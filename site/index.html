@@ -3,13 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>lab-status</title>
+  <title>Lab status</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main>
-    <h1>lab-status</h1>
-    <p>Deployment check: this page is served from the Git repository.</p>
-  </main>
+  <header class="top">
+    <p class="brand">Lab status</p>
+    <h1 id="verdict" class="verdict">Checking services…</h1>
+    <p id="details" class="details"></p>
+    <button id="again" class="again" type="button" hidden>Check again</button>
+  </header>
+  <main id="rack" class="rack" aria-live="polite"></main>
+  <script src="app.js"></script>
 </body>
 </html>

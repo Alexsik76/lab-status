@@ -6,14 +6,16 @@ and the Docker containers inside those VMs, each with its current state.
 The page is a static site (HTML, CSS, JavaScript). State is not polled in the
 background: it is requested from n8n when the page is opened.
 
-Current content of `site/` is a placeholder used to verify the deployment path.
+Data comes from one request to the n8n webhook
+`https://n8n.lab.vn.ua/webhook/lab-status`. n8n reads the hierarchy from NetBox,
+checks the web services over HTTP and returns a ready tree; the page only draws it.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `docker-compose.yml` | one service: the unmodified `nginx` image serving `site/` |
-| `site/` | the site itself: `index.html`, styles, scripts |
+| `site/` | the site itself: `index.html`, `style.css`, `app.js` |
 
 ## Deployment
 
