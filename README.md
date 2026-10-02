@@ -22,7 +22,7 @@ Deployed as a Portainer stack from this Git repository with
 directory on the host, so `./site` resolves to a real path and can be mounted
 into the container. Without that option the mount would be an empty directory.
 
-- Host: VM `portainer`, container port published on `8081`
+- Host: VM `treehouse` (`10.10.70.97`), container port published on `8081`
 - Address: `https://status.lab.vn.ua` (proxy host in Nginx Proxy Manager)
 
 ## Updating
