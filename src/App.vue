@@ -1,85 +1,93 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { provide, reactive } from 'vue'
+import ErrorPage from './components/ErrorPage.vue'
+import InventorySkeleton from './components/InventorySkeleton.vue'
+import LabToolbar from './components/LabToolbar.vue'
+import LabTree from './components/LabTree.vue'
+import NoticeBanner from './components/NoticeBanner.vue'
+import { useLab } from './composables/useLab'
+import { statusPhaseKey } from './injection'
 
-interface Counts {
-  devices: number
-  virtualMachines: number
-  services: number
-}
-
-interface NamedList {
-  name: string
-}
-
-interface GraphQLResponse {
-  data?: {
-    device_list: NamedList[]
-    virtual_machine_list: NamedList[]
-    service_list: NamedList[]
-  }
-  errors?: { message: string }[]
-}
-
-const QUERY =
-  '{ device_list { name } virtual_machine_list { name } service_list { name } }'
-
-const loading = ref(true)
-const error = ref<string | null>(null)
-const counts = ref<Counts | null>(null)
-
-async function load() {
-  loading.value = true
-  error.value = null
-  try {
-    const res = await fetch('/netbox/graphql/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: QUERY }),
-    })
-    if (!res.ok) {
-      throw new Error(`NetBox request failed: HTTP ${res.status} ${res.statusText}`)
-    }
-    const body = (await res.json()) as GraphQLResponse
-    if (body.errors?.length) {
-      throw new Error(body.errors.map((e) => e.message).join('; '))
-    }
-    if (!body.data) {
-      throw new Error('Response contains no data')
-    }
-    counts.value = {
-      devices: body.data.device_list.length,
-      virtualMachines: body.data.virtual_machine_list.length,
-      services: body.data.service_list.length,
-    }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(load)
+const labState = useLab()
+const lab = reactive(labState)
+provide(statusPhaseKey, labState.statusPhase)
 </script>
 
 <template>
-  <main>
-    <h1>Lab Status</h1>
-    <p v-if="loading">Loading…</p>
-    <p v-else-if="error" class="error" role="alert">Could not load data: {{ error }}</p>
-    <ul v-else-if="counts">
-      <li>Devices: {{ counts.devices }}</li>
-      <li>Virtual machines: {{ counts.virtualMachines }}</li>
-      <li>Services: {{ counts.services }}</li>
-    </ul>
+  <main class="homelab-app">
+    <ErrorPage
+      v-if="lab.view === 'fatal'"
+      :message="lab.fatalError ?? 'Unknown error.'"
+      :retrying="lab.isRefreshing"
+      @retry="labState.refresh"
+    />
+
+    <InventorySkeleton v-else-if="lab.view === 'loading'" />
+
+    <template v-else>
+      <LabToolbar
+        :refreshing="lab.isRefreshing"
+        :updated-at="lab.updatedAt"
+        :counts="lab.counts"
+        @refresh="labState.refresh"
+      />
+      <NoticeBanner v-if="lab.refreshError">
+        The inventory could not be refreshed, showing the last loaded data. {{ lab.refreshError }}
+      </NoticeBanner>
+      <NoticeBanner v-if="lab.statusPhase === 'failed'">
+        Live statuses are unavailable, so states are shown as unknown. {{ lab.statusError }}
+      </NoticeBanner>
+
+      <p v-if="lab.view === 'empty'" class="empty-state">
+        NetBox returned no machines or containers.
+      </p>
+      <LabTree v-else-if="lab.tree" :tree="lab.tree" />
+    </template>
   </main>
 </template>
 
 <style>
-body {
-  font-family: system-ui, sans-serif;
-  margin: 2rem;
+*, *::before, *::after {
+  box-sizing: border-box;
 }
-.error {
-  color: #b00020;
+
+body {
+  margin: 0;
+  padding: 0;
+  background: oklch(0.15 0.008 250);
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: oklch(0.93 0.006 250);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+a:hover {
+  color: inherit;
+}
+
+.homelab-app {
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: oklch(0.15 0.008 250);
+  padding: 18px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.empty-state {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: oklch(0.55 0.012 250);
+  padding: 24px;
+  text-align: center;
+  background: oklch(0.19 0.009 250);
+  border: 1px dashed oklch(0.3 0.01 250);
+  border-radius: 8px;
 }
 </style>

@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# Optional override of the status endpoint (bundled into the app; not a secret)
+ARG VITE_STATUS_URL
 RUN npm run build
 
 FROM nginx:alpine

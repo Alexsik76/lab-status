@@ -1,6 +1,9 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        - VITE_STATUS_URL
     container_name: lab-status
     restart: unless-stopped
     ports:
