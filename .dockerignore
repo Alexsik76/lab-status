@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.gitignore
+.env*
+!.env.example
+Home Lab Status Dashboard
+docker-compose.yml
+README.md
+*.log

@@ -1,0 +1,25 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The only NetBox endpoint exposed: GraphQL, POST only.
+    location = /netbox/graphql/ {
+        limit_except POST {
+            deny all;
+        }
+        proxy_pass ${NETBOX_URL}/graphql/;
+        proxy_set_header Authorization "Bearer ${NETBOX_TOKEN}";
+    }
+
+    # Anything else under /netbox/ is not proxied.
+    location /netbox/ {
+        return 404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

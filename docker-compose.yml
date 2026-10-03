@@ -1,9 +1,10 @@
 services:
   web:
-    image: nginx:alpine
+    build: .
     container_name: lab-status
     restart: unless-stopped
     ports:
       - 8081:80
-    volumes:
-      - ./site:/usr/share/nginx/html:ro,z
+    environment:
+      - NETBOX_URL
+      - NETBOX_TOKEN
