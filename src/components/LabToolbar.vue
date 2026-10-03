@@ -69,9 +69,9 @@ const summary = computed(() => {
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: oklch(0.55 0.01 250);
+  color: var(--color-text-dim);
 }
 
 .toolbar-left {
@@ -82,15 +82,15 @@ const summary = computed(() => {
 }
 
 .homelab-title {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: oklch(0.85 0.006 250);
+  color: var(--color-text-title);
 }
 
 .homelab-counts {
-  color: oklch(0.6 0.012 250);
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -104,12 +104,12 @@ const summary = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: oklch(0.215 0.01 250);
-  border: 1px solid oklch(0.28 0.01 250);
-  border-radius: 4px;
+  background: var(--color-bg-spine);
+  border: 1px solid var(--color-border-guest);
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
-  color: oklch(0.85 0.006 250);
-  font-family: 'IBM Plex Mono', monospace;
+  color: var(--color-text-title);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -117,8 +117,8 @@ const summary = computed(() => {
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: oklch(0.26 0.01 250);
-  border-color: oklch(0.35 0.01 250);
+  background: var(--color-bg-hover-dim);
+  border-color: var(--color-border-btn-hover);
 }
 
 .refresh-btn:disabled {

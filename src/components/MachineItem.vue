@@ -1,29 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Machine } from '../domain/model'
-import {
-  balanceMachineUnits,
-  detectMachineOs,
-  getHostHardware,
-  getNodePrimaryUrlAndPort,
-} from '../domain/homelabUi'
+import { formatHardware } from '../presentation/hardware'
+import { balanceMachineUnits } from '../presentation/layout'
+import { getNodePrimaryUrlAndPort } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
 import GuestItem from './GuestItem.vue'
+import LinkOrPlain from './LinkOrPlain.vue'
 import OsIcon from './OsIcon.vue'
 import StateBadge from './StateBadge.vue'
+import Tag from './Tag.vue'
 
-const props = withDefaults(
-  defineProps<{
-    machine: Machine
-    index?: number
-  }>(),
-  {
-    index: 0,
-  },
-)
+const props = defineProps<{
+  machine: Machine
+}>()
 
-const machineOs = computed(() => detectMachineOs(props.machine))
-const hw = computed(() => getHostHardware(props.machine))
+const hwText = computed(() => formatHardware(props.machine.hardware))
+const modelText = computed(() => props.machine.model || props.machine.manufacturer || '')
 
 const serviceInfo = computed(() =>
   getNodePrimaryUrlAndPort(props.machine.services, props.machine.ip),
@@ -46,21 +39,18 @@ const isEmpty = computed(
     ]"
   >
     <!-- Left Host Sidebar Card -->
-    <component
-      :is="hostUrl ? 'a' : 'div'"
-      :href="hostUrl || undefined"
-      :target="hostUrl ? '_blank' : undefined"
-      :rel="hostUrl ? 'noopener noreferrer' : undefined"
+    <LinkOrPlain
+      :href="hostUrl"
       class="host-card"
       :class="{ 'is-clickable': !!hostUrl }"
     >
       <div class="host-header">
         <span
           class="drag-handle"
-          title="Перетягніть для зміни порядку серверів"
+          title="Drag to reorder servers"
           role="button"
           tabindex="0"
-          aria-label="Перетягніть для переміщення"
+          aria-label="Drag to move"
           @click.stop.prevent
         >
           <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
@@ -72,21 +62,24 @@ const isEmpty = computed(
             <circle cx="6" cy="12" r="1.2" />
           </svg>
         </span>
-        <OsIcon :os="machineOs" :size="22" />
+        <OsIcon :platform="machine.platform" :size="22" />
         <span class="host-name">{{ machine.name }}</span>
         <span class="spacer"></span>
         <StateBadge :state="machine.state" variant="machine" />
-        <span v-if="hostUrl" class="host-arrow">↗</span>
       </div>
 
       <div class="host-meta">
-        <span class="host-model">{{ machine.model || machine.manufacturer || 'Server' }}</span>
+        <span v-if="modelText" class="host-model">{{ modelText }}</span>
         <div class="host-network-hw">
           <span class="host-ip">
             {{ machine.ip }}<span v-if="hostPort" class="host-port">{{ hostPort }}</span>
           </span>
-          <span class="host-hw">{{ hw.cores }}c · {{ hw.mem }}G</span>
+          <span v-if="hwText" class="host-hw">{{ hwText }}</span>
         </div>
+      </div>
+
+      <div v-if="machine.tags?.length" class="host-tags">
+        <Tag v-for="tag in machine.tags" :key="tag.name" :tag="tag" size="sm" />
       </div>
 
       <div class="host-metrics" title="Data collector for CPU and MEM metrics to be configured">
@@ -105,9 +98,9 @@ const isEmpty = computed(
           <span class="metric-pct">—</span>
         </div>
       </div>
-    </component>
+    </LinkOrPlain>
 
-    <!-- Right Content Area: 3 Columns Grid -->
+    <!-- Right Content Area: 2 Columns Grid -->
     <div class="machine-content">
       <div v-for="(col, colIdx) in columns" :key="colIdx" class="content-col">
         <template v-for="unit in col.items" :key="unit.id">
@@ -140,16 +133,16 @@ const isEmpty = computed(
 .machine-tile {
   display: flex;
   box-sizing: border-box;
-  background: oklch(0.19 0.009 250);
-  border: 1px solid oklch(0.25 0.01 250);
-  border-radius: 8px;
+  background: var(--color-bg-tile);
+  border: 1px solid var(--color-border-tile);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color 0.15s ease;
   list-style: none;
 }
 
 .machine-tile.is-unreachable {
-  border: 2px solid oklch(0.62 0.22 27);
+  border: 2px solid var(--color-state-down);
 }
 
 /* Left Host Card */
@@ -162,8 +155,8 @@ const isEmpty = computed(
   flex-direction: column;
   justify-content: flex-start;
   gap: 6px;
-  background: oklch(0.215 0.01 250);
-  border-right: 1px solid oklch(0.26 0.01 250);
+  background: var(--color-bg-spine);
+  border-right: 1px solid var(--color-border-spine);
   text-decoration: none;
   color: inherit;
   transition: background 0.12s ease;
@@ -174,7 +167,7 @@ const isEmpty = computed(
   cursor: pointer;
 }
 .host-card.is-clickable:hover {
-  background: oklch(0.245 0.01 250);
+  background: var(--color-bg-spine-hover);
 }
 
 .host-header {
@@ -189,70 +182,71 @@ const isEmpty = computed(
   justify-content: center;
   width: 14px;
   height: 20px;
-  color: oklch(0.48 0.01 250);
+  color: var(--color-text-dim);
   cursor: grab;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   transition: color 0.12s ease, background 0.12s ease;
   user-select: none;
   margin-left: -6px;
   flex: none;
 }
 .drag-handle:hover {
-  color: oklch(0.85 0.006 250);
-  background: oklch(0.26 0.01 250);
+  color: var(--color-text-secondary);
+  background: var(--color-border-spine);
 }
 .drag-handle:active {
   cursor: grabbing;
 }
 
 .host-name {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 28px;
   line-height: 1.05;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: oklch(0.95 0.006 250);
+  color: var(--color-text-host);
 }
 
 .spacer {
   flex: 1;
 }
 
-.host-arrow {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px;
-  color: oklch(0.6 0.012 250);
-  margin-left: -4px;
-}
-
 .host-meta {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.3;
-  color: oklch(0.6 0.012 250);
+  color: var(--color-text-muted);
 }
 
 .host-model {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--color-text-model);
 }
 
 .host-network-hw {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  color: oklch(0.78 0.012 250);
+  color: var(--color-text-secondary);
 }
 
 .host-port {
-  color: oklch(0.58 0.012 250);
+  color: var(--color-text-port);
 }
 .host-hw {
-  color: oklch(0.6 0.012 250);
+  color: var(--color-text-muted);
+}
+
+.host-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .host-metrics {
@@ -266,9 +260,9 @@ const isEmpty = computed(
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
-  color: oklch(0.55 0.012 250);
+  color: var(--color-text-port);
 }
 
 .metric-label {
@@ -281,9 +275,9 @@ const isEmpty = computed(
   width: 50px;
   height: 14px;
   box-sizing: border-box;
-  border-radius: 3px;
-  border: 1px dashed oklch(0.32 0.01 250);
-  background: oklch(0.18 0.008 250);
+  border-radius: var(--radius-xs);
+  border: 1px dashed var(--color-border-slot);
+  background: var(--color-bg-slot);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -292,12 +286,12 @@ const isEmpty = computed(
 .slot-line {
   width: 60%;
   height: 1px;
-  background: oklch(0.3 0.01 250);
+  background: var(--color-border-slot-line);
 }
 
 .metric-pct {
-  color: oklch(0.48 0.01 250);
-  font-family: 'IBM Plex Mono', monospace;
+  color: var(--color-text-pct);
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -307,7 +301,7 @@ const isEmpty = computed(
   min-width: 0;
   padding: 8px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   align-items: start;
   align-content: center;
@@ -332,23 +326,17 @@ const isEmpty = computed(
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px;
   padding: 3px;
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px oklch(0.29 0.01 250);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--color-border-apps);
 }
 
 .empty {
   grid-column: 1 / -1;
   align-self: center;
   padding: 0 12px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: oklch(0.48 0.01 250);
-}
-
-@media (max-width: 1280px) {
-  .machine-content {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  color: var(--color-text-empty);
 }
 
 @media (max-width: 900px) {
@@ -358,7 +346,7 @@ const isEmpty = computed(
   .host-card {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid oklch(0.26 0.01 250);
+    border-bottom: 1px solid var(--color-border-spine);
   }
   .machine-content {
     grid-template-columns: 1fr;

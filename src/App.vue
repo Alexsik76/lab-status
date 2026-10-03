@@ -10,7 +10,7 @@ import { statusPhaseKey } from './injection'
 
 const labState = useLab()
 const lab = reactive(labState)
-provide(statusPhaseKey, labState.statusPhase)
+provide(statusPhaseKey, labState.livePhase)
 </script>
 
 <template>
@@ -37,6 +37,9 @@ provide(statusPhaseKey, labState.statusPhase)
       <NoticeBanner v-if="lab.statusPhase === 'failed'">
         Live statuses are unavailable, so states are shown as unknown. {{ lab.statusError }}
       </NoticeBanner>
+      <NoticeBanner v-if="lab.containerStatusPhase === 'failed'">
+        Live container states are unavailable. {{ lab.containerStatusError }}
+      </NoticeBanner>
 
       <p v-if="lab.view === 'empty'" class="empty-state">
         NetBox returned no machines or containers.
@@ -54,9 +57,9 @@ provide(statusPhaseKey, labState.statusPhase)
 body {
   margin: 0;
   padding: 0;
-  background: oklch(0.15 0.008 250);
-  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: oklch(0.93 0.006 250);
+  background: var(--color-bg-page);
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -73,7 +76,7 @@ a:hover {
   width: 100%;
   min-height: 100vh;
   box-sizing: border-box;
-  background: oklch(0.15 0.008 250);
+  background: var(--color-bg-page);
   padding: 18px 28px 24px;
   display: flex;
   flex-direction: column;
@@ -81,13 +84,13 @@ a:hover {
 }
 
 .empty-state {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: oklch(0.55 0.012 250);
+  color: var(--color-text-dim);
   padding: 24px;
   text-align: center;
-  background: oklch(0.19 0.009 250);
-  border: 1px dashed oklch(0.3 0.01 250);
-  border-radius: 8px;
+  background: var(--color-bg-tile);
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: var(--radius-lg);
 }
 </style>

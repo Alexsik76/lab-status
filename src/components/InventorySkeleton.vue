@@ -12,7 +12,7 @@ const ROWS = [0, 1, 2]
         <div class="shimmer-block spark-shimmer"></div>
       </div>
       <div class="skeleton-content">
-        <div v-for="c in 3" :key="c" class="skeleton-card">
+        <div v-for="c in 2" :key="c" class="skeleton-card">
           <div class="shimmer-block guest-shimmer"></div>
           <div class="shimmer-block container-shimmer"></div>
           <div class="shimmer-block container-shimmer"></div>
@@ -33,9 +33,9 @@ const ROWS = [0, 1, 2]
 .skeleton-tile {
   display: flex;
   box-sizing: border-box;
-  background: oklch(0.19 0.009 250);
-  border: 1px solid oklch(0.25 0.01 250);
-  border-radius: 8px;
+  background: var(--color-bg-tile);
+  border: 1px solid var(--color-border-tile);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   height: 95px;
 }
@@ -48,22 +48,22 @@ const ROWS = [0, 1, 2]
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: oklch(0.215 0.01 250);
-  border-right: 1px solid oklch(0.26 0.01 250);
+  background: var(--color-bg-spine);
+  border-right: 1px solid var(--color-border-spine);
 }
 
 .skeleton-content {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 8px;
 }
 
 .skeleton-card {
-  background: oklch(0.215 0.01 250);
-  border: 1px solid oklch(0.28 0.01 250);
-  border-radius: 6px;
+  background: var(--color-bg-guest);
+  border: 1px solid var(--color-border-guest);
+  border-radius: var(--radius-md);
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -71,8 +71,8 @@ const ROWS = [0, 1, 2]
 }
 
 .shimmer-block {
-  background: oklch(0.25 0.01 250);
-  border-radius: 4px;
+  background: var(--color-bg-shimmer);
+  border-radius: var(--radius-sm);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
@@ -113,7 +113,7 @@ const ROWS = [0, 1, 2]
   .skeleton-sidebar {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid oklch(0.26 0.01 250);
+    border-bottom: 1px solid var(--color-border-spine);
   }
   .skeleton-content {
     grid-template-columns: 1fr;

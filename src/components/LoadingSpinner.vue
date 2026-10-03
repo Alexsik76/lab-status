@@ -7,9 +7,9 @@
   display: inline-block;
   width: 1em;
   height: 1em;
-  border: 2px solid oklch(0.35 0.01 250);
-  border-top-color: oklch(0.78 0.14 155);
-  border-radius: 50%;
+  border: 2px solid var(--color-border-btn-hover);
+  border-top-color: var(--color-state-up);
+  border-radius: var(--radius-pill);
   vertical-align: -0.15em;
   animation: spin 0.8s linear infinite;
 }

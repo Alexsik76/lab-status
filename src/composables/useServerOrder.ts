@@ -1,36 +1,18 @@
 import { ref, watch } from 'vue'
+import { useLocalStorage } from '@vueuse/core'
 import type { Machine } from '../domain/model'
 
 const STORAGE_KEY = 'homelab_server_order'
 
-function loadSavedOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveOrder(ids: string[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ids))
-  } catch {
-    // ignore in restricted environments
-  }
-}
-
 export function useServerOrder(initialMachines: () => Machine[]) {
+  const savedOrder = useLocalStorage<string[]>(STORAGE_KEY, [], { flush: 'sync' })
   const orderedMachines = ref<Machine[]>([])
 
-  function applyOrder(machines: Machine[]): Machine[] {
-    const saved = loadSavedOrder()
-    if (!saved.length) return [...machines]
+  function applyOrder(machines: Machine[], order: string[]): Machine[] {
+    if (!order || !order.length) return [...machines]
 
     const rankMap = new Map<string, number>()
-    saved.forEach((id, idx) => rankMap.set(id, idx))
+    order.forEach((id, idx) => rankMap.set(id, idx))
 
     return [...machines].sort((a, b) => {
       const rankA = rankMap.has(a.id) ? rankMap.get(a.id)! : 9999
@@ -41,35 +23,30 @@ export function useServerOrder(initialMachines: () => Machine[]) {
   }
 
   watch(
-    initialMachines,
-    (machines) => {
-      orderedMachines.value = applyOrder(machines)
+    [initialMachines, savedOrder],
+    ([machines, order]) => {
+      orderedMachines.value = applyOrder(machines, order)
     },
-    { immediate: true },
+    { immediate: true, deep: true },
   )
 
-  function moveMachine(oldIndex: number, newIndex: number) {
-    if (oldIndex === newIndex) return
-    const updated = [...orderedMachines.value]
-    const [moved] = updated.splice(oldIndex, 1)
-    if (!moved) return
-    updated.splice(newIndex, 0, moved)
-    orderedMachines.value = updated
-    saveOrder(updated.map((m) => m.id))
-  }
-
-  function resetOrder() {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      // ignore
-    }
-    orderedMachines.value = [...initialMachines()]
-  }
+  watch(
+    orderedMachines,
+    (newList) => {
+      if (!newList.length) return
+      const currentIds = newList.map((m) => m.id)
+      const existing = savedOrder.value
+      if (
+        currentIds.length !== existing.length ||
+        currentIds.some((id, idx) => id !== existing[idx])
+      ) {
+        savedOrder.value = currentIds
+      }
+    },
+    { deep: true, flush: 'sync' },
+  )
 
   return {
     orderedMachines,
-    moveMachine,
-    resetOrder,
   }
 }

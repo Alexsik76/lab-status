@@ -1,0 +1,103 @@
+:root {
+  /* Typography */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Border Radii */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+
+  /* Surfaces & Backgrounds */
+  --color-bg-page: oklch(0.15 0.008 250);
+  --color-bg-tile: oklch(0.19 0.009 250);
+  --color-bg-spine: oklch(0.215 0.01 250);
+  --color-bg-spine-hover: oklch(0.245 0.01 250);
+  --color-bg-guest: oklch(0.215 0.01 250);
+  --color-bg-guest-down: oklch(0.22 0.04 27);
+  --color-bg-hover: oklch(0.29 0.012 250);
+  --color-bg-hover-dim: oklch(0.26 0.01 250);
+  --color-bg-slot: oklch(0.18 0.008 250);
+  --color-bg-shimmer: oklch(0.25 0.01 250);
+
+  /* Borders */
+  --color-border-tile: oklch(0.25 0.01 250);
+  --color-border-spine: oklch(0.26 0.01 250);
+  --color-border-guest: oklch(0.28 0.01 250);
+  --color-border-dashed: oklch(0.34 0.01 250);
+  --color-border-stack: oklch(0.33 0.012 250);
+  --color-border-apps: oklch(0.29 0.01 250);
+  --color-border-slot: oklch(0.32 0.01 250);
+  --color-border-slot-line: oklch(0.30 0.01 250);
+  --color-border-btn-hover: oklch(0.35 0.01 250);
+
+  /* Kind Badge (LXC, VM) */
+  --color-kind-active-bg: oklch(0.24 0.03 155);
+  --color-kind-active-border: oklch(0.42 0.06 155);
+  --color-kind-active-fg: oklch(0.78 0.14 155);
+  --color-kind-inactive-border: oklch(0.32 0.01 250);
+  --color-kind-inactive-fg: oklch(0.55 0.01 250);
+  --color-kind-down-border: rgba(255, 255, 255, 0.6);
+
+  /* Icon Dim States */
+  --color-icon-dim-bg: oklch(0.25 0.01 250);
+  --color-icon-dim-fg: oklch(0.55 0.01 250);
+
+  /* Text Levels */
+  --color-text-host: oklch(0.95 0.006 250);
+  --color-text-primary: oklch(0.93 0.006 250);
+  --color-text-white: #ffffff;
+  --color-text-title: oklch(0.85 0.006 250);
+  --color-text-pct: oklch(0.82 0.01 250);
+  --color-text-secondary: oklch(0.78 0.012 250);
+  --color-text-unknown: oklch(0.66 0.01 250);
+  --color-text-ip: oklch(0.62 0.012 250);
+  --color-text-model: oklch(0.6 0.012 250);
+  --color-text-muted: oklch(0.6 0.012 250);
+  --color-text-port: oklch(0.58 0.012 250);
+  --color-text-dim: oklch(0.55 0.01 250);
+  --color-text-stack-label: oklch(0.55 0.012 250);
+  --color-text-stopped: oklch(0.52 0.01 250);
+  --color-text-image: oklch(0.5 0.01 250);
+  --color-text-empty: oklch(0.48 0.01 250);
+  --color-text-dim-port: oklch(0.45 0.01 250);
+  --color-text-drag: oklch(0.48 0.01 250);
+  --color-text-down-subtle: rgba(255, 255, 255, 0.8);
+  --color-text-down-muted: rgba(255, 255, 255, 0.85);
+
+  /* Drag handle & drag states */
+  --color-drag-shadow: rgba(0, 0, 0, 0.6);
+
+  /* State Indicators */
+  /* Up - green */
+  --color-state-up: oklch(0.78 0.14 155);
+
+  /* Down - red */
+  --color-state-down: oklch(0.62 0.22 27);
+  --color-state-down-hover: oklch(0.68 0.22 27);
+
+  /* Stopped - muted solid */
+  --color-state-stopped: oklch(0.52 0.01 250);
+  --color-state-stopped-dot: oklch(0.55 0.01 250);
+
+  /* Unknown - grey dashed */
+  --color-state-unknown: oklch(0.66 0.01 250);
+  --color-state-unknown-dot: oklch(0.55 0.01 250);
+
+  /* Notice Banners */
+  --color-notice-warn-border: oklch(0.75 0.15 65);
+  --color-notice-warn-bg: oklch(0.20 0.04 65);
+  --color-notice-warn-text: oklch(0.88 0.06 65);
+  --color-notice-err-border: oklch(0.62 0.22 27);
+  --color-notice-err-bg: oklch(0.20 0.04 27);
+  --color-notice-err-text: oklch(0.90 0.06 27);
+
+  /* Tags */
+  --color-tag-default-bg: rgba(56, 139, 253, 0.15);
+  --color-tag-default-border: rgba(56, 139, 253, 0.25);
+  --color-tag-default-text: #58a6ff;
+  --color-tag-down-bg: rgba(255, 255, 255, 0.18);
+  --color-tag-down-border: rgba(255, 255, 255, 0.35);
+}

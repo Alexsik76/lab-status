@@ -1,5 +1,10 @@
 /** Raw shapes of the NetBox GraphQL response (see `api/netbox.ts` for the query). */
 
+export interface RawTag {
+  name: string
+  color?: string | null
+}
+
 export interface RawDevice {
   id: string
   name: string | null
@@ -9,6 +14,8 @@ export interface RawDevice {
   primary_ip4: { address: string } | null
   cluster: { name: string } | null
   platform: { name: string } | null
+  tags?: RawTag[] | null
+  custom_fields?: Record<string, unknown> | null
 }
 
 export interface RawVirtualMachine {
@@ -24,7 +31,7 @@ export interface RawVirtualMachine {
   device: { id: string; name: string | null } | null
   platform: { name: string } | null
   primary_ip4: { address: string } | null
-  tags: { name: string }[] | null
+  tags: RawTag[] | null
   custom_fields: Record<string, unknown> | null
 }
 

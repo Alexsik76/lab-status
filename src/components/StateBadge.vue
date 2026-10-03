@@ -8,9 +8,11 @@ const props = withDefaults(
   defineProps<{
     state: State
     variant?: 'machine' | 'guest' | 'container' | 'default'
+    blinking?: boolean
   }>(),
   {
     variant: 'default',
+    blinking: false,
   },
 )
 
@@ -37,7 +39,11 @@ const machineLabel = computed(() => {
 <template>
   <span
     class="state"
-    :class="[`variant-${variant}`, `state-${pending ? 'pending' : state}`]"
+    :class="[
+      `variant-${variant}`,
+      `state-${pending ? 'pending' : state}`,
+      { 'is-blinking': blinking },
+    ]"
     :data-state="pending ? 'pending' : state"
   >
     <!-- Dot indicator -->
@@ -69,7 +75,7 @@ const machineLabel = computed(() => {
   align-items: center;
   gap: 5px;
   box-sizing: border-box;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -81,27 +87,27 @@ const machineLabel = computed(() => {
 /* Machine variant: pill badge */
 .variant-machine {
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .variant-machine.state-up {
-  color: oklch(0.78 0.14 155);
+  color: var(--color-state-up);
   background: transparent;
 }
 .variant-machine.state-down {
-  color: #ffffff;
-  background: oklch(0.62 0.22 27);
+  color: var(--color-text-white);
+  background: var(--color-state-down);
 }
 .variant-machine.state-pending,
 .variant-machine.state-unknown,
 .variant-machine.state-stopped {
-  color: oklch(0.66 0.01 250);
+  color: var(--color-text-unknown);
   background: transparent;
 }
 
 /* Dot indicator */
 .status-dot {
   display: inline-block;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
   box-sizing: border-box;
   flex: none;
 }
@@ -111,15 +117,15 @@ const machineLabel = computed(() => {
   height: 7px;
 }
 .variant-machine.state-up .status-dot {
-  background: oklch(0.78 0.14 155);
+  background: var(--color-state-up);
 }
 .variant-machine.state-down .status-dot {
-  background: #ffffff;
+  background: var(--color-text-white);
 }
 .variant-machine.state-pending .status-dot,
 .variant-machine.state-unknown .status-dot {
   background: transparent;
-  border: 1.5px dashed oklch(0.55 0.01 250);
+  border: 1.5px dashed var(--color-state-unknown-dot);
 }
 
 /* Guest variant: 9px dot */
@@ -128,21 +134,21 @@ const machineLabel = computed(() => {
   height: 9px;
 }
 .variant-guest.state-up .status-dot {
-  background: oklch(0.78 0.14 155);
-  border: 1.5px solid oklch(0.78 0.14 155);
+  background: var(--color-state-up);
+  border: 1.5px solid var(--color-state-up);
 }
 .variant-guest.state-down .status-dot {
-  background: #ffffff;
-  border: 1.5px solid #ffffff;
+  background: var(--color-text-white);
+  border: 1.5px solid var(--color-text-white);
 }
 .variant-guest.state-stopped .status-dot {
   background: transparent;
-  border: 1.5px solid oklch(0.55 0.01 250);
+  border: 1.5px solid var(--color-state-stopped-dot);
 }
 .variant-guest.state-pending .status-dot,
 .variant-guest.state-unknown .status-dot {
   background: transparent;
-  border: 1.5px dashed oklch(0.55 0.01 250);
+  border: 1.5px dashed var(--color-state-unknown-dot);
 }
 
 /* Container variant: 7px dot */
@@ -151,39 +157,39 @@ const machineLabel = computed(() => {
   height: 7px;
 }
 .variant-container.state-up .status-dot {
-  background: oklch(0.78 0.14 155);
-  border: 1.5px solid oklch(0.78 0.14 155);
+  background: var(--color-state-up);
+  border: 1.5px solid var(--color-state-up);
 }
 .variant-container.state-down .status-dot {
-  background: #ffffff;
-  border: 1.5px solid #ffffff;
+  background: var(--color-text-white);
+  border: 1.5px solid var(--color-text-white);
 }
 .variant-container.state-stopped .status-dot {
   background: transparent;
-  border: 1.5px solid oklch(0.55 0.01 250);
+  border: 1.5px solid var(--color-state-stopped-dot);
 }
 .variant-container.state-pending .status-dot,
 .variant-container.state-unknown .status-dot {
   background: transparent;
-  border: 1.5px dashed oklch(0.55 0.01 250);
+  border: 1.5px dashed var(--color-state-unknown-dot);
 }
 
 /* Default fallback */
 .variant-default {
   padding: 0 0.4em;
   border: 1px solid currentColor;
-  border-radius: 0.6em;
+  border-radius: var(--radius-sm);
 }
 .variant-default.state-up {
-  color: oklch(0.78 0.14 155);
+  color: var(--color-state-up);
 }
 .variant-default.state-down {
-  color: oklch(0.62 0.22 27);
+  color: var(--color-state-down);
 }
 .variant-default.state-pending,
 .variant-default.state-unknown,
 .variant-default.state-stopped {
-  color: oklch(0.55 0.01 250);
+  color: var(--color-state-unknown-dot);
 }
 
 /* Status tags */
@@ -192,11 +198,11 @@ const machineLabel = computed(() => {
   letter-spacing: 0.1em;
 }
 .variant-guest.state-stopped .status-tag {
-  color: oklch(0.52 0.01 250);
+  color: var(--color-text-stopped);
 }
 .variant-guest.state-down .status-tag,
 .variant-container.state-down .status-tag {
-  color: #ffffff;
+  color: var(--color-text-white);
 }
 
 /* Pending pulse */
@@ -207,6 +213,27 @@ const machineLabel = computed(() => {
 @keyframes pulse {
   50% {
     opacity: 0.35;
+  }
+}
+
+/* Blinking dot for down containers */
+.is-blinking .status-dot {
+  animation: blink-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes blink-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-pending .status-dot,
+  .is-blinking .status-dot {
+    animation: none;
   }
 }
 </style>

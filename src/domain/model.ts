@@ -7,6 +7,17 @@ export type ServiceState = Exclude<State, 'stopped'>
 
 export type VmKind = 'KVM' | 'LXC' | 'Docker' | 'other'
 
+export interface TagItem {
+  name: string
+  color: string | null
+}
+
+export interface DeviceHardware {
+  cpuCores: number | null
+  memoryGb: number | null
+  storageGb: number | null
+}
+
 // ---- Normalized inventory (flat records, output of `normalizeInventory`) ----
 
 export interface DeviceRecord {
@@ -19,16 +30,19 @@ export interface DeviceRecord {
   ip: string | null
   cluster: string | null
   platform: string | null
+  tags: TagItem[]
+  hardware: DeviceHardware
 }
 
 export interface VmRecord {
   id: string
   name: string
+  alias: string | null
   kind: VmKind
   offline: boolean
   vcpus: number | null
   memoryMb: number | null
-  /** Disk size as stored in NetBox (unit follows the NetBox version). */
+  /** Disk size as stored in NetBox (unit follows the NetBox version, typically MiB). */
   disk: number | null
   description: string
   image: string | null
@@ -37,6 +51,7 @@ export interface VmRecord {
   cluster: string | null
   platform: string | null
   ip: string | null
+  tags: TagItem[]
   /** Id of the device the VM runs on (NetBox `device`). */
   deviceId: string | null
   /** Id of the guest VM that hosts this container (custom field `host`). */
@@ -47,6 +62,7 @@ export interface ServiceRecord {
   id: string
   name: string
   ports: number[]
+  scheme: string | null
   addresses: string[]
   parent: { kind: 'vm' | 'device'; id: string } | null
 }
@@ -63,6 +79,7 @@ export interface ServiceItem {
   id: string
   name: string
   ports: number[]
+  scheme: string | null
   addresses: string[]
   /** Link target: the url of the matching status entry. */
   url: string | null
@@ -81,6 +98,9 @@ interface NodeBase {
 export interface Container extends NodeBase {
   image: string | null
   stack: string | null
+  tags: TagItem[]
+  blinking?: boolean
+  dockerStatus?: string | null
 }
 
 export interface Stack {
@@ -97,6 +117,7 @@ export interface Guest extends NodeBase {
   ip: string | null
   platform: string | null
   cluster: string | null
+  tags: TagItem[]
   stacks: Stack[]
   /** Containers without a stack. */
   standalone: Container[]
@@ -108,6 +129,8 @@ export interface Machine extends NodeBase {
   ip: string | null
   platform: string | null
   cluster: string | null
+  tags: TagItem[]
+  hardware: DeviceHardware
   guests: Guest[]
   /** Docker workloads attached straight to the machine. */
   apps: Container[]

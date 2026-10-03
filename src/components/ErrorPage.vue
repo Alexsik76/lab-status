@@ -34,9 +34,9 @@ defineEmits<{ retry: [] }>()
 }
 
 .error-card {
-  background: oklch(0.19 0.009 250);
-  border: 1px solid oklch(0.28 0.01 250);
-  border-radius: 8px;
+  background: var(--color-bg-tile);
+  border: 1px solid var(--color-border-guest);
+  border-radius: var(--radius-lg);
   padding: 28px 24px;
   display: flex;
   flex-direction: column;
@@ -47,31 +47,31 @@ defineEmits<{ retry: [] }>()
 .error-icon {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  background: oklch(0.22 0.04 27);
-  border: 1px solid oklch(0.62 0.22 27);
-  color: oklch(0.62 0.22 27);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-guest-down);
+  border: 1px solid var(--color-state-down);
+  color: var(--color-state-down);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: 18px;
 }
 
 .error-title {
   margin: 0;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 18px;
   font-weight: 600;
-  color: oklch(0.93 0.006 250);
+  color: var(--color-text-primary);
 }
 
 .error-message {
   margin: 0;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: oklch(0.6 0.012 250);
+  color: var(--color-text-muted);
   line-height: 1.4;
 }
 
@@ -80,20 +80,20 @@ defineEmits<{ retry: [] }>()
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: oklch(0.24 0.01 250);
-  border: 1px solid oklch(0.32 0.01 250);
-  border-radius: 4px;
+  background: var(--color-bg-spine-hover);
+  border: 1px solid var(--color-border-slot);
+  border-radius: var(--radius-sm);
   padding: 6px 16px;
-  color: oklch(0.92 0.006 250);
-  font-family: 'IBM Plex Mono', monospace;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.12s ease;
 }
 
 .retry-btn:hover:not(:disabled) {
-  background: oklch(0.28 0.01 250);
-  border-color: oklch(0.4 0.01 250);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-btn-hover);
 }
 
 .retry-btn:disabled {

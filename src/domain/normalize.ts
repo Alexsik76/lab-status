@@ -1,8 +1,17 @@
-import type { Inventory, DeviceRecord, ServiceRecord, VmKind, VmRecord } from './model'
+import type {
+  DeviceHardware,
+  DeviceRecord,
+  Inventory,
+  ServiceRecord,
+  TagItem,
+  VmKind,
+  VmRecord,
+} from './model'
 import type {
   RawDevice,
   RawInventory,
   RawService,
+  RawTag,
   RawVirtualMachine,
 } from '../types/netbox'
 
@@ -15,6 +24,39 @@ export function parseVcpus(value: string | null | undefined): number | null {
   if (value == null) return null
   const n = Number.parseFloat(value)
   return Number.isFinite(n) ? n : null
+}
+
+function parseInteger(val: unknown): number | null {
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    return Math.round(val)
+  }
+  if (typeof val === 'string') {
+    const parsed = Number.parseInt(val.trim(), 10)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+export function parseHardware(customFields: Record<string, unknown> | null | undefined): DeviceHardware {
+  return {
+    cpuCores: parseInteger(customFields?.cpu_cores),
+    memoryGb: parseInteger(customFields?.memory_gb),
+    storageGb: parseInteger(customFields?.storage_gb),
+  }
+}
+
+export function normalizeTags(rawTags: readonly RawTag[] | null | undefined): TagItem[] {
+  if (!rawTags) return []
+  return rawTags
+    .map((t) => {
+      const name = t.name.trim()
+      let color = t.color?.trim() || null
+      if (color && !color.startsWith('#')) {
+        color = `#${color}`
+      }
+      return { name, color }
+    })
+    .filter((t) => t.name !== '' && !t.name.startsWith(STACK_TAG_PREFIX))
 }
 
 /** First `stack:<name>` tag; `stack:standalone` and no tag both mean "no stack". */
@@ -48,8 +90,23 @@ export function parseHostId(customFields: Record<string, unknown> | null | undef
   return null
 }
 
+export function parseAlias(customFields: Record<string, unknown> | null | undefined): string | null {
+  const alias = customFields?.alias
+  if (typeof alias === 'string' && alias.trim() !== '') {
+    return alias.trim()
+  }
+  return null
+}
+
 function parseVmKind(typeName: string | undefined): VmKind {
   return typeName === 'KVM' || typeName === 'LXC' || typeName === 'Docker' ? typeName : 'other'
+}
+
+/** Strips CIDR prefix length (e.g. `"10.10.1.60/24"` -> `"10.10.1.60"`). */
+export function stripAddressMask(address: string | null | undefined): string | null {
+  if (!address) return null
+  const plain = address.replace(/\/.*$/, '').trim()
+  return plain || null
 }
 
 function normalizeDevice(raw: RawDevice): DeviceRecord {
@@ -60,9 +117,11 @@ function normalizeDevice(raw: RawDevice): DeviceRecord {
     offline: raw.status === 'offline',
     model: raw.device_type?.model ?? null,
     manufacturer: raw.device_type?.manufacturer?.name ?? null,
-    ip: raw.primary_ip4?.address ?? null,
+    ip: stripAddressMask(raw.primary_ip4?.address),
     cluster: raw.cluster?.name ?? null,
     platform: raw.platform?.name ?? null,
+    tags: normalizeTags(raw.tags),
+    hardware: parseHardware(raw.custom_fields),
   }
 }
 
@@ -70,6 +129,7 @@ function normalizeVm(raw: RawVirtualMachine): VmRecord {
   return {
     id: raw.id,
     name: raw.name ?? `vm ${raw.id}`,
+    alias: parseAlias(raw.custom_fields),
     kind: parseVmKind(raw.virtual_machine_type?.name),
     offline: raw.status === 'offline',
     vcpus: parseVcpus(raw.vcpus),
@@ -78,9 +138,10 @@ function normalizeVm(raw: RawVirtualMachine): VmRecord {
     description: raw.description ?? '',
     image: resolveImage(raw.custom_fields, raw.description),
     stack: parseStack(raw.tags),
+    tags: normalizeTags(raw.tags),
     cluster: raw.cluster?.name ?? null,
     platform: raw.platform?.name ?? null,
-    ip: raw.primary_ip4?.address ?? null,
+    ip: stripAddressMask(raw.primary_ip4?.address),
     deviceId: raw.device?.id ?? null,
     hostId: parseHostId(raw.custom_fields),
   }
@@ -93,11 +154,18 @@ function normalizeService(raw: RawService): ServiceRecord {
     if (parent.__typename === 'VirtualMachineType') link = { kind: 'vm', id: parent.id }
     else if (parent.__typename === 'DeviceType') link = { kind: 'device', id: parent.id }
   }
+  const scheme =
+    typeof raw.custom_fields?.scheme === 'string' && raw.custom_fields.scheme.trim() !== ''
+      ? raw.custom_fields.scheme.trim().toLowerCase()
+      : null
   return {
     id: raw.id,
     name: raw.name ?? `service ${raw.id}`,
     ports: raw.ports ?? [],
-    addresses: (raw.ipaddresses ?? []).map((a) => a.address),
+    scheme,
+    addresses: (raw.ipaddresses ?? [])
+      .map((a) => stripAddressMask(a.address))
+      .filter((a): a is string => a !== null),
     parent: link,
   }
 }

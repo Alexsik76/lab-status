@@ -14,6 +14,7 @@ import type {
 } from './model'
 import { resolveState } from './state'
 import type { StatusEntry } from '../types/status'
+import { resolveContainerState, type DockerStatusIndex } from './containerStatuses'
 
 const MACHINE_ROLE = 'server'
 
@@ -44,6 +45,7 @@ function toServiceItem(record: ServiceRecord, statuses: StatusIndex): ServiceIte
     id: record.id,
     name: record.name,
     ports: record.ports,
+    scheme: record.scheme,
     addresses: record.addresses,
     url: entry?.url ?? null,
     state,
@@ -55,6 +57,7 @@ function toServiceItem(record: ServiceRecord, statuses: StatusIndex): ServiceIte
 interface BuildContext {
   statuses: StatusIndex
   services: ServicesByParent
+  dockerStatuses: DockerStatusIndex
 }
 
 function servicesOf(ctx: BuildContext, kind: 'vm' | 'device', id: string): ServiceItem[] {
@@ -63,17 +66,22 @@ function servicesOf(ctx: BuildContext, kind: 'vm' | 'device', id: string): Servi
 
 function buildContainer(ctx: BuildContext, vm: VmRecord): Container {
   const services = servicesOf(ctx, 'vm', vm.id)
+  const dockerEntry = ctx.dockerStatuses.get(vm.id)
+  const { state, blinking, dockerStatus } = resolveContainerState(
+    vm,
+    services.map((s) => s.state),
+    dockerEntry,
+  )
   return {
     id: vm.id,
     name: vm.name,
     image: vm.image,
     stack: vm.stack,
+    tags: vm.tags ?? [],
     services,
-    state: resolveState({
-      offline: vm.offline,
-      serviceStates: services.map((s) => s.state),
-      childStates: [],
-    }),
+    state,
+    blinking,
+    dockerStatus,
   }
 }
 
@@ -109,6 +117,7 @@ function buildGuest(ctx: BuildContext, vm: VmRecord & { kind: 'KVM' | 'LXC' }, c
     ip: vm.ip,
     platform: vm.platform,
     cluster: vm.cluster,
+    tags: vm.tags ?? [],
     services,
     stacks: buildStacks(containers),
     standalone: containers.filter((c) => c.stack === null),
@@ -135,6 +144,8 @@ function buildMachine(
     ip: device.ip,
     platform: device.platform,
     cluster: device.cluster,
+    tags: device.tags ?? [],
+    hardware: device.hardware,
     services,
     guests,
     apps,
@@ -154,10 +165,15 @@ const isGuestVm = (vm: VmRecord): vm is VmRecord & { kind: 'KVM' | 'LXC' } =>
  * the live statuses. Pure: with an empty status index every state is unknown
  * (or stopped, which comes from NetBox).
  */
-export function buildTree(inventory: Inventory, statuses: StatusIndex = new Map()): LabTree {
+export function buildTree(
+  inventory: Inventory,
+  statuses: StatusIndex = new Map(),
+  dockerStatuses: DockerStatusIndex = new Map(),
+): LabTree {
   const ctx: BuildContext = {
     statuses,
     services: groupBy(inventory.services, (s) => (s.parent ? parentKey(s.parent.kind, s.parent.id) : null)),
+    dockerStatuses,
   }
 
   const machineRecords = inventory.devices.filter((d) => d.roleSlug === MACHINE_ROLE)

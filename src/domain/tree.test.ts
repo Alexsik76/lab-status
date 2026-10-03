@@ -146,7 +146,7 @@ describe('buildTree: edge cases', () => {
   })
 
   it('does not mix up a VM and a device that share a numeric id', () => {
-    const service = { id: '1', name: 's', ports: [], addresses: [], parent: { kind: 'vm' as const, id: machine.id } }
+    const service = { id: '1', name: 's', ports: [], scheme: null, addresses: [], parent: { kind: 'vm' as const, id: machine.id } }
     const tree = buildTree({ ...empty, devices: [machine], services: [service] })
     expect(tree.machines[0].services).toEqual([])
   })

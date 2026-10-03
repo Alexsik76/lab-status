@@ -7,10 +7,10 @@ import { fetchJson } from './http'
 
 export const INVENTORY_QUERY = `{
   device_list { id name status role { slug } device_type { model manufacturer { name } }
-    primary_ip4 { address } cluster { name } platform { name } }
+    primary_ip4 { address } cluster { name } platform { name } tags { name color } custom_fields }
   virtual_machine_list { id name status vcpus memory disk description
     virtual_machine_type { name } cluster { name } device { id name } platform { name }
-    primary_ip4 { address } tags { name } custom_fields }
+    primary_ip4 { address } tags { name color } custom_fields }
   service_list { id name ports custom_fields ipaddresses { address }
     parent { __typename ... on VirtualMachineType { id } ... on DeviceType { id } } }
 }`

@@ -11,6 +11,8 @@ function mockMachine(id: string, name: string): Machine {
     ip: null,
     platform: null,
     cluster: null,
+    tags: [],
+    hardware: { cpuCores: null, memoryGb: null, storageGb: null },
     services: [],
     guests: [],
     apps: [],
@@ -24,18 +26,21 @@ describe('useServerOrder', () => {
   })
 
   it('keeps original order when localStorage is empty', () => {
-    const list = [mockMachine('1', 'prox1'), mockMachine('2', 'prox2'), mockMachine('3', 'prox3')]
+    const list = [mockMachine('1', 'server-a'), mockMachine('2', 'server-b'), mockMachine('3', 'server-c')]
     const { orderedMachines } = useServerOrder(() => list)
 
-    expect(orderedMachines.value.map((m) => m.name)).toEqual(['prox1', 'prox2', 'prox3'])
+    expect(orderedMachines.value.map((m) => m.name)).toEqual(['server-a', 'server-b', 'server-c'])
   })
 
   it('reorders machines and saves to localStorage', () => {
-    const list = [mockMachine('1', 'prox1'), mockMachine('2', 'prox2'), mockMachine('3', 'prox3')]
-    const { orderedMachines, moveMachine } = useServerOrder(() => list)
+    const list = [mockMachine('1', 'server-a'), mockMachine('2', 'server-b'), mockMachine('3', 'server-c')]
+    const { orderedMachines } = useServerOrder(() => list)
 
-    moveMachine(0, 2)
-    expect(orderedMachines.value.map((m) => m.name)).toEqual(['prox2', 'prox3', 'prox1'])
+    const updated = [...orderedMachines.value]
+    const [moved] = updated.splice(0, 1)
+    updated.splice(2, 0, moved)
+    orderedMachines.value = updated
+    expect(orderedMachines.value.map((m) => m.name)).toEqual(['server-b', 'server-c', 'server-a'])
 
     const stored = JSON.parse(localStorage.getItem('homelab_server_order') || '[]')
     expect(stored).toEqual(['2', '3', '1'])
@@ -44,12 +49,12 @@ describe('useServerOrder', () => {
   it('restores order from localStorage and appends new machines at the end', () => {
     localStorage.setItem('homelab_server_order', JSON.stringify(['3', '1']))
     const list = [
-      mockMachine('1', 'prox1'),
-      mockMachine('2', 'prox2'),
-      mockMachine('3', 'prox3'),
+      mockMachine('1', 'server-a'),
+      mockMachine('2', 'server-b'),
+      mockMachine('3', 'server-c'),
     ]
     const { orderedMachines } = useServerOrder(() => list)
 
-    expect(orderedMachines.value.map((m) => m.name)).toEqual(['prox3', 'prox1', 'prox2'])
+    expect(orderedMachines.value.map((m) => m.name)).toEqual(['server-c', 'server-a', 'server-b'])
   })
 })

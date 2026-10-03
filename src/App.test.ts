@@ -1,8 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { netboxResponse, statusEntries } from './__fixtures__'
+import { containerStatusEntries, netboxResponse, statusEntries } from './__fixtures__'
 import App from './App.vue'
-import { NETBOX_GRAPHQL_URL, STATUS_URL } from './config'
+import { CONTAINER_STATUS_URL, NETBOX_GRAPHQL_URL, STATUS_URL } from './config'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,10 +17,12 @@ function deferred() {
   return { gate, release }
 }
 
-function stubBackend(handlers: { netbox: Handler; status: Handler }) {
+function stubBackend(handlers: { netbox: Handler; status: Handler; containerStatus?: Handler }) {
+  const containerStatusHandler = handlers.containerStatus ?? ok(containerStatusEntries)
   const fetchMock = vi.fn(async (url: string) => {
     if (url === NETBOX_GRAPHQL_URL) return handlers.netbox()
     if (url === STATUS_URL) return handlers.status()
+    if (url === CONTAINER_STATUS_URL) return containerStatusHandler()
     throw new Error(`unexpected request ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -48,6 +50,36 @@ describe('App', () => {
     await vi.waitFor(() => expect(states(wrapper)).not.toContain('pending'))
     expect(states(wrapper)).toContain('up')
     expect(wrapper.text()).not.toContain('unavailable')
+    expect(wrapper.text()).not.toContain('/24')
+
+    const findContainer = (name: string) =>
+      wrapper.findAll('.container-node').find((c) => c.find('.container-name').text() === name)
+
+    const energyPostgres = findContainer('energy_postgres')
+    expect(energyPostgres?.classes()).toContain('state-up')
+    expect(energyPostgres?.attributes('title')).toContain('Up 4 days (healthy)')
+
+    const netboxPostgres = findContainer('netbox-docker-postgres-1')
+    expect(netboxPostgres?.classes()).toContain('state-up')
+    expect(netboxPostgres?.attributes('title')).toContain('Up 3 days (healthy)')
+
+    const netboxRedis = findContainer('netbox-docker-redis-1')
+    expect(netboxRedis?.classes()).toContain('state-up')
+    expect(netboxRedis?.attributes('title')).toContain('Up 3 days (healthy)')
+
+    const netboxWorker = findContainer('netbox-docker-netbox-worker-1')
+    expect(netboxWorker?.classes()).toContain('state-up')
+    expect(netboxWorker?.attributes('title')).toContain('Up 3 days (healthy)')
+  })
+
+  it('keeps the tree and says so when only the container status service fails', async () => {
+    stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries), containerStatus: down })
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Live container states are unavailable'))
+
+    expect(wrapper.findAll('.machine-node')).toHaveLength(5)
+    expect(wrapper.find('.error-page').exists()).toBe(false)
+    expect(states(wrapper)).toContain('up')
   })
 
   it('shows the tree with pending statuses while the status service is slow', async () => {
@@ -101,10 +133,11 @@ describe('App', () => {
     expect(wrapper.find('.error-page').exists()).toBe(false)
   })
 
-  it('keeps the tree and says so when only the status service fails', async () => {
-    stubBackend({ netbox: ok(netboxResponse), status: down })
+  it('keeps the tree and says so when live statuses fail', async () => {
+    stubBackend({ netbox: ok(netboxResponse), status: down, containerStatus: down })
     const wrapper = await mountApp()
     await vi.waitFor(() => expect(wrapper.text()).toContain('Live statuses are unavailable'))
+    expect(wrapper.text()).toContain('Live container states are unavailable')
 
     expect(wrapper.findAll('.machine-node')).toHaveLength(5)
     expect(wrapper.find('.error-page').exists()).toBe(false)

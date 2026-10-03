@@ -1,43 +1,69 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { platformToIcon, type PlatformIcon } from '../presentation/platform'
 
 const props = withDefaults(
   defineProps<{
-    os: string
+    platform?: string | null
+    name?: string | null
     size?: number
     dim?: boolean
   }>(),
   {
+    platform: null,
+    name: null,
     size: 20,
     dim: false,
   },
 )
 
-const BRAND: Record<string, { bg: string; fg: string }> = {
+interface IconConfig {
+  kind: 'image' | 'svg'
+  name: string
+  alt: string
+  src?: string
+  bg: string
+  fg: string
+}
+
+const BRAND_THEMES: Record<string, { bg: string; fg: string }> = {
   proxmox: { bg: 'oklch(0.26 0.03 50)', fg: 'oklch(0.80 0.13 55)' },
   truenas: { bg: 'oklch(0.26 0.03 235)', fg: 'oklch(0.78 0.11 230)' },
-  centos: { bg: 'oklch(0.26 0.02 300)', fg: 'oklch(0.75 0.10 300)' },
   debian: { bg: 'oklch(0.26 0.03 5)', fg: 'oklch(0.72 0.15 8)' },
   haos: { bg: 'oklch(0.30 0.06 225)', fg: 'oklch(0.80 0.11 225)' },
   docker: { bg: 'oklch(0.29 0.06 245)', fg: 'oklch(0.74 0.12 245)' },
 }
 
-const LOGO: Record<string, string> = {
-  proxmox: '/assets/proxmox-mark.svg',
-  truenas: '/assets/truenas.svg',
-  centos: '/assets/centos.svg',
-  debian: '/assets/debian-dark.svg',
-}
+const icon = computed<IconConfig | null>(() => {
+  if (props.name === 'docker') {
+    const theme = BRAND_THEMES.docker
+    return { kind: 'svg', name: 'docker', alt: 'Docker', bg: theme.bg, fg: theme.fg }
+  }
 
-const brand = computed(() => BRAND[props.os] ?? BRAND.debian)
-const bg = computed(() => (props.dim ? 'oklch(0.25 0.01 250)' : brand.value.bg))
-const fg = computed(() => (props.dim ? 'oklch(0.55 0.01 250)' : brand.value.fg))
-const logoUrl = computed(() => LOGO[props.os] ?? null)
+  const resolved: PlatformIcon | null = platformToIcon(props.platform)
+  if (!resolved) return null
+
+  const theme = BRAND_THEMES[resolved.name]
+  if (!theme) return null
+
+  return {
+    kind: resolved.kind,
+    name: resolved.name,
+    alt: resolved.alt,
+    src: resolved.src,
+    bg: theme.bg,
+    fg: theme.fg,
+  }
+})
+
+const bg = computed(() => (props.dim ? 'var(--color-icon-dim-bg)' : icon.value?.bg))
+const fg = computed(() => (props.dim ? 'var(--color-icon-dim-fg)' : icon.value?.fg))
 const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}px`)
 </script>
 
 <template>
   <span
+    v-if="icon"
     class="os-icon-box"
     :style="{
       width: `${size}px`,
@@ -45,11 +71,12 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
       borderRadius,
       background: bg,
     }"
+    :title="icon.alt"
   >
     <img
-      v-if="logoUrl"
-      :src="logoUrl"
-      :alt="os"
+      v-if="icon.kind === 'image' && icon.src"
+      :src="icon.src"
+      :alt="icon.alt"
       class="os-logo-img"
       :style="{
         width: `${Math.round(size * 0.8)}px`,
@@ -60,7 +87,7 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
     />
 
     <svg
-      v-else-if="os === 'haos'"
+      v-else-if="icon.name === 'haos'"
       :width="size"
       :height="size"
       viewBox="0 0 16 16"
@@ -79,7 +106,7 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
     </svg>
 
     <svg
-      v-else
+      v-else-if="icon.name === 'docker'"
       :width="size"
       :height="size"
       viewBox="0 0 16 16"
@@ -107,10 +134,12 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
   overflow: hidden;
   user-select: none;
 }
+
 .os-logo-img {
   object-fit: contain;
   display: block;
 }
+
 .os-svg {
   display: block;
 }

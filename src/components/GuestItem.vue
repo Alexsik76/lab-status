@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Container, Guest, Stack } from '../domain/model'
-import { detectGuestOs, getNodePrimaryUrlAndPort } from '../domain/homelabUi'
+import type { Container, Guest, Stack, TagItem } from '../domain/model'
 import { formatMemory } from '../format'
+import { getNodePrimaryUrlAndPort } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
+import LinkOrPlain from './LinkOrPlain.vue'
 import OsIcon from './OsIcon.vue'
 import StateBadge from './StateBadge.vue'
+import Tag from './Tag.vue'
 
 const props = defineProps<{ guest: Guest }>()
 
-const guestOs = computed(() => detectGuestOs(props.guest))
 const displayKind = computed(() => (props.guest.kind === 'KVM' ? 'VM' : props.guest.kind))
 
 const serviceInfo = computed(() =>
@@ -28,6 +29,8 @@ const specs = computed(() => {
 const isEmpty = computed(
   () => props.guest.stacks.length === 0 && props.guest.standalone.length === 0,
 )
+
+const guestTags = computed<TagItem[]>(() => props.guest.tags ?? [])
 
 interface DisplayStack {
   name: string
@@ -72,11 +75,8 @@ const displayStacks = computed<DisplayStack[]>(() => {
     ]"
   >
     <!-- Guest header -->
-    <component
-      :is="guestUrl ? 'a' : 'div'"
-      :href="guestUrl || undefined"
-      :target="guestUrl ? '_blank' : undefined"
-      :rel="guestUrl ? 'noopener noreferrer' : undefined"
+    <LinkOrPlain
+      :href="guestUrl"
       class="guest-header"
       :class="{ 'is-clickable': !!guestUrl }"
     >
@@ -85,7 +85,7 @@ const displayStacks = computed<DisplayStack[]>(() => {
         :class="{ 'is-inactive': guest.state === 'stopped' || guest.state === 'unknown' }"
       >
         <OsIcon
-          :os="guestOs"
+          :platform="guest.platform"
           :size="16"
           :dim="guest.state === 'stopped' || guest.state === 'unknown'"
         />
@@ -93,6 +93,12 @@ const displayStacks = computed<DisplayStack[]>(() => {
       </span>
 
       <span class="guest-name">{{ guest.name }}</span>
+
+      <!-- GitHub-style tags with NetBox colors -->
+      <span v-if="guestTags.length" class="guest-tags">
+        <Tag v-for="tag in guestTags" :key="tag.name" :tag="tag" size="md" />
+      </span>
+
       <span class="spacer"></span>
 
       <span v-if="guest.ip" class="guest-ip">
@@ -104,7 +110,7 @@ const displayStacks = computed<DisplayStack[]>(() => {
       <StateBadge :state="guest.state" variant="guest" />
 
       <span v-if="guestUrl" class="guest-arrow">↗</span>
-    </component>
+    </LinkOrPlain>
 
     <!-- Stacks and Containers -->
     <div v-if="!isEmpty" class="guest-stacks">
@@ -137,9 +143,9 @@ const displayStacks = computed<DisplayStack[]>(() => {
 .guest-card {
   min-width: 0;
   box-sizing: border-box;
-  background: oklch(0.215 0.01 250);
-  border: 1px solid oklch(0.28 0.01 250);
-  border-radius: 6px;
+  background: var(--color-bg-guest);
+  border: 1px solid var(--color-border-guest);
+  border-radius: var(--radius-md);
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -148,13 +154,13 @@ const displayStacks = computed<DisplayStack[]>(() => {
 }
 
 .guest-card.state-down {
-  border: 1.5px solid oklch(0.62 0.22 27);
-  background: oklch(0.22 0.04 27);
+  border: 1.5px solid var(--color-state-down);
+  background: var(--color-bg-guest-down);
 }
 
 .guest-card.state-stopped,
 .guest-card.state-unknown {
-  border: 1px dashed oklch(0.34 0.01 250);
+  border: 1px dashed var(--color-border-dashed);
   background: transparent;
 }
 
@@ -163,9 +169,9 @@ const displayStacks = computed<DisplayStack[]>(() => {
   align-items: center;
   gap: 10px;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
-  color: oklch(0.93 0.006 250);
+  color: var(--color-text-primary);
   background: transparent;
   transition: background 0.12s ease;
   user-select: none;
@@ -175,15 +181,15 @@ const displayStacks = computed<DisplayStack[]>(() => {
   cursor: pointer;
 }
 .guest-header.is-clickable:hover {
-  background: oklch(0.245 0.01 250);
+  background: var(--color-bg-hover);
 }
 
 .state-down .guest-header {
-  background: oklch(0.62 0.22 27);
-  color: #ffffff;
+  background: var(--color-state-down);
+  color: var(--color-text-white);
 }
 .state-down .guest-header.is-clickable:hover {
-  background: oklch(0.68 0.22 27);
+  background: var(--color-state-down-hover);
 }
 
 .kind-badge {
@@ -192,40 +198,61 @@ const displayStacks = computed<DisplayStack[]>(() => {
   align-items: center;
   gap: 5px;
   padding: 2px 6px 2px 2px;
-  border-radius: 4px;
-  border: 1px solid oklch(0.42 0.06 155);
-  background: oklch(0.24 0.03 155);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-kind-active-border);
+  background: var(--color-kind-active-bg);
 }
 .kind-badge.is-inactive {
-  border-color: oklch(0.32 0.01 250);
+  border-color: var(--color-kind-inactive-border);
   background: transparent;
 }
 
+.state-down .kind-badge {
+  border-color: var(--color-kind-down-border);
+}
+
 .kind-text {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: oklch(0.78 0.14 155);
+  color: var(--color-kind-active-fg);
 }
 .kind-badge.is-inactive .kind-text {
-  color: oklch(0.55 0.01 250);
+  color: var(--color-kind-inactive-fg);
+}
+.state-down .kind-badge .kind-text {
+  color: var(--color-text-white);
 }
 
 .guest-name {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 20px;
   font-weight: 500;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: oklch(0.93 0.006 250);
+  color: var(--color-text-primary);
+}
+
+.guest-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-left: 2px;
 }
 
 .state-down .guest-name {
-  color: #ffffff;
+  color: var(--color-text-white);
+}
+.state-stopped .guest-name {
+  color: var(--color-text-stopped);
+}
+.state-unknown .guest-name {
+  color: var(--color-text-unknown);
 }
 
 .spacer {
@@ -233,37 +260,37 @@ const displayStacks = computed<DisplayStack[]>(() => {
 }
 
 .guest-ip {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: oklch(0.62 0.012 250);
+  color: var(--color-text-ip);
   white-space: nowrap;
 }
 .guest-port {
-  color: oklch(0.58 0.012 250);
+  color: var(--color-text-port);
 }
 .state-down .guest-ip,
 .state-down .guest-port {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--color-text-down-muted);
 }
 
 .guest-specs {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: oklch(0.58 0.012 250);
+  color: var(--color-text-port);
   white-space: nowrap;
 }
 .state-down .guest-specs {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-down-subtle);
 }
 
 .guest-arrow {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
-  color: oklch(0.6 0.012 250);
+  color: var(--color-text-muted);
   flex: none;
 }
 .state-down .guest-arrow {
-  color: #ffffff;
+  color: var(--color-text-white);
 }
 
 .guest-stacks {
@@ -275,22 +302,22 @@ const displayStacks = computed<DisplayStack[]>(() => {
 
 .stack-box {
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 2px;
   display: flex;
   flex-direction: column;
 }
 .stack-box.is-labeled {
-  border-color: oklch(0.33 0.012 250);
+  border-color: var(--color-border-stack);
 }
 
 .stack-label {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: oklch(0.55 0.012 250);
+  color: var(--color-text-stack-label);
   padding: 2px 8px 2px;
 }
 
@@ -308,8 +335,8 @@ const displayStacks = computed<DisplayStack[]>(() => {
 
 .empty-notice {
   padding: 4px 8px 6px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: oklch(0.48 0.01 250);
+  color: var(--color-text-dim);
 }
 </style>

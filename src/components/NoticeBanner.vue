@@ -10,23 +10,23 @@ defineProps<{ kind?: 'warning' | 'error' }>()
 .notice {
   margin: 8px 0;
   padding: 8px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border-left: 3px solid;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.4;
   box-sizing: border-box;
 }
 
 .warning {
-  border-color: oklch(0.75 0.15 65);
-  background: oklch(0.20 0.04 65);
-  color: oklch(0.88 0.06 65);
+  border-color: var(--color-notice-warn-border);
+  background: var(--color-notice-warn-bg);
+  color: var(--color-notice-warn-text);
 }
 
 .error {
-  border-color: oklch(0.62 0.22 27);
-  background: oklch(0.20 0.04 27);
-  color: oklch(0.90 0.06 27);
+  border-color: var(--color-notice-err-border);
+  background: var(--color-notice-err-bg);
+  color: var(--color-notice-err-text);
 }
 </style>

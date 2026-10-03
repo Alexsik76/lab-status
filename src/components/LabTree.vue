@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import Sortable from 'sortablejs'
+import { ref } from 'vue'
+import { useSortable } from '@vueuse/integrations/useSortable'
 import type { LabTree } from '../domain/model'
 import { useServerOrder } from '../composables/useServerOrder'
 import ContainerItem from './ContainerItem.vue'
@@ -8,44 +8,25 @@ import MachineItem from './MachineItem.vue'
 
 const props = defineProps<{ tree: LabTree }>()
 
-const { orderedMachines, moveMachine } = useServerOrder(() => props.tree.machines)
+const { orderedMachines } = useServerOrder(() => props.tree.machines)
 
 const listRef = ref<HTMLUListElement | null>(null)
-let sortable: Sortable | null = null
 
-onMounted(() => {
-  if (listRef.value) {
-    sortable = Sortable.create(listRef.value, {
-      animation: 200,
-      handle: '.drag-handle',
-      ghostClass: 'sortable-ghost',
-      chosenClass: 'sortable-chosen',
-      dragClass: 'sortable-drag',
-      onEnd: (evt) => {
-        const { oldIndex, newIndex } = evt
-        if (oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
-          moveMachine(oldIndex, newIndex)
-        }
-      },
-    })
-  }
-})
-
-onUnmounted(() => {
-  if (sortable) {
-    sortable.destroy()
-    sortable = null
-  }
+useSortable(listRef, orderedMachines, {
+  animation: 200,
+  handle: '.drag-handle',
+  ghostClass: 'sortable-ghost',
+  chosenClass: 'sortable-chosen',
+  dragClass: 'sortable-drag',
 })
 </script>
 
 <template>
   <ul ref="listRef" class="lab-tree" aria-label="Lab inventory">
     <MachineItem
-      v-for="(machine, index) in orderedMachines"
+      v-for="machine in orderedMachines"
       :key="machine.id"
       :machine="machine"
-      :index="index"
     />
   </ul>
 
@@ -76,7 +57,7 @@ onUnmounted(() => {
 
 :deep(.sortable-ghost) {
   opacity: 0.35;
-  border: 1px dashed oklch(0.55 0.01 250) !important;
+  border: 1px dashed var(--color-text-muted) !important;
 }
 
 :deep(.sortable-chosen) {
@@ -85,15 +66,15 @@ onUnmounted(() => {
 
 :deep(.sortable-drag) {
   opacity: 0.95;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 10px 25px var(--color-drag-shadow);
 }
 
 .unplaced {
   margin-top: 16px;
   padding: 14px 18px;
-  background: oklch(0.19 0.009 250);
-  border: 1px dashed oklch(0.34 0.01 250);
-  border-radius: 8px;
+  background: var(--color-bg-tile);
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: var(--radius-lg);
 }
 
 .unplaced-header {
@@ -102,17 +83,17 @@ onUnmounted(() => {
 
 .unplaced-title {
   margin: 0 0 4px 0;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 600;
-  color: oklch(0.85 0.006 250);
+  color: var(--color-text-secondary);
 }
 
 .unplaced-desc {
   margin: 0;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: oklch(0.55 0.012 250);
+  color: var(--color-text-muted);
 }
 
 .unplaced-grid {
