@@ -100,12 +100,16 @@ export function useLab() {
     livePhase,
     statusPhase: statuses.phase,
     statusError: statuses.errorMessage,
+    hasStatusData: computed(() => statuses.data.value !== null),
     containerStatusPhase: containerStatuses.phase,
     containerStatusError: containerStatuses.errorMessage,
+    hasContainerStatusData: computed(() => containerStatuses.data.value !== null),
     proxmoxPhase: proxmox.phase,
     proxmoxError: proxmox.errorMessage,
+    hasProxmoxData: computed(() => proxmox.data.value !== null),
     /** The inventory failed to refresh while an older tree is still shown. */
     refreshError: computed(() => (tree.value ? inventory.errorMessage.value : null)),
+    inventoryTimeText: inventory.inventoryTimeText,
     /** Message of the failure that made the page unusable. */
     fatalError: computed(() => (tree.value ? null : inventory.errorMessage.value)),
     isRefreshing: readonly(isManualRefreshing),

@@ -27,12 +27,18 @@ export function balanceMachineUnits(guests: Guest[], apps: Container[]): { items
   const units: ColumnUnit[] = []
 
   for (const g of sortedGuests) {
-    const stackWeight = g.stacks.reduce(
-      (sum, s) => sum + Math.ceil(s.containers.length / 2) * 1.4 + (s.containers.length > 1 ? 0.5 : 0),
+    const multiStacks = g.stacks.filter((s) => s.containers.length > 1)
+    const singleStacks = g.stacks.filter((s) => s.containers.length === 1)
+
+    const multiStackWeight = multiStacks.reduce(
+      (sum, s) => sum + Math.ceil(s.containers.length / 2) * 1.4 + 0.5,
       0,
     )
-    const standaloneWeight = Math.ceil(g.standalone.length / 2) * 1.4
-    const est = 1 + stackWeight + standaloneWeight
+    const singleCells = singleStacks.length + g.standalone.length
+    const singleWeight =
+      Math.ceil(singleCells / 2) * 1.4 + Math.ceil(singleStacks.length / 2) * 0.5
+
+    const est = 1 + multiStackWeight + singleWeight
     units.push({
       id: g.id,
       isGuest: true,

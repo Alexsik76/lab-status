@@ -9,7 +9,7 @@ export type DockerStatusIndex = ReadonlyMap<string, DockerContainerEntry>
  * - A Docker entry belongs to the NetBox container whose custom_fields.alias equals the entry's name.
  * - If several containers share that alias, take the one whose host VM name equals env.
  * - Entries with no NetBox container are ignored.
- * - Containers with no Docker entry (apps on truenas) keep the current rules.
+ * - Containers with no Docker entry (apps on a host machine) keep the current rules.
  */
 export function matchDockerContainers(
   entries: readonly DockerContainerEntry[],
@@ -66,30 +66,20 @@ export interface ContainerStateResult {
 
 /**
  * State rules for a container:
- * - "offline" in NetBox still means stopped.
+ * - When a live source has data (Docker entry or HTTP check), state comes from live data only.
  * - Docker state is anything but "running" -> stopped (grey).
  * - Docker running and its HTTP check fails -> down: red and blinking.
  * - Docker running and the HTTP check passes or does not exist -> up (green).
- * - Containers with no Docker entry keep the current rules.
+ * - NetBox "offline" is a fallback, used only when no live data exists for the container.
  */
 export function resolveContainerState(
   vm: VmRecord,
   serviceStates: readonly ServiceState[],
   dockerEntry?: DockerContainerEntry | null,
 ): ContainerStateResult {
-  // 1. "offline" in NetBox still means stopped
-  if (vm.offline) {
-    return {
-      state: 'stopped',
-      blinking: false,
-      dockerStatus: dockerEntry?.status ?? null,
-    }
-  }
-
-  // 2. If no Docker entry: keep current rules
   if (!dockerEntry) {
     const state = resolveState({
-      offline: false,
+      offline: vm.offline,
       serviceStates,
       childStates: [],
     })
@@ -101,8 +91,6 @@ export function resolveContainerState(
   }
 
   const dockerStatus = dockerEntry.status
-
-  // 3. Docker state is anything but "running" -> stopped
   if (dockerEntry.state.toLowerCase() !== 'running') {
     return {
       state: 'stopped',
@@ -111,7 +99,6 @@ export function resolveContainerState(
     }
   }
 
-  // 4. Docker running: check HTTP service checks
   const checked = serviceStates.filter((s) => s !== 'unknown')
   if (checked.includes('down')) {
     return {

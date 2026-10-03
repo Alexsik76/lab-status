@@ -44,6 +44,24 @@ server {
         return 404;
     }
 
+    # Service status: GET only
+    location = /api/service-status {
+        limit_except GET {
+            deny all;
+        }
+        proxy_pass ${SERVICE_STATUS_URL};
+        proxy_ssl_verify off;
+    }
+
+    # Container status: GET only
+    location = /api/container-status {
+        limit_except GET {
+            deny all;
+        }
+        proxy_pass ${CONTAINER_STATUS_URL};
+        proxy_ssl_verify off;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }

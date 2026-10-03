@@ -1,1 +1,484 @@
-{"data":[{"arcsize":1920,"maxcpu":8,"rootused":22841091140.2667,"swapused":44404736,"pressurememoryfull":0,"memused":10721371477.3333,"memtotal":15642816512,"netout":103159.053333333,"cpu":0.0175651868696545,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000373454101279165,"pressurecpusome":0,"pressureiosome":0,"pressureiofull":0,"loadavg":0.419666666666667,"memavailable":4921445034.66667,"time":1791048300,"netin":79150.8433333333},{"arcsize":1920,"maxcpu":8,"pressurememoryfull":0,"rootused":22841096874.6667,"swapused":44404736,"netout":139526.82,"cpu":0.0170676420582039,"memused":10722800571.7333,"memtotal":15642816512,"pressurecpusome":0,"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.000374123841569007,"pressureiosome":0,"pressureiofull":0,"netin":78209.5,"memavailable":4920015940.26667,"loadavg":0.284666666666667,"time":1791048360},{"maxcpu":8,"arcsize":1920,"cpu":0.0173717422303177,"netout":107490.626666667,"memtotal":15642816512,"memused":10716614246.4,"pressurememoryfull":0,"swapused":44404736,"rootused":22841096874.6667,"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.000350525308031324,"roottotal":70258786304,"pressurememorysome":0,"netin":77738.64,"loadavg":0.276,"memavailable":4926202265.6,"time":1791048420,"pressureiosome":0,"pressureiofull":0},{"maxcpu":8,"arcsize":1920,"pressurememoryfull":0,"swapused":44404736,"rootused":22841128413.8667,"cpu":0.0169856351908896,"netout":93767.3566666667,"memtotal":15642816512,"memused":10726115874.1333,"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.00037620509986089,"pressurememorysome":0,"roottotal":70258786304,"pressureiofull":0,"pressureiosome":0,"netin":77972.1233333333,"memavailable":4916700637.86667,"loadavg":0.258666666666667,"time":1791048480},{"swaptotal":8589930496,"iowait":0.000402188356438988,"roottotal":70258786304,"pressurememorysome":0,"pressurecpusome":0,"pressureiofull":0,"pressureiosome":0,"loadavg":0.259333333333333,"memavailable":4933126144,"time":1791048540,"netin":83376.5033333333,"maxcpu":8,"arcsize":1920,"swapused":44404736,"rootused":22841108343.4667,"pressurememoryfull":0,"memtotal":15642816512,"memused":10709690368,"cpu":0.0182469892629191,"netout":133624.83},{"pressureiofull":0,"pressureiosome":0,"netin":78141.5966666667,"memavailable":4928525653.33333,"loadavg":0.311666666666667,"time":1791048600,"pressurecpusome":0,"iowait":0.000364973000879644,"swaptotal":8589930496,"pressurememorysome":0,"roottotal":70258786304,"pressurememoryfull":0,"swapused":44404736,"rootused":22841093051.7333,"cpu":0.016764871480062,"netout":106552.696666667,"memtotal":15642816512,"memused":10714290858.6667,"maxcpu":8,"arcsize":1920},{"maxcpu":8,"arcsize":1920,"swapused":44404736,"rootused":22841095918.9333,"pressurememoryfull":0,"memtotal":15642816512,"memused":10727265894.4,"cpu":0.0176641331900514,"netout":138626.816666667,"swaptotal":8589930496,"iowait":0.000850931909271083,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"pressureiofull":0.111333333333333,"pressureiosome":0.111333333333333,"loadavg":0.232,"memavailable":4915550617.6,"time":1791048660,"netin":79071.8133333333},{"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.00152860445611588,"pressurecpusome":0,"pressureiosome":0.268166666666667,"pressureiofull":0.268166666666667,"memavailable":4932751564.8,"loadavg":0.261666666666667,"time":1791048720,"netin":78042.3066666667,"arcsize":1920,"maxcpu":8,"rootused":22841097352.5333,"swapused":44404736,"pressurememoryfull":0,"memused":10710064947.2,"memtotal":15642816512,"netout":105044.2,"cpu":0.016600936233869},{"maxcpu":8,"arcsize":1920,"swapused":44404736,"rootused":22841096874.6667,"pressurememoryfull":0,"memtotal":15642816512,"memused":10710623709.8667,"cpu":0.0165114378441517,"netout":114649.843333333,"swaptotal":8589930496,"iowait":0.000391091575563663,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"pressureiosome":0.005,"pressureiofull":0.005,"time":1791048780,"memavailable":4932192802.13333,"loadavg":0.224666666666667,"netin":77658.9466666667},{"pressurecpusome":0,"iowait":0.000365966439622864,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0,"pressureiofull":0,"pressureiosome":0,"netin":83658.29,"memavailable":4930728755.2,"time":1791048840,"loadavg":0.175,"maxcpu":8,"arcsize":1920,"pressurememoryfull":0,"swapused":44404736,"rootused":22841093051.7333,"cpu":0.018755057147698,"netout":123368.753333333,"memtotal":15642816512,"memused":10712087756.8},{"arcsize":1920,"maxcpu":8,"memused":10714868531.2,"memtotal":15642816512,"netout":108552.783333333,"cpu":0.0175866700193858,"rootused":22841092096,"swapused":44404736,"pressurememoryfull":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000385720010132866,"pressurecpusome":0,"memavailable":4927947980.8,"loadavg":0.441333333333333,"time":1791048900,"netin":78416.31,"pressureiofull":0,"pressureiosome":0},{"cpu":0.018882681289311,"netout":142083.943333333,"memtotal":15642816512,"memused":10717662549.3333,"pressurememoryfull":0,"swapused":44404736,"rootused":22841095918.9333,"maxcpu":8,"arcsize":1920,"netin":85801.5466666667,"memavailable":4925153962.66667,"time":1791048960,"loadavg":0.460333333333333,"pressureiosome":0,"pressureiofull":0,"pressurecpusome":0,"iowait":0.000353543152322798,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0},{"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000343158654060549,"pressureiosome":0,"pressureiofull":0,"netin":84853.46,"time":1791049020,"memavailable":4925514956.8,"loadavg":0.392,"arcsize":1920,"maxcpu":8,"pressurememoryfull":0,"rootused":22841093051.7333,"swapused":44404736,"netout":121637.743333333,"cpu":0.0170467646690472,"memused":10717301555.2,"memtotal":15642816512},{"pressurecpusome":0,"iowait":0.000378255867167437,"swaptotal":8589930496,"pressurememorysome":0,"roottotal":70258786304,"netin":78315.5766666667,"memavailable":4923940864,"loadavg":0.257333333333333,"time":1791049080,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"cpu":0.017275591900689,"netout":73276.6333333333,"memtotal":15642816512,"memused":10718875648,"pressurememoryfull":0,"swapused":44404736,"rootused":22841092096},{"netout":136887.46,"cpu":0.0194442686951341,"memused":10713615701.3333,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841095918.9333,"swapused":44404736,"arcsize":1920,"maxcpu":8,"netin":92639.0233333333,"loadavg":0.166,"memavailable":4929200810.66667,"time":1791049140,"pressureiofull":0.0366666666666667,"pressureiosome":0.0366666666666667,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"iowait":0.000537216870416706,"swaptotal":8589930496},{"arcsize":1920,"maxcpu":8,"memused":10715540002.1333,"memtotal":15642816512,"netout":130087,"cpu":0.0174498137853994,"rootused":22841093051.7333,"swapused":44404736,"pressurememoryfull":0,"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.000395997210331421,"pressurecpusome":0,"memavailable":4927276509.86667,"time":1791049200,"loadavg":0.151,"netin":81639.1333333333,"pressureiofull":0,"pressureiosome":0},{"swaptotal":8589930496,"iowait":0.000259605872987073,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"loadavg":0.207,"memavailable":4927394611.2,"time":1791049260,"netin":81035.44,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"memtotal":15642816512,"memused":10715421900.8,"cpu":0.0193146691834588,"netout":86508.11,"swapused":44404736,"rootused":22841092096,"pressurememoryfull":0},{"maxcpu":8,"arcsize":1920,"cpu":0.022309884845135,"netout":166899.276666667,"memtotal":15642816512,"memused":10724435831.4667,"pressurememoryfull":0,"swapused":44404736,"rootused":22841095918.9333,"pressurecpusome":0,"iowait":0.000539111061409263,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0,"netin":81179.22,"loadavg":0.223333333333333,"memavailable":4918380680.53333,"time":1791049320,"pressureiofull":0,"pressureiosome":0},{"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.000642004980857623,"roottotal":70258786304,"pressurememorysome":0,"netin":81656.5533333333,"memavailable":4922305058.13333,"loadavg":0.144666666666667,"time":1791049380,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"cpu":0.0215927094075489,"netout":154515.883333333,"memtotal":15642816512,"memused":10720511453.8667,"pressurememoryfull":0,"swapused":44404736,"rootused":22841093051.7333},{"pressureiosome":0,"pressureiofull":0,"loadavg":0.129,"memavailable":4923014485.33333,"time":1791049440,"netin":86928.8933333333,"iowait":0.000375121396401297,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0,"pressurecpusome":0,"swapused":44404736,"rootused":22841092096,"pressurememoryfull":0,"memtotal":15642816512,"memused":10719802026.6667,"cpu":0.0224446940469277,"netout":143934.163333333,"maxcpu":8,"arcsize":1920},{"pressureiofull":0.0166666666666667,"pressureiosome":0.0166666666666667,"netin":79289.91,"memavailable":4927749324.8,"time":1791049500,"loadavg":0.176,"pressurecpusome":0,"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.000407443922501815,"pressurememoryfull":0,"rootused":22841095918.9333,"swapused":44404736,"netout":88441.5466666667,"cpu":0.0176773223742608,"memused":10715067187.2,"memtotal":15642816512,"arcsize":1920,"maxcpu":8},{"pressurecpusome":0,"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.000418404111388238,"netin":81306.81,"memavailable":4930992674.13333,"time":1791049560,"loadavg":0.237,"pressureiosome":0,"pressureiofull":0,"arcsize":1920,"maxcpu":8,"netout":156509.206666667,"cpu":0.0219422382496104,"memused":10711823837.8667,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841093051.7333,"swapused":44404736},{"arcsize":1920,"maxcpu":8,"pressurememoryfull":0,"rootused":22841092096,"swapused":44404736,"netout":195144.416666667,"cpu":0.0254986784121527,"memused":10719568827.7333,"memtotal":15642816512,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"iowait":0.000327484280409206,"swaptotal":8589930496,"pressureiofull":0,"pressureiosome":0,"netin":92587.99,"memavailable":4923247684.26667,"loadavg":0.178666666666667,"time":1791049620},{"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.000646944848746169,"roottotal":70258786304,"pressurememorysome":0,"netin":82140.5266666667,"memavailable":4934892339.2,"loadavg":0.389333333333333,"time":1791049680,"pressureiofull":0,"pressureiosome":0,"maxcpu":8,"arcsize":1920,"cpu":0.023281619154691,"netout":137374.233333333,"memtotal":15642816512,"memused":10707924172.8,"pressurememoryfull":0,"swapused":44404736,"rootused":22841092096},{"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.000436100736910306,"pressurememorysome":0,"roottotal":70258786304,"netin":85041.6066666667,"time":1791049740,"memavailable":4925741056,"loadavg":0.304333333333333,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"cpu":0.0209643940675576,"netout":109668.693333333,"memtotal":15642816512,"memused":10717075456,"pressurememoryfull":0,"swapused":44404736,"rootused":22841092096},{"swaptotal":8589930496,"iowait":0.000623290164418369,"roottotal":70258786304,"pressurememorysome":0,"pressurecpusome":0,"time":1791049800,"memavailable":4933889774.93333,"loadavg":0.244333333333333,"netin":78764.5366666667,"pressureiofull":0,"pressureiosome":0,"maxcpu":8,"arcsize":1920,"memtotal":15642816512,"memused":10708926737.0667,"cpu":0.0226994447525198,"netout":122268.556666667,"swapused":44404736,"rootused":22841092096,"pressurememoryfull":0},{"pressurecpusome":0,"iowait":0.00107081931562563,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0,"pressureiofull":0.0216666666666667,"pressureiosome":0.0216666666666667,"netin":82211.4666666667,"memavailable":4925294728.53333,"time":1791049860,"loadavg":0.371666666666667,"maxcpu":8,"arcsize":1920,"pressurememoryfull":0,"swapused":44404736,"rootused":22841092096,"cpu":0.0280205337660366,"netout":227123.63,"memtotal":15642816512,"memused":10717521783.4667},{"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"iowait":0.00037986822518787,"swaptotal":8589930496,"netin":80157.6466666667,"time":1791049920,"memavailable":4925974254.93333,"loadavg":0.2,"pressureiosome":0,"pressureiofull":0,"arcsize":1920,"maxcpu":8,"netout":88362.3033333333,"cpu":0.0185018801272814,"memused":10716842257.0667,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841092096,"swapused":44404736},{"arcsize":1920,"maxcpu":8,"netout":117393.88,"cpu":0.0189758696697157,"memused":10714204979.2,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841092096,"swapused":44404736,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000346480958716325,"netin":77679.54,"loadavg":0.147333333333333,"memavailable":4928611532.8,"time":1791049980,"pressureiofull":0,"pressureiosome":0},{"netout":154869.673333333,"cpu":0.0224987190383578,"memused":10713383458.1333,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841092096,"swapused":44404736,"arcsize":1920,"maxcpu":8,"netin":87286.5733333333,"memavailable":4929433053.86667,"loadavg":0.106333333333333,"time":1791050040,"pressureiofull":0.038,"pressureiosome":0.038,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000647903003070211},{"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000419503561649829,"pressurecpusome":0,"time":1791050100,"memavailable":4927755195.73333,"loadavg":0.241333333333333,"netin":79491.3166666667,"pressureiosome":0.00533333333333333,"pressureiofull":0.00533333333333333,"arcsize":1920,"maxcpu":8,"memused":10715061316.2667,"memtotal":15642816512,"netout":124218.276666667,"cpu":0.0192718347827401,"rootused":22841092096,"swapused":44404736,"pressurememoryfull":0},{"memavailable":4932742894.93333,"loadavg":0.381333333333333,"time":1791050160,"netin":81939.7166666667,"pressureiosome":0,"pressureiofull":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000502715523887659,"pressurecpusome":0,"memused":10710073617.0667,"memtotal":15642816512,"netout":144509.91,"cpu":0.0234789775935308,"rootused":22841092096,"swapused":44404736,"pressurememoryfull":0,"arcsize":1920,"maxcpu":8},{"pressurecpusome":0,"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.000650910798944292,"pressureiofull":0,"pressureiosome":0,"netin":83673.4633333333,"memavailable":4933186628.26667,"time":1791050220,"loadavg":0.295,"arcsize":1920,"maxcpu":8,"pressurememoryfull":0,"rootused":22841092096,"swapused":44404736,"netout":202767.723333333,"cpu":0.0257236100730609,"memused":10709629883.7333,"memtotal":15642816512},{"pressureiofull":0,"pressureiosome":0,"loadavg":0.304333333333333,"memavailable":4934360405.33333,"time":1791050280,"netin":79201.73,"iowait":0.000400562359745462,"swaptotal":8589930496,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"swapused":44404736,"rootused":22841113122.1333,"pressurememoryfull":0,"memtotal":15642816512,"memused":10708456106.6667,"cpu":0.0193374549771647,"netout":145899.62,"maxcpu":8,"arcsize":1920},{"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.00043602187784084,"roottotal":70258786304,"pressurememorysome":0,"pressureiosome":0,"pressureiofull":0,"netin":84080.06,"loadavg":0.245,"memavailable":4934468676.26667,"time":1791050340,"maxcpu":8,"arcsize":1920,"pressurememoryfull":0,"swapused":44404736,"rootused":22841108343.4667,"cpu":0.0194490001517454,"netout":87713.54,"memtotal":15642816512,"memused":10708347835.7333},{"memtotal":15642816512,"memused":10718511377.0667,"cpu":0.0214844844995461,"netout":149256.693333333,"swapused":44404736,"rootused":22841096874.6667,"pressurememoryfull":0,"maxcpu":8,"arcsize":1920,"time":1791050400,"memavailable":4924305134.93333,"loadavg":0.245666666666667,"netin":81040.0666666667,"pressureiosome":0,"pressureiofull":0,"swaptotal":8589930496,"iowait":0.00053557387749641,"roottotal":70258786304,"pressurememorysome":0,"pressurecpusome":0},{"iowait":0.000951649428881464,"swaptotal":8589930496,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"loadavg":0.256666666666667,"memavailable":4934393582.93333,"time":1791050460,"netin":85003.3666666667,"pressureiosome":0.028,"pressureiofull":0.028,"maxcpu":8,"arcsize":1920,"memtotal":15642816512,"memused":10708422929.0667,"cpu":0.0289900235028154,"netout":205605.286666667,"swapused":44404736,"rootused":22841092096,"pressurememoryfull":0},{"pressurememoryfull":0,"rootused":22841096874.6667,"swapused":44404736,"netout":136003.616666667,"cpu":0.0216475965323923,"memused":10724405657.6,"memtotal":15642816512,"arcsize":1920,"maxcpu":8,"pressureiofull":0.000333333333333333,"pressureiosome":0.000333333333333333,"netin":81233.76,"memavailable":4918410854.4,"time":1791050520,"loadavg":0.4,"pressurecpusome":0,"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.000533473279195461},{"pressureiosome":0.233333333333333,"pressureiofull":0.203,"netin":83213.6166666667,"time":1791050580,"memavailable":4914529348.26667,"loadavg":0.41,"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.0019613481870968,"roottotal":70258786304,"pressurememorysome":0,"pressurememoryfull":0,"swapused":44404736,"rootused":22841096874.6667,"cpu":0.0247247815871812,"netout":180284.75,"memtotal":15642816512,"memused":10728287163.7333,"maxcpu":8,"arcsize":1920},{"pressurememoryfull":0,"rootused":22841096874.6667,"swapused":44404736,"netout":142279.936666667,"cpu":0.0196350311779417,"memused":10723956599.4667,"memtotal":15642816512,"arcsize":1920,"maxcpu":8,"pressureiofull":0.0603333333333333,"pressureiosome":0.0733333333333333,"netin":85085.5233333333,"memavailable":4918859912.53333,"time":1791050640,"loadavg":0.444,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"iowait":0.000585000108349279,"swaptotal":8589930496},{"arcsize":1920,"maxcpu":8,"pressurememoryfull":0,"rootused":22841096874.6667,"swapused":44404736,"netout":122477.356666667,"cpu":0.0214005228473513,"memused":10731829657.6,"memtotal":15642816512,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000443930867733615,"pressureiofull":0,"pressureiosome":0,"netin":80248.6566666667,"memavailable":4910986854.4,"loadavg":0.616666666666667,"time":1791050700},{"roottotal":70258786304,"pressurememorysome":0,"iowait":0.000326897820698075,"swaptotal":8589930496,"pressurecpusome":0,"time":1791050760,"memavailable":4902468812.8,"loadavg":0.463,"netin":78285.02,"pressureiosome":0,"pressureiofull":0,"arcsize":1920,"maxcpu":8,"memused":10740347699.2,"memtotal":15642816512,"netout":108867.116666667,"cpu":0.0176677615642205,"rootused":22841097420.8,"swapused":44404736,"pressurememoryfull":0},{"memused":10717391667.2,"memtotal":15642816512,"netout":137120.63,"cpu":0.0181133529811565,"rootused":22841097011.2,"swapused":44404736,"pressurememoryfull":0,"arcsize":1920,"maxcpu":8,"memavailable":4925424844.8,"time":1791050820,"loadavg":0.304333333333333,"netin":79583.9333333333,"pressureiosome":0,"pressureiofull":0,"roottotal":70258786304,"pressurememorysome":0,"iowait":0.000441861711805609,"swaptotal":8589930496,"pressurecpusome":0},{"swaptotal":8589930496,"iowait":0.000474024180930158,"roottotal":70258786304,"pressurememorysome":0,"pressurecpusome":0,"memavailable":4916987904,"loadavg":0.283,"time":1791050880,"netin":103454.126666667,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"memtotal":15642816512,"memused":10725828608,"cpu":0.0224447300354904,"netout":191603.01,"swapused":44404736,"rootused":22841112166.4,"pressurememoryfull":0},{"arcsize":1920,"maxcpu":8,"netout":119939.736666667,"cpu":0.0200904703869061,"memused":10742996172.8,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841109299.2,"swapused":44404736,"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000415480273938178,"netin":92005.9866666667,"memavailable":4899820339.2,"loadavg":0.310333333333333,"time":1791050940,"pressureiosome":0,"pressureiofull":0},{"pressureiofull":0,"pressureiosome":0,"time":1791051000,"memavailable":4893912814.93333,"loadavg":0.199666666666667,"netin":87288.4966666667,"roottotal":70258786304,"pressurememorysome":0,"iowait":0.000373594607584337,"swaptotal":8589930496,"pressurecpusome":0,"rootused":22841114077.8667,"swapused":44404736,"pressurememoryfull":0,"memused":10748903697.0667,"memtotal":15642816512,"netout":116565.903333333,"cpu":0.0193038843181074,"arcsize":1920,"maxcpu":8},{"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.000387797367402615,"pressurecpusome":0,"pressureiosome":0,"pressureiofull":0,"loadavg":0.193333333333333,"memavailable":4894101367.46667,"time":1791051060,"netin":87660.7333333333,"arcsize":1920,"maxcpu":8,"rootused":22841121314.1333,"swapused":44404736,"pressurememoryfull":0,"memused":10748715144.5333,"memtotal":15642816512,"netout":150616.493333333,"cpu":0.0180279934980486},{"pressurememoryfull":0,"swapused":44404736,"rootused":22841128413.8667,"cpu":0.0191270082386125,"netout":95200.71,"memtotal":15642816512,"memused":10757904110.9333,"maxcpu":8,"arcsize":1920,"pressureiosome":0,"pressureiofull":0,"netin":85466.7333333333,"loadavg":0.212333333333333,"memavailable":4884912401.06667,"time":1791051120,"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.000332213488053175,"pressurememorysome":0,"roottotal":70258786304},{"arcsize":1920,"maxcpu":8,"rootused":22841123635.2,"swapused":44404736,"pressurememoryfull":0,"memused":10755787980.8,"memtotal":15642816512,"netout":100988.693333333,"cpu":0.0188146672503417,"pressurememorysome":0,"roottotal":70258786304,"iowait":0.000334419032283222,"swaptotal":8589930496,"pressurecpusome":0,"pressureiosome":0,"pressureiofull":0,"loadavg":0.243666666666667,"memavailable":4887028531.2,"time":1791051180,"netin":85853.7866666667},{"swaptotal":8589930496,"iowait":0.000577046365913963,"roottotal":70258786304,"pressurememorysome":0,"pressurecpusome":0,"time":1791051240,"memavailable":4891516245.33333,"loadavg":0.286,"netin":95450.67,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"memtotal":15642816512,"memused":10751300266.6667,"cpu":0.02219612285433,"netout":150654.613333333,"swapused":44404736,"rootused":22841139882.6667,"pressurememoryfull":0},{"iowait":0.000295253199395285,"swaptotal":8589930496,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"memavailable":4899826619.73333,"loadavg":0.285333333333333,"time":1791051300,"netin":86504.0866666667,"pressureiosome":0,"pressureiofull":0,"maxcpu":8,"arcsize":1920,"memtotal":15642816512,"memused":10742989892.2667,"cpu":0.0192791293836925,"netout":104469.536666667,"swapused":44404736,"rootused":22841143432.5333,"pressurememoryfull":0},{"pressurecpusome":0,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.00040526681705529,"netin":84537.5266666667,"memavailable":4891754496,"time":1791051360,"loadavg":0.366666666666667,"pressureiosome":0,"pressureiofull":0,"arcsize":1920,"maxcpu":8,"netout":163327.023333333,"cpu":0.0197315797834989,"memused":10751062016,"memtotal":15642816512,"pressurememoryfull":0,"rootused":22841142749.8667,"swapused":44404736},{"roottotal":70258786304,"pressurememorysome":0,"swaptotal":8589930496,"iowait":0.00038951520216237,"pressurecpusome":0,"pressureiofull":0,"pressureiosome":0,"memavailable":4904062976,"loadavg":0.433666666666667,"time":1791051420,"netin":77294.4442424242,"arcsize":1920,"maxcpu":8,"rootused":22841136878.9333,"swapused":44404736,"pressurememoryfull":0,"memused":10738753536,"memtotal":15642816512,"netout":103407.136060606,"cpu":0.0179349469500262},{"memavailable":4898730530.13333,"time":1791051480,"loadavg":0.308166666666667,"netin":78792.6724242424,"pressureiosome":0,"pressureiofull":0,"roottotal":70258786304,"pressurememorysome":0,"iowait":0.000288610053598796,"swaptotal":8589930496,"pressurecpusome":0,"memused":10744085981.8667,"memtotal":15642816512,"netout":102810.227272727,"cpu":0.0177827115342802,"rootused":22841137834.6667,"swapused":44404736,"pressurememoryfull":0,"arcsize":1920,"maxcpu":8},{"pressureiofull":0,"pressureiosome":0,"loadavg":0.413333333333333,"memavailable":4903884936.53333,"time":1791051540,"netin":111694.87,"pressurememorysome":0,"roottotal":70258786304,"swaptotal":8589930496,"iowait":0.00055756909807356,"pressurecpusome":0,"rootused":22841141384.5333,"swapused":44404736,"pressurememoryfull":0,"memused":10738931575.4667,"memtotal":15642816512,"netout":136042.903333333,"cpu":0.0218894093577776,"arcsize":1920,"maxcpu":8},{"cpu":0.0192138574039798,"netout":117695.02,"memtotal":15642816512,"memused":10739554986.6667,"pressurememoryfull":0,"swapused":44404736,"rootused":22841144524.8,"maxcpu":8,"arcsize":1920,"netin":86124.6733333333,"memavailable":4903261525.33333,"loadavg":0.328666666666667,"time":1791051600,"pressureiofull":0,"pressureiosome":0,"pressurecpusome":0,"iowait":0.000409672803737095,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0},{"netin":88935.8133333333,"time":1791051660,"memavailable":4909679138.13333,"loadavg":0.294333333333333,"pressureiofull":0,"pressureiosome":0,"pressurecpusome":0,"swaptotal":8589930496,"iowait":0.000441071334807824,"roottotal":70258786304,"pressurememorysome":0,"cpu":0.0234081491723727,"netout":139689.2,"memtotal":15642816512,"memused":10733137373.8667,"pressurememoryfull":0,"swapused":44404736,"rootused":22841211835.7333,"maxcpu":8,"arcsize":1920},{"cpu":0.0192879187840265,"netout":139530.826666667,"memtotal":15642816512,"memused":10737101073.0667,"pressurememoryfull":0,"swapused":44404736,"rootused":22841207739.7333,"maxcpu":8,"arcsize":1920,"netin":86512.8333333333,"memavailable":4905715438.93333,"time":1791051720,"loadavg":0.232333333333333,"pressureiofull":0,"pressureiosome":0,"pressurecpusome":0,"iowait":0.000371949962843763,"swaptotal":8589930496,"roottotal":70258786304,"pressurememorysome":0},{"pressureiofull":0,"pressureiosome":0,"netin":86532.7066666667,"memavailable":4903663752.53333,"time":1791051780,"loadavg":0.255,"pressurecpusome":0,"iowait":0.000267552320091668,"swaptotal":8589930496,"pressurememorysome":0,"roottotal":70258786304,"pressurememoryfull":0,"swapused":44404736,"rootused":22841206784,"cpu":0.0194986518452724,"netout":144057.56,"memtotal":15642816512,"memused":10739152759.4667,"maxcpu":8,"arcsize":1920},{"pressureiosome":0,"pressureiofull":0,"time":1791051840,"memavailable":4903513975.46667,"loadavg":0.360333333333333,"netin":94253.4433333333,"swaptotal":8589930496,"iowait":0.000603161909502289,"pressurememorysome":0,"roottotal":70258786304,"pressurecpusome":0,"swapused":44404736,"rootused":22841206784,"pressurememoryfull":0,"memtotal":15642816512,"memused":10739302536.5333,"cpu":0.0246278069485986,"netout":124560.226666667,"maxcpu":8,"arcsize":1920}]}
+{
+  "data": [
+    {
+      "time": 1700000000,
+      "cpu": 0.12,
+      "memused": 10000000000,
+      "memtotal": 15642816512,
+      "netin": 50000,
+      "netout": 70000
+    },
+    {
+      "time": 1700000060,
+      "cpu": 0.126,
+      "memused": 10020000000,
+      "memtotal": 15642816512,
+      "netin": 50100,
+      "netout": 70150
+    },
+    {
+      "time": 1700000120,
+      "cpu": 0.132,
+      "memused": 10040000000,
+      "memtotal": 15642816512,
+      "netin": 50200,
+      "netout": 70300
+    },
+    {
+      "time": 1700000180,
+      "cpu": 0.138,
+      "memused": 10060000000,
+      "memtotal": 15642816512,
+      "netin": 50300,
+      "netout": 70450
+    },
+    {
+      "time": 1700000240,
+      "cpu": 0.144,
+      "memused": 10080000000,
+      "memtotal": 15642816512,
+      "netin": 50400,
+      "netout": 70600
+    },
+    {
+      "time": 1700000300,
+      "cpu": 0.15,
+      "memused": 10100000000,
+      "memtotal": 15642816512,
+      "netin": 50500,
+      "netout": 70750
+    },
+    {
+      "time": 1700000360,
+      "cpu": 0.156,
+      "memused": 10120000000,
+      "memtotal": 15642816512,
+      "netin": 50600,
+      "netout": 70900
+    },
+    {
+      "time": 1700000420,
+      "cpu": 0.162,
+      "memused": 10140000000,
+      "memtotal": 15642816512,
+      "netin": 50700,
+      "netout": 71050
+    },
+    {
+      "time": 1700000480,
+      "cpu": 0.168,
+      "memused": 10160000000,
+      "memtotal": 15642816512,
+      "netin": 50800,
+      "netout": 71200
+    },
+    {
+      "time": 1700000540,
+      "cpu": 0.174,
+      "memused": 10180000000,
+      "memtotal": 15642816512,
+      "netin": 50900,
+      "netout": 71350
+    },
+    {
+      "time": 1700000600,
+      "cpu": 0.12,
+      "memused": 10200000000,
+      "memtotal": 15642816512,
+      "netin": 51000,
+      "netout": 71500
+    },
+    {
+      "time": 1700000660,
+      "cpu": 0.126,
+      "memused": 10220000000,
+      "memtotal": 15642816512,
+      "netin": 51100,
+      "netout": 71650
+    },
+    {
+      "time": 1700000720,
+      "cpu": 0.132,
+      "memused": 10240000000,
+      "memtotal": 15642816512,
+      "netin": 51200,
+      "netout": 71800
+    },
+    {
+      "time": 1700000780,
+      "cpu": 0.138,
+      "memused": 10260000000,
+      "memtotal": 15642816512,
+      "netin": 51300,
+      "netout": 71950
+    },
+    {
+      "time": 1700000840,
+      "cpu": 0.144,
+      "memused": 10280000000,
+      "memtotal": 15642816512,
+      "netin": 51400,
+      "netout": 72100
+    },
+    {
+      "time": 1700000900,
+      "cpu": 0.15,
+      "memused": 10300000000,
+      "memtotal": 15642816512,
+      "netin": 51500,
+      "netout": 72250
+    },
+    {
+      "time": 1700000960,
+      "cpu": 0.156,
+      "memused": 10320000000,
+      "memtotal": 15642816512,
+      "netin": 51600,
+      "netout": 72400
+    },
+    {
+      "time": 1700001020,
+      "cpu": 0.162,
+      "memused": 10340000000,
+      "memtotal": 15642816512,
+      "netin": 51700,
+      "netout": 72550
+    },
+    {
+      "time": 1700001080,
+      "cpu": 0.168,
+      "memused": 10360000000,
+      "memtotal": 15642816512,
+      "netin": 51800,
+      "netout": 72700
+    },
+    {
+      "time": 1700001140,
+      "cpu": 0.174,
+      "memused": 10380000000,
+      "memtotal": 15642816512,
+      "netin": 51900,
+      "netout": 72850
+    },
+    {
+      "time": 1700001200,
+      "cpu": 0.12,
+      "memused": 10400000000,
+      "memtotal": 15642816512,
+      "netin": 52000,
+      "netout": 73000
+    },
+    {
+      "time": 1700001260,
+      "cpu": 0.126,
+      "memused": 10420000000,
+      "memtotal": 15642816512,
+      "netin": 52100,
+      "netout": 73150
+    },
+    {
+      "time": 1700001320,
+      "cpu": 0.132,
+      "memused": 10440000000,
+      "memtotal": 15642816512,
+      "netin": 52200,
+      "netout": 73300
+    },
+    {
+      "time": 1700001380,
+      "cpu": 0.138,
+      "memused": 10460000000,
+      "memtotal": 15642816512,
+      "netin": 52300,
+      "netout": 73450
+    },
+    {
+      "time": 1700001440,
+      "cpu": 0.144,
+      "memused": 10480000000,
+      "memtotal": 15642816512,
+      "netin": 52400,
+      "netout": 73600
+    },
+    {
+      "time": 1700001500,
+      "cpu": 0.15,
+      "memused": 10500000000,
+      "memtotal": 15642816512,
+      "netin": 52500,
+      "netout": 73750
+    },
+    {
+      "time": 1700001560,
+      "cpu": 0.156,
+      "memused": 10520000000,
+      "memtotal": 15642816512,
+      "netin": 52600,
+      "netout": 73900
+    },
+    {
+      "time": 1700001620,
+      "cpu": 0.162,
+      "memused": 10540000000,
+      "memtotal": 15642816512,
+      "netin": 52700,
+      "netout": 74050
+    },
+    {
+      "time": 1700001680,
+      "cpu": 0.168,
+      "memused": 10560000000,
+      "memtotal": 15642816512,
+      "netin": 52800,
+      "netout": 74200
+    },
+    {
+      "time": 1700001740,
+      "cpu": 0.174,
+      "memused": 10580000000,
+      "memtotal": 15642816512,
+      "netin": 52900,
+      "netout": 74350
+    },
+    {
+      "time": 1700001800,
+      "cpu": 0.12,
+      "memused": 10600000000,
+      "memtotal": 15642816512,
+      "netin": 53000,
+      "netout": 74500
+    },
+    {
+      "time": 1700001860,
+      "cpu": 0.126,
+      "memused": 10620000000,
+      "memtotal": 15642816512,
+      "netin": 53100,
+      "netout": 74650
+    },
+    {
+      "time": 1700001920,
+      "cpu": 0.132,
+      "memused": 10640000000,
+      "memtotal": 15642816512,
+      "netin": 53200,
+      "netout": 74800
+    },
+    {
+      "time": 1700001980,
+      "cpu": 0.138,
+      "memused": 10660000000,
+      "memtotal": 15642816512,
+      "netin": 53300,
+      "netout": 74950
+    },
+    {
+      "time": 1700002040,
+      "cpu": 0.144,
+      "memused": 10680000000,
+      "memtotal": 15642816512,
+      "netin": 53400,
+      "netout": 75100
+    },
+    {
+      "time": 1700002100,
+      "cpu": 0.15,
+      "memused": 10700000000,
+      "memtotal": 15642816512,
+      "netin": 53500,
+      "netout": 75250
+    },
+    {
+      "time": 1700002160,
+      "cpu": 0.156,
+      "memused": 10720000000,
+      "memtotal": 15642816512,
+      "netin": 53600,
+      "netout": 75400
+    },
+    {
+      "time": 1700002220,
+      "cpu": 0.162,
+      "memused": 10740000000,
+      "memtotal": 15642816512,
+      "netin": 53700,
+      "netout": 75550
+    },
+    {
+      "time": 1700002280,
+      "cpu": 0.168,
+      "memused": 10760000000,
+      "memtotal": 15642816512,
+      "netin": 53800,
+      "netout": 75700
+    },
+    {
+      "time": 1700002340,
+      "cpu": 0.174,
+      "memused": 10780000000,
+      "memtotal": 15642816512,
+      "netin": 53900,
+      "netout": 75850
+    },
+    {
+      "time": 1700002400,
+      "cpu": 0.12,
+      "memused": 10800000000,
+      "memtotal": 15642816512,
+      "netin": 54000,
+      "netout": 76000
+    },
+    {
+      "time": 1700002460,
+      "cpu": 0.126,
+      "memused": 10820000000,
+      "memtotal": 15642816512,
+      "netin": 54100,
+      "netout": 76150
+    },
+    {
+      "time": 1700002520,
+      "cpu": 0.132,
+      "memused": 10840000000,
+      "memtotal": 15642816512,
+      "netin": 54200,
+      "netout": 76300
+    },
+    {
+      "time": 1700002580,
+      "cpu": 0.138,
+      "memused": 10860000000,
+      "memtotal": 15642816512,
+      "netin": 54300,
+      "netout": 76450
+    },
+    {
+      "time": 1700002640,
+      "cpu": 0.144,
+      "memused": 10880000000,
+      "memtotal": 15642816512,
+      "netin": 54400,
+      "netout": 76600
+    },
+    {
+      "time": 1700002700,
+      "cpu": 0.15,
+      "memused": 10900000000,
+      "memtotal": 15642816512,
+      "netin": 54500,
+      "netout": 76750
+    },
+    {
+      "time": 1700002760,
+      "cpu": 0.156,
+      "memused": 10920000000,
+      "memtotal": 15642816512,
+      "netin": 54600,
+      "netout": 76900
+    },
+    {
+      "time": 1700002820,
+      "cpu": 0.162,
+      "memused": 10940000000,
+      "memtotal": 15642816512,
+      "netin": 54700,
+      "netout": 77050
+    },
+    {
+      "time": 1700002880,
+      "cpu": 0.168,
+      "memused": 10960000000,
+      "memtotal": 15642816512,
+      "netin": 54800,
+      "netout": 77200
+    },
+    {
+      "time": 1700002940,
+      "cpu": 0.174,
+      "memused": 10980000000,
+      "memtotal": 15642816512,
+      "netin": 54900,
+      "netout": 77350
+    },
+    {
+      "time": 1700003000,
+      "cpu": 0.12,
+      "memused": 11000000000,
+      "memtotal": 15642816512,
+      "netin": 55000,
+      "netout": 77500
+    },
+    {
+      "time": 1700003060,
+      "cpu": 0.126,
+      "memused": 11020000000,
+      "memtotal": 15642816512,
+      "netin": 55100,
+      "netout": 77650
+    },
+    {
+      "time": 1700003120,
+      "cpu": 0.132,
+      "memused": 11040000000,
+      "memtotal": 15642816512,
+      "netin": 55200,
+      "netout": 77800
+    },
+    {
+      "time": 1700003180,
+      "cpu": 0.138,
+      "memused": 11060000000,
+      "memtotal": 15642816512,
+      "netin": 55300,
+      "netout": 77950
+    },
+    {
+      "time": 1700003240,
+      "cpu": 0.144,
+      "memused": 11080000000,
+      "memtotal": 15642816512,
+      "netin": 55400,
+      "netout": 78100
+    },
+    {
+      "time": 1700003300,
+      "cpu": 0.15,
+      "memused": 11100000000,
+      "memtotal": 15642816512,
+      "netin": 55500,
+      "netout": 78250
+    },
+    {
+      "time": 1700003360,
+      "cpu": 0.156,
+      "memused": 11120000000,
+      "memtotal": 15642816512,
+      "netin": 55600,
+      "netout": 78400
+    },
+    {
+      "time": 1700003420,
+      "cpu": 0.162,
+      "memused": 11140000000,
+      "memtotal": 15642816512,
+      "netin": 55700,
+      "netout": 78550
+    },
+    {
+      "time": 1700003480,
+      "cpu": 0.168,
+      "memused": 11160000000,
+      "memtotal": 15642816512,
+      "netin": 55800,
+      "netout": 78700
+    },
+    {
+      "time": 1700003540,
+      "cpu": 0.174,
+      "memused": 11180000000,
+      "memtotal": 15642816512,
+      "netin": 55900,
+      "netout": 78850
+    }
+  ]
+}

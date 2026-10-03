@@ -20,17 +20,17 @@ describe('parsers', () => {
   })
 
   it('reads the stack from the tag and treats standalone as no stack', () => {
-    expect(parseStack([{ name: 'other' }, { name: 'stack:n8n' }])).toBe('n8n')
+    expect(parseStack([{ name: 'other' }, { name: 'stack:workflow' }])).toBe('workflow')
     expect(parseStack([{ name: 'stack:standalone' }])).toBeNull()
     expect(parseStack([])).toBeNull()
     expect(parseStack(null)).toBeNull()
   })
 
   it('reads the image from the description', () => {
-    expect(parseImage('Image: bi-studio-web | Hosted on: treehouse')).toBe('bi-studio-web')
+    expect(parseImage('Image: analytics-web | Hosted on: vm-services')).toBe('analytics-web')
     expect(parseImage('Image: postgres:16')).toBe('postgres:16')
     expect(parseImage('')).toBeNull()
-    expect(parseImage('Hosted on: treehouse')).toBeNull()
+    expect(parseImage('Hosted on: vm-services')).toBeNull()
     expect(parseImage(null)).toBeNull()
   })
 
@@ -71,23 +71,23 @@ describe('parsers', () => {
 
   it('normalizes tags: strips stack:* prefix, preserves color with # prefix', () => {
     const raw = [
-      { name: 'portainer', color: '9c27b0' },
-      { name: 'stack:bi-studio', color: '9e9e9e' },
+      { name: 'ops', color: '9c27b0' },
+      { name: 'stack:analytics', color: '9e9e9e' },
       { name: '  ', color: '123456' },
       { name: 'infra', color: '#ff0000' },
     ]
     expect(normalizeTags(raw)).toEqual([
-      { name: 'portainer', color: '#9c27b0' },
+      { name: 'ops', color: '#9c27b0' },
       { name: 'infra', color: '#ff0000' },
     ])
     expect(normalizeTags(null)).toEqual([])
   })
 
   it('strips prefix length mask from IP addresses', () => {
-    expect(stripAddressMask('10.10.1.60/24')).toBe('10.10.1.60')
-    expect(stripAddressMask('10.10.70.100/16')).toBe('10.10.70.100')
-    expect(stripAddressMask('10.10.1.1')).toBe('10.10.1.1')
-    expect(stripAddressMask(' 10.10.1.5/24 ')).toBe('10.10.1.5')
+    expect(stripAddressMask('192.0.2.11/24')).toBe('192.0.2.11')
+    expect(stripAddressMask('198.51.100.100/16')).toBe('198.51.100.100')
+    expect(stripAddressMask('192.0.2.1')).toBe('192.0.2.1')
+    expect(stripAddressMask(' 192.0.2.5/24 ')).toBe('192.0.2.5')
     expect(stripAddressMask(null)).toBeNull()
     expect(stripAddressMask('')).toBeNull()
   })
@@ -103,14 +103,14 @@ describe('normalizeInventory (real data)', () => {
   })
 
   it('strips network masks so the model holds plain addresses for devices, VMs and services', () => {
-    const prox1 = inventory.devices.find((d) => d.name === 'prox1')
-    expect(prox1?.ip).toBe('10.10.1.60')
+    const alpha = inventory.devices.find((d) => d.name === 'node-alpha')
+    expect(alpha?.ip).toBe('192.0.2.11')
 
-    const havm = inventory.vms.find((v) => v.name === 'havm')
-    expect(havm?.ip).toBe('10.10.70.100')
+    const home = inventory.vms.find((v) => v.name === 'vm-home')
+    expect(home?.ip).toBe('198.51.100.100')
 
-    const truenasSvc = inventory.services.find((s) => s.name === 'truenas-web')
-    expect(truenasSvc?.addresses).toEqual(['10.10.70.50'])
+    const nasSvc = inventory.services.find((s) => s.name === 'nas-web')
+    expect(nasSvc?.addresses).toEqual(['192.0.2.50'])
 
     const allIps = [
       ...inventory.devices.map((d) => d.ip),
@@ -125,13 +125,13 @@ describe('normalizeInventory (real data)', () => {
   it('maps VM kinds, hosts and stacks', () => {
     const kinds = new Set(inventory.vms.map((vm) => vm.kind))
     expect(kinds).toEqual(new Set(['KVM', 'LXC', 'Docker']))
-    const bi = inventory.vms.find((vm) => vm.name === 'bi-studio-web-1')
-    expect(bi).toMatchObject({ kind: 'Docker', hostId: '3', stack: 'bi-studio', image: 'bi-studio-web' })
+    const analytics = inventory.vms.find((vm) => vm.name === 'analytics-web')
+    expect(analytics).toMatchObject({ kind: 'Docker', hostId: '3', stack: 'analytics', image: 'analytics-web:latest' })
   })
 
   it('distinguishes VM and device parents of services', () => {
     const parents = inventory.services.map((s) => s.parent?.kind)
     expect(parents.filter((p) => p === 'vm')).toHaveLength(15)
-    expect(parents.filter((p) => p === 'device')).toHaveLength(7)
+    expect(parents.filter((p) => p === 'device')).toHaveLength(5)
   })
 })

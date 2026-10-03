@@ -32,16 +32,31 @@ provide(statusPhaseKey, labState.livePhase)
         @refresh="labState.refresh"
       />
       <NoticeBanner v-if="lab.refreshError">
-        The inventory could not be refreshed, showing the last loaded data. {{ lab.refreshError }}
+        The inventory could not be refreshed; the inventory is from {{ lab.inventoryTimeText }}. {{ lab.refreshError }}
       </NoticeBanner>
       <NoticeBanner v-if="lab.statusPhase === 'failed'">
-        Live statuses are unavailable, so states are shown as unknown. {{ lab.statusError }}
+        <template v-if="lab.hasStatusData">
+          Live statuses could not be refreshed; showing last known data. {{ lab.statusError }}
+        </template>
+        <template v-else>
+          Live statuses are unavailable; none shown. {{ lab.statusError }}
+        </template>
       </NoticeBanner>
       <NoticeBanner v-if="lab.containerStatusPhase === 'failed'">
-        Live container states are unavailable. {{ lab.containerStatusError }}
+        <template v-if="lab.hasContainerStatusData">
+          Live container states could not be refreshed; showing last known data. {{ lab.containerStatusError }}
+        </template>
+        <template v-else>
+          Live container states are unavailable; none shown. {{ lab.containerStatusError }}
+        </template>
       </NoticeBanner>
       <NoticeBanner v-if="lab.proxmoxPhase === 'failed'">
-        Proxmox data is unavailable. {{ lab.proxmoxError }}
+        <template v-if="lab.hasProxmoxData">
+          Proxmox data could not be refreshed; showing last known data. {{ lab.proxmoxError }}
+        </template>
+        <template v-else>
+          Proxmox data is unavailable; none shown. {{ lab.proxmoxError }}
+        </template>
       </NoticeBanner>
 
       <p v-if="lab.view === 'empty'" class="empty-state">

@@ -1,4 +1,4 @@
-/** One entry of the n8n `service-status` response. */
+/** One entry of the live `service-status` response. */
 export interface StatusEntry {
   name: string
   url: string

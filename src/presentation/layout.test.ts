@@ -67,32 +67,32 @@ describe('layout: balanceMachineUnits', () => {
   })
 
   it('places the guest with more containers on the left (column 0)', () => {
-    const havm = makeGuest('havm', 'havm', 0) // 0 containers
-    const portainer = makeGuest('portainer', 'portainer', 4, [6]) // 10 containers
+    const guestA = makeGuest('ga', 'guest-a', 0) // 0 containers
+    const guestB = makeGuest('gb', 'guest-b', 4, [6]) // 10 containers
 
-    // Pass them in alphabetical order (havm, portainer)
-    const cols = balanceMachineUnits([havm, portainer], [])
+    // Pass them in alphabetical order (guest-a, guest-b)
+    const cols = balanceMachineUnits([guestA, guestB], [])
 
     expect(cols).toHaveLength(2)
-    // Left column must contain portainer (10 containers)
-    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['portainer'])
-    // Right column must contain havm (0 containers)
-    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['havm'])
+    // Left column must contain guest-b (10 containers)
+    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['guest-b'])
+    // Right column must contain guest-a (0 containers)
+    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['guest-a'])
   })
 
   it('places a heavy VM on the left and balances lighter LXCs on the right', () => {
-    const netbox = makeGuest('netbox', 'netbox', 1, [6]) // 7 containers
-    const jump = makeGuest('jump', 'jump', 0) // 0 containers
-    const caddy = makeGuest('caddy', 'caddy', 0) // 0 containers
-    const monitoring = makeGuest('monitoring', 'monitoring', 0) // 0 containers
+    const heavyVm = makeGuest('heavy', 'heavy-vm', 1, [6]) // 7 containers
+    const light1 = makeGuest('l1', 'light-1', 0) // 0 containers
+    const light2 = makeGuest('l2', 'light-2', 0) // 0 containers
+    const light3 = makeGuest('l3', 'light-3', 0) // 0 containers
 
-    const cols = balanceMachineUnits([caddy, jump, monitoring, netbox], [])
+    const cols = balanceMachineUnits([light1, light2, light3, heavyVm], [])
 
     expect(cols).toHaveLength(2)
-    // Left column has netbox
-    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['netbox'])
+    // Left column has heavyVm
+    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['heavy-vm'])
     // Right column has the other 3
-    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['caddy', 'jump', 'monitoring'])
+    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['light-1', 'light-2', 'light-3'])
   })
 
   it('tie-breaks equal container counts alphabetically', () => {
@@ -117,4 +117,32 @@ describe('layout: balanceMachineUnits', () => {
     expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['vm1'])
     expect(cols[1].items[0].isAppGroup).toBe(true)
   })
+
+  it('accounts for 1-container stacks sharing rows and adding a label line', () => {
+    // 2 standalone containers: 1 row, 0 label lines -> est = 1 + 1.4 = 2.4
+    const gStandalone = makeGuest('g-std', 'g-std', 2, [])
+    const [c1] = balanceMachineUnits([gStandalone], [])
+    expect(c1.items[0].est).toBeCloseTo(2.4)
+
+    // 2 one-container stacks: share 1 row, 1 label line -> est = 1 + 1.4 + 0.5 = 2.9
+    const g2SingleStacks = makeGuest('g-2s', 'g-2s', 0, [1, 1])
+    const [c2] = balanceMachineUnits([g2SingleStacks], [])
+    expect(c2.items[0].est).toBeCloseTo(2.9)
+
+    // 1 one-container stack + 1 standalone: share 1 row, 1 label line -> est = 1 + 1.4 + 0.5 = 2.9
+    const gMixedRow = makeGuest('g-mix', 'g-mix', 1, [1])
+    const [c3] = balanceMachineUnits([gMixedRow], [])
+    expect(c3.items[0].est).toBeCloseTo(2.9)
+
+    // 3 one-container stacks: 2 rows, both rows have label line -> est = 1 + 2.8 + 1.0 = 4.8
+    const g3SingleStacks = makeGuest('g-3s', 'g-3s', 0, [1, 1, 1])
+    const [c4] = balanceMachineUnits([g3SingleStacks], [])
+    expect(c4.items[0].est).toBeCloseTo(4.8)
+
+    // 2 one-container stacks + 1 standalone: 2 rows, only first row has label line -> est = 1 + 2.8 + 0.5 = 4.3
+    const g2Single1Std = makeGuest('g-2s1std', 'g-2s1std', 1, [1, 1])
+    const [c5] = balanceMachineUnits([g2Single1Std], [])
+    expect(c5.items[0].est).toBeCloseTo(4.3)
+  })
 })
+

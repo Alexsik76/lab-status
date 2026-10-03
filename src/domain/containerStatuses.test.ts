@@ -53,32 +53,32 @@ describe('matchDockerContainers', () => {
 
   it('disambiguates containers sharing the same alias using host VM name equal to env', () => {
     // Host VMs
-    const hostTreehouse = makeVm({ id: 'host-1', name: 'treehouse', kind: 'KVM' })
-    const hostNetbox = makeVm({ id: 'host-2', name: 'netbox', kind: 'KVM' })
+    const hostServices = makeVm({ id: 'host-1', name: 'vm-services', kind: 'KVM' })
+    const hostAuth = makeVm({ id: 'host-2', name: 'vm-auth', kind: 'KVM' })
 
-    // Containers sharing the alias 'portainer_agent'
-    const agentTreehouse = makeVm({
+    // Containers sharing the alias 'cluster_agent'
+    const agentServices = makeVm({
       id: 'agent-1',
-      name: 'portainer_agent-treehouse',
-      alias: 'portainer_agent',
+      name: 'cluster-agent-services',
+      alias: 'cluster_agent',
       hostId: 'host-1',
     })
-    const agentNetbox = makeVm({
+    const agentAuth = makeVm({
       id: 'agent-2',
-      name: 'portainer_agent-netbox',
-      alias: 'portainer_agent',
+      name: 'cluster-agent-auth',
+      alias: 'cluster_agent',
       hostId: 'host-2',
     })
 
     const inventory: Inventory = {
       devices: [],
-      vms: [hostTreehouse, hostNetbox, agentTreehouse, agentNetbox],
+      vms: [hostServices, hostAuth, agentServices, agentAuth],
       services: [],
     }
 
     const entries: DockerContainerEntry[] = [
-      { env: 'treehouse', name: 'portainer_agent', state: 'running', status: 'Up 7 days' },
-      { env: 'netbox', name: 'portainer_agent', state: 'running', status: 'Up 7 days' },
+      { env: 'vm-services', name: 'cluster_agent', state: 'running', status: 'Up 7 days' },
+      { env: 'vm-auth', name: 'cluster_agent', state: 'running', status: 'Up 7 days' },
     ]
 
     const matched = matchDockerContainers(entries, inventory)
@@ -105,18 +105,17 @@ describe('matchDockerContainers', () => {
     const inventory = normalizeInventory(rawInventory)
     const matched = matchDockerContainers(containerStatusEntries, inventory)
 
-    // energy_postgres, netbox-docker-postgres-1, netbox-docker-redis-1, netbox-docker-netbox-worker-1
     const vmsByAlias = new Map(inventory.vms.map((vm) => [vm.alias, vm]))
 
-    expect(matched.has(vmsByAlias.get('energy_postgres')!.id)).toBe(true)
-    expect(matched.has(vmsByAlias.get('netbox-docker-postgres-1')!.id)).toBe(true)
-    expect(matched.has(vmsByAlias.get('netbox-docker-redis-1')!.id)).toBe(true)
-    expect(matched.has(vmsByAlias.get('netbox-docker-netbox-worker-1')!.id)).toBe(true)
+    expect(matched.has(vmsByAlias.get('metrics_db')!.id)).toBe(true)
+    expect(matched.has(vmsByAlias.get('auth-db')!.id)).toBe(true)
+    expect(matched.has(vmsByAlias.get('auth-cache')!.id)).toBe(true)
+    expect(matched.has(vmsByAlias.get('auth-worker')!.id)).toBe(true)
   })
 })
 
 describe('resolveContainerState', () => {
-  it('offline in NetBox still means stopped regardless of Docker state', () => {
+  it('prefers live data over offline: offline + live running -> up; offline + no live data -> stopped', () => {
     const vm = makeVm({ offline: true, alias: 'db' })
     const entry: DockerContainerEntry = {
       env: 'local',
@@ -125,11 +124,23 @@ describe('resolveContainerState', () => {
       status: 'Up 10 hours',
     }
 
-    const result = resolveContainerState(vm, ['up'], entry)
-    expect(result).toEqual({
-      state: 'stopped',
+    // 1. offline + live running -> up
+    expect(resolveContainerState(vm, [], entry)).toEqual({
+      state: 'up',
       blinking: false,
       dockerStatus: 'Up 10 hours',
+    })
+    expect(resolveContainerState(vm, ['up'], entry)).toEqual({
+      state: 'up',
+      blinking: false,
+      dockerStatus: 'Up 10 hours',
+    })
+
+    // 2. offline + no live data -> stopped
+    expect(resolveContainerState(vm, [], null)).toEqual({
+      state: 'stopped',
+      blinking: false,
+      dockerStatus: null,
     })
   })
 
@@ -221,7 +232,7 @@ describe('resolveContainerState', () => {
     })
   })
 
-  it('containers with no Docker entry keep the current rules (e.g. apps on truenas)', () => {
+  it('containers with no Docker entry keep the current rules (e.g. apps on a host machine)', () => {
     const vm = makeVm({ offline: false, alias: null })
 
     // No services -> unknown
@@ -248,7 +259,7 @@ describe('resolveContainerState', () => {
 })
 
 describe('buildTree with Docker statuses', () => {
-  it('marks energy_postgres, netbox-docker database, cache, and workers as up', () => {
+  it('marks metrics-db, auth-system database, cache, and workers as up', () => {
     const inventory = normalizeInventory(rawInventory)
     const statusMap = indexStatuses(statusEntries)
     const dockerIndex = matchDockerContainers(containerStatusEntries, inventory)
@@ -267,34 +278,34 @@ describe('buildTree with Docker statuses', () => {
 
     const findByName = (name: string) => allContainers.find((c) => c.name === name)
 
-    const energyPostgres = findByName('energy_postgres')
-    expect(energyPostgres).toBeDefined()
-    expect(energyPostgres?.state).toBe('up')
-    expect(energyPostgres?.blinking).toBe(false)
-    expect(energyPostgres?.dockerStatus).toBe('Up 4 days (healthy)')
+    const metricsDb = findByName('metrics-db')
+    expect(metricsDb).toBeDefined()
+    expect(metricsDb?.state).toBe('up')
+    expect(metricsDb?.blinking).toBe(false)
+    expect(metricsDb?.dockerStatus).toBe('Up 4 days (healthy)')
 
-    const netboxPostgres = findByName('netbox-docker-postgres-1')
-    expect(netboxPostgres).toBeDefined()
-    expect(netboxPostgres?.state).toBe('up')
-    expect(netboxPostgres?.blinking).toBe(false)
-    expect(netboxPostgres?.dockerStatus).toBe('Up 3 days (healthy)')
+    const authDb = findByName('auth-db')
+    expect(authDb).toBeDefined()
+    expect(authDb?.state).toBe('up')
+    expect(authDb?.blinking).toBe(false)
+    expect(authDb?.dockerStatus).toBe('Up 3 days (healthy)')
 
-    const netboxRedis = findByName('netbox-docker-redis-1')
-    expect(netboxRedis).toBeDefined()
-    expect(netboxRedis?.state).toBe('up')
-    expect(netboxRedis?.blinking).toBe(false)
-    expect(netboxRedis?.dockerStatus).toBe('Up 3 days (healthy)')
+    const authCache = findByName('auth-cache')
+    expect(authCache).toBeDefined()
+    expect(authCache?.state).toBe('up')
+    expect(authCache?.blinking).toBe(false)
+    expect(authCache?.dockerStatus).toBe('Up 3 days (healthy)')
 
-    const netboxRedisCache = findByName('netbox-docker-redis-cache-1')
-    expect(netboxRedisCache).toBeDefined()
-    expect(netboxRedisCache?.state).toBe('up')
-    expect(netboxRedisCache?.blinking).toBe(false)
-    expect(netboxRedisCache?.dockerStatus).toBe('Up 3 days (healthy)')
+    const authCacheSec = findByName('auth-cache-secondary')
+    expect(authCacheSec).toBeDefined()
+    expect(authCacheSec?.state).toBe('up')
+    expect(authCacheSec?.blinking).toBe(false)
+    expect(authCacheSec?.dockerStatus).toBe('Up 3 days (healthy)')
 
-    const netboxWorker = findByName('netbox-docker-netbox-worker-1')
-    expect(netboxWorker).toBeDefined()
-    expect(netboxWorker?.state).toBe('up')
-    expect(netboxWorker?.blinking).toBe(false)
-    expect(netboxWorker?.dockerStatus).toBe('Up 3 days (healthy)')
+    const authWorker = findByName('auth-worker')
+    expect(authWorker).toBeDefined()
+    expect(authWorker?.state).toBe('up')
+    expect(authWorker?.blinking).toBe(false)
+    expect(authWorker?.dockerStatus).toBe('Up 3 days (healthy)')
   })
 })

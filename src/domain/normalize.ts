@@ -102,7 +102,7 @@ function parseVmKind(typeName: string | undefined): VmKind {
   return typeName === 'KVM' || typeName === 'LXC' || typeName === 'Docker' ? typeName : 'other'
 }
 
-/** Strips CIDR prefix length (e.g. `"10.10.1.60/24"` -> `"10.10.1.60"`). */
+/** Strips CIDR prefix length (e.g. `"192.0.2.11/24"` -> `"192.0.2.11"`). */
 export function stripAddressMask(address: string | null | undefined): string | null {
   if (!address) return null
   const plain = address.replace(/\/.*$/, '').trim()

@@ -9,9 +9,13 @@ const resolve = (
 ) => resolveState({ offline, serviceStates, childStates })
 
 describe('resolveState', () => {
-  it('is stopped when NetBox says offline, whatever the checks say', () => {
-    expect(resolve(['up'], ['up'], true)).toBe('stopped')
+  it('prefers live checks over offline: offline + live running -> up; offline + no live data -> stopped', () => {
+    // Live data beats offline
+    expect(resolve(['up'], [], true)).toBe('up')
+    expect(resolve(['down'], [], true)).toBe('down')
+    // Offline fallback when no live checks exist for the object
     expect(resolve([], [], true)).toBe('stopped')
+    expect(resolve([], ['up'], true)).toBe('stopped')
   })
 
   it('is up when all checked services are up', () => {

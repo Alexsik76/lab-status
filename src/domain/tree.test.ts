@@ -27,30 +27,39 @@ describe('buildTree (real data)', () => {
   })
 
   it('lists machines sorted by name', () => {
-    expect(tree.machines.map((m) => m.name)).toEqual(['prints', 'prox1', 'prox2', 'prox3', 'truenas'])
+    expect(tree.machines.map((m) => m.name)).toEqual([
+      'host-print',
+      'node-alpha',
+      'node-beta',
+      'node-gamma',
+      'storage-nas',
+    ])
   })
 
   it('attaches guests to the machine they run on', () => {
     const guests = Object.fromEntries(tree.machines.map((m) => [m.name, m.guests.map((g) => g.name)]))
     expect(guests).toEqual({
-      prints: [],
-      prox1: ['havm', 'portainer'],
-      prox2: ['caddy-st', 'jump', 'monitoring', 'netbox'],
-      prox3: ['agent', 'treehouse'],
-      truenas: [],
+      'host-print': [],
+      'node-alpha': ['vm-control', 'vm-home'],
+      'node-beta': ['lxc-bastion', 'lxc-gateway-st', 'lxc-monitoring', 'vm-auth'],
+      'node-gamma': ['vm-services', 'vm-worker'],
+      'storage-nas': [],
     })
   })
 
   it('puts containers under the guest named by custom field host, grouped by stack', () => {
-    const treehouse = guestByName('treehouse', tree)
-    expect(treehouse.stacks.map((s) => s.name)).toContain('bi-studio')
-    const bi = treehouse.stacks.find((s) => s.name === 'bi-studio')
-    expect(bi?.containers.map((c) => c.name)).toEqual(['bi-studio-web-1'])
-    expect(bi?.containers[0]).toMatchObject({ image: 'bi-studio-web', stack: 'bi-studio' })
+    const servicesGuest = guestByName('vm-services', tree)
+    expect(servicesGuest.stacks.map((s) => s.name)).toContain('analytics')
+    const analytics = servicesGuest.stacks.find((s) => s.name === 'analytics')
+    expect(analytics?.containers.map((c) => c.name)).toEqual(['analytics-web'])
+    expect(analytics?.containers[0]).toMatchObject({ image: 'analytics-web:latest', stack: 'analytics' })
 
-    const placed = tree.machines
-      .flatMap((m) => m.guests)
-      .flatMap((g) => [...g.standalone, ...g.stacks.flatMap((s) => s.containers)])
+    const placed = [
+      ...tree.machines.flatMap((m) => m.apps),
+      ...tree.machines
+        .flatMap((m) => m.guests)
+        .flatMap((g) => [...g.standalone, ...g.stacks.flatMap((s) => s.containers)]),
+    ]
     expect(placed).toHaveLength(22)
   })
 
@@ -61,37 +70,37 @@ describe('buildTree (real data)', () => {
   })
 
   it('marks offline guests as stopped', () => {
-    expect(guestByName('caddy-st', tree).state).toBe('stopped')
-    expect(guestByName('monitoring', tree).state).toBe('stopped')
-    expect(guestByName('netbox', tree).state).toBe('up')
+    expect(guestByName('lxc-gateway-st', tree).state).toBe('stopped')
+    expect(guestByName('lxc-monitoring', tree).state).toBe('stopped')
+    expect(guestByName('vm-auth', tree).state).toBe('up')
   })
 
   it('links services via service_id and uses the status entry url', () => {
-    const prox1 = tree.machines.find((m) => m.name === 'prox1')
-    expect(prox1?.services).toHaveLength(1)
-    expect(prox1?.services[0]).toMatchObject({ name: 'proxmox-web', state: 'up' })
-    expect(prox1?.services[0].url).toBe(statusEntries.find((e) => e.service_id === 17)?.url)
+    const alpha = tree.machines.find((m) => m.name === 'node-alpha')
+    expect(alpha?.services).toHaveLength(1)
+    expect(alpha?.services[0]).toMatchObject({ name: 'proxmox-web', state: 'up' })
+    expect(alpha?.services[0].url).toBe(statusEntries.find((e) => e.service_id === 17)?.url)
   })
 
   it('keeps services without a status entry as unknown, without a link', () => {
-    const portainer = guestByName('portainer', tree)
-    const npm = portainer.stacks.flatMap((s) => s.containers).find((c) => c.name.includes('nginx-proxy-manager'))
-    const unchecked = npm?.services.find((s) => s.name === 'nginx-proxy-manager-443')
+    const control = guestByName('vm-control', tree)
+    const ingress = control.stacks.flatMap((s) => s.containers).find((c) => c.name.includes('ingress-proxy'))
+    const unchecked = ingress?.services.find((s) => s.name === 'ingress-443')
     expect(unchecked).toMatchObject({ state: 'unknown', url: null })
-    expect(npm?.state).toBe('up')
+    expect(ingress?.state).toBe('up')
   })
 
   it('derives a guest without own checks from what runs inside', () => {
-    expect(guestByName('treehouse', tree).state).toBe('up')
-    expect(tree.machines.find((m) => m.name === 'prox3')?.state).toBe('up')
+    expect(guestByName('vm-services', tree).state).toBe('up')
+    expect(tree.machines.find((m) => m.name === 'node-gamma')?.state).toBe('up')
   })
 })
 
 describe('buildTree: statuses', () => {
   it('shows everything unknown (stopped stays stopped) when statuses are missing', () => {
     const tree = buildTree(inventory)
-    expect(guestByName('treehouse', tree).state).toBe('unknown')
-    expect(guestByName('caddy-st', tree).state).toBe('stopped')
+    expect(guestByName('vm-services', tree).state).toBe('unknown')
+    expect(guestByName('lxc-gateway-st', tree).state).toBe('stopped')
     const services = tree.machines.flatMap((m) => m.services)
     expect(services.every((s) => s.state === 'unknown' && s.url === null)).toBe(true)
   })
@@ -100,9 +109,9 @@ describe('buildTree: statuses', () => {
     const failing = withStatus((e) =>
       e.service_id === 17 ? { up: false, code: 0, error: 'timeout' } : {},
     )
-    const prox1 = buildTree(inventory, failing).machines.find((m) => m.name === 'prox1')
-    expect(prox1?.state).toBe('down')
-    expect(prox1?.services[0]).toMatchObject({ state: 'down', error: 'timeout' })
+    const alpha = buildTree(inventory, failing).machines.find((m) => m.name === 'node-alpha')
+    expect(alpha?.state).toBe('down')
+    expect(alpha?.services[0]).toMatchObject({ state: 'down', error: 'timeout' })
   })
 
   it('ignores status entries that belong to no NetBox service', () => {

@@ -81,11 +81,11 @@ export interface GuestStateResult {
 
 /**
  * State rules for a guest:
- * - "offline" in NetBox still means stopped.
+ * - When a live source has data (Proxmox entry or HTTP check), state comes from live data only.
  * - Proxmox says stopped -> stopped (grey).
  * - Proxmox running and its HTTP check fails -> down: red and blinking.
  * - Proxmox running and the HTTP check passes or does not exist -> up.
- * - NetBox records with no Proxmox entry keep current rules.
+ * - NetBox "offline" is a fallback, used only when no live data exists for the guest.
  */
 export function resolveGuestState(
   vm: VmRecord,
@@ -93,16 +93,9 @@ export function resolveGuestState(
   proxmoxGuest?: ProxmoxGuestResource | null,
   childStates: readonly State[] = [],
 ): GuestStateResult {
-  if (vm.offline) {
-    return {
-      state: 'stopped',
-      blinking: false,
-    }
-  }
-
   if (!proxmoxGuest) {
     const state = resolveState({
-      offline: false,
+      offline: vm.offline,
       serviceStates,
       childStates,
     })

@@ -1,9 +1,6 @@
 services:
   web:
-    build:
-      context: .
-      args:
-        - VITE_STATUS_URL
+    build: .
     container_name: lab-status
     restart: unless-stopped
     ports:
@@ -13,3 +10,5 @@ services:
       - NETBOX_TOKEN
       - PROXMOX_URL
       - PROXMOX_TOKEN
+      - SERVICE_STATUS_URL
+      - CONTAINER_STATUS_URL

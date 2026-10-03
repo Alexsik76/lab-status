@@ -73,8 +73,8 @@ describe('matchProxmoxGuests', () => {
     const inventory: Inventory = {
       devices: [],
       vms: [
-        makeVm({ id: 'vm-jump', name: 'jump', kind: 'LXC' }),
-        makeVm({ id: 'vm-agent', name: 'agent', kind: 'KVM' }),
+        makeVm({ id: 'vm-bastion', name: 'lxc-bastion', kind: 'LXC' }),
+        makeVm({ id: 'vm-worker', name: 'vm-worker', kind: 'KVM' }),
       ],
       services: [],
     }
@@ -83,8 +83,8 @@ describe('matchProxmoxGuests', () => {
       {
         type: 'lxc',
         vmid: 104,
-        name: 'jump',
-        node: 'prox2',
+        name: 'lxc-bastion',
+        node: 'node-beta',
         status: 'running',
         cpu: 0.01,
         mem: 50000000,
@@ -93,8 +93,8 @@ describe('matchProxmoxGuests', () => {
       {
         type: 'qemu',
         vmid: 109,
-        name: 'agent',
-        node: 'prox3',
+        name: 'vm-worker',
+        node: 'node-gamma',
         status: 'running',
         cpu: 0.02,
         mem: 1500000000,
@@ -104,7 +104,7 @@ describe('matchProxmoxGuests', () => {
         type: 'qemu',
         vmid: 999,
         name: 'unmatched-guest',
-        node: 'prox1',
+        node: 'node-alpha',
         status: 'running',
         cpu: 0,
         mem: 0,
@@ -114,8 +114,8 @@ describe('matchProxmoxGuests', () => {
 
     const matched = matchProxmoxGuests(resources, inventory)
     expect(matched.size).toBe(2)
-    expect(matched.get('vm-jump')).toEqual(resources[0])
-    expect(matched.get('vm-agent')).toEqual(resources[1])
+    expect(matched.get('vm-bastion')).toEqual(resources[0])
+    expect(matched.get('vm-worker')).toEqual(resources[1])
     expect(matched.has('999')).toBe(false)
   })
 
@@ -125,43 +125,56 @@ describe('matchProxmoxGuests', () => {
 
     const findByName = (name: string) => inventory.vms.find((v) => v.name === name)
 
-    const jump = findByName('jump')
-    const agent = findByName('agent')
-    const caddy = findByName('caddy-st')
-    const havm = findByName('havm')
+    const bastion = findByName('lxc-bastion')
+    const worker = findByName('vm-worker')
+    const gateway = findByName('lxc-gateway-st')
+    const home = findByName('vm-home')
 
-    expect(matched.get(jump!.id)?.status).toBe('running')
-    expect(matched.get(agent!.id)?.status).toBe('running')
-    expect(matched.get(caddy!.id)?.status).toBe('stopped')
-    expect(matched.get(havm!.id)?.status).toBe('running')
+    expect(matched.get(bastion!.id)?.status).toBe('running')
+    expect(matched.get(worker!.id)?.status).toBe('running')
+    expect(matched.get(gateway!.id)?.status).toBe('stopped')
+    expect(matched.get(home!.id)?.status).toBe('running')
   })
 })
 
 describe('resolveGuestState', () => {
-  it('offline in NetBox still means stopped regardless of Proxmox state', () => {
-    const vm = makeVm({ offline: true, name: 'jump' })
-    const guest: ProxmoxGuestResource = {
+  it('prefers live data over offline: offline + live running -> up; offline + no live data -> stopped', () => {
+    const vm = makeVm({ offline: true, name: 'lxc-bastion' })
+    const runningGuest: ProxmoxGuestResource = {
       type: 'lxc',
       vmid: 104,
-      name: 'jump',
-      node: 'prox2',
+      name: 'lxc-bastion',
+      node: 'node-beta',
       status: 'running',
       cpu: 0.01,
       mem: 1000,
       maxmem: 2000,
     }
 
-    const result = resolveGuestState(vm, ['up'], guest)
-    expect(result).toEqual({ state: 'stopped', blinking: false })
+    // 1. offline + live running -> up
+    expect(resolveGuestState(vm, [], runningGuest)).toEqual({
+      state: 'up',
+      blinking: false,
+    })
+    expect(resolveGuestState(vm, ['up'], runningGuest)).toEqual({
+      state: 'up',
+      blinking: false,
+    })
+
+    // 2. offline + no live data -> stopped
+    expect(resolveGuestState(vm, [], null)).toEqual({
+      state: 'stopped',
+      blinking: false,
+    })
   })
 
   it('Proxmox says stopped -> stopped (grey)', () => {
-    const vm = makeVm({ offline: false, name: 'caddy-st', kind: 'LXC' })
+    const vm = makeVm({ offline: false, name: 'lxc-gateway-st', kind: 'LXC' })
     const guest: ProxmoxGuestResource = {
       type: 'lxc',
       vmid: 105,
-      name: 'caddy-st',
-      node: 'prox2',
+      name: 'lxc-gateway-st',
+      node: 'node-beta',
       status: 'stopped',
       cpu: 0,
       mem: 0,
@@ -173,12 +186,12 @@ describe('resolveGuestState', () => {
   })
 
   it('Proxmox running and HTTP check fails -> down: red and blinking', () => {
-    const vm = makeVm({ offline: false, name: 'havm', kind: 'KVM' })
+    const vm = makeVm({ offline: false, name: 'vm-home', kind: 'KVM' })
     const guest: ProxmoxGuestResource = {
       type: 'qemu',
       vmid: 100,
-      name: 'havm',
-      node: 'prox1',
+      name: 'vm-home',
+      node: 'node-alpha',
       status: 'running',
       cpu: 0.05,
       mem: 1000,
@@ -190,12 +203,12 @@ describe('resolveGuestState', () => {
   })
 
   it('Proxmox running and HTTP check passes -> up', () => {
-    const vm = makeVm({ offline: false, name: 'havm', kind: 'KVM' })
+    const vm = makeVm({ offline: false, name: 'vm-home', kind: 'KVM' })
     const guest: ProxmoxGuestResource = {
       type: 'qemu',
       vmid: 100,
-      name: 'havm',
-      node: 'prox1',
+      name: 'vm-home',
+      node: 'node-alpha',
       status: 'running',
       cpu: 0.05,
       mem: 1000,
@@ -207,12 +220,12 @@ describe('resolveGuestState', () => {
   })
 
   it('Proxmox running and HTTP check does not exist -> up', () => {
-    const vm = makeVm({ offline: false, name: 'jump', kind: 'LXC' })
+    const vm = makeVm({ offline: false, name: 'lxc-bastion', kind: 'LXC' })
     const guest: ProxmoxGuestResource = {
       type: 'lxc',
       vmid: 104,
-      name: 'jump',
-      node: 'prox2',
+      name: 'lxc-bastion',
+      node: 'node-beta',
       status: 'running',
       cpu: 0.01,
       mem: 1000,
@@ -236,7 +249,7 @@ describe('mapMachineMetrics', () => {
     const resources: ProxmoxNodeResource[] = [
       {
         type: 'node',
-        node: 'prox1',
+        node: 'node-alpha',
         status: 'online',
         cpu: 0.18,
         maxcpu: 8,
@@ -250,17 +263,17 @@ describe('mapMachineMetrics', () => {
       { time: 200, cpu: 0.2, memused: 6000, memtotal: 10000 },
     ]
 
-    const metricsMap = mapMachineMetrics(resources, { prox1: rrdPoints })
+    const metricsMap = mapMachineMetrics(resources, { 'node-alpha': rrdPoints })
     expect(metricsMap.size).toBe(1)
 
-    const prox1 = metricsMap.get('prox1')
-    expect(prox1).toBeDefined()
-    expect(prox1?.cpu.currentPct).toBe('18%')
-    expect(prox1?.cpu.spark).not.toBeNull()
-    expect(prox1?.mem.currentPct).toBe('69%')
-    expect(prox1?.mem.spark).not.toBeNull()
+    const alpha = metricsMap.get('node-alpha')
+    expect(alpha).toBeDefined()
+    expect(alpha?.cpu.currentPct).toBe('18%')
+    expect(alpha?.cpu.spark).not.toBeNull()
+    expect(alpha?.mem.currentPct).toBe('69%')
+    expect(alpha?.mem.spark).not.toBeNull()
 
-    expect(metricsMap.get('truenas')).toBeUndefined()
+    expect(metricsMap.get('storage-nas')).toBeUndefined()
   })
 })
 
@@ -271,9 +284,9 @@ describe('buildTree with Proxmox integration', () => {
     const dockerIndex = matchDockerContainers(containerStatusEntries, inventory)
     const proxmoxGuests = matchProxmoxGuests(proxmoxResources, inventory)
     const machineMetrics = mapMachineMetrics(proxmoxResources, {
-      prox1: proxmoxRrdPoints,
-      prox2: proxmoxRrdPoints,
-      prox3: proxmoxRrdPoints,
+      'node-alpha': proxmoxRrdPoints,
+      'node-beta': proxmoxRrdPoints,
+      'node-gamma': proxmoxRrdPoints,
     })
 
     const tree = buildTree(inventory, statusMap, dockerIndex, proxmoxGuests, machineMetrics)
@@ -282,34 +295,34 @@ describe('buildTree with Proxmox integration', () => {
     const allGuests = tree.machines.flatMap((m) => m.guests)
     const findGuest = (name: string) => allGuests.find((g) => g.name === name)
 
-    const jump = findGuest('jump')
-    expect(jump?.state).toBe('up')
+    const bastion = findGuest('lxc-bastion')
+    expect(bastion?.state).toBe('up')
 
-    const agent = findGuest('agent')
-    expect(agent?.state).toBe('up')
+    const worker = findGuest('vm-worker')
+    expect(worker?.state).toBe('up')
 
-    const caddy = findGuest('caddy-st')
-    expect(caddy?.state).toBe('stopped')
+    const gateway = findGuest('lxc-gateway-st')
+    expect(gateway?.state).toBe('stopped')
 
     // Check machine metrics
     const findMachine = (name: string) => tree.machines.find((m) => m.name === name)
 
-    const prox1 = findMachine('prox1')
-    expect(prox1?.metrics).toBeDefined()
-    expect(prox1?.metrics?.cpu.currentPct).toMatch(/^\d+%$/)
-    expect(prox1?.metrics?.cpu.spark).not.toBeNull()
-    expect(prox1?.metrics?.mem.spark).not.toBeNull()
+    const alpha = findMachine('node-alpha')
+    expect(alpha?.metrics).toBeDefined()
+    expect(alpha?.metrics?.cpu.currentPct).toMatch(/^\d+%$/)
+    expect(alpha?.metrics?.cpu.spark).not.toBeNull()
+    expect(alpha?.metrics?.mem.spark).not.toBeNull()
 
-    const prox2 = findMachine('prox2')
-    expect(prox2?.metrics).toBeDefined()
+    const beta = findMachine('node-beta')
+    expect(beta?.metrics).toBeDefined()
 
-    const prox3 = findMachine('prox3')
-    expect(prox3?.metrics).toBeDefined()
+    const gamma = findMachine('node-gamma')
+    expect(gamma?.metrics).toBeDefined()
 
-    const truenas = findMachine('truenas')
-    expect(truenas?.metrics).toBeNull()
+    const storage = findMachine('storage-nas')
+    expect(storage?.metrics).toBeNull()
 
-    const prints = findMachine('prints')
-    expect(prints?.metrics).toBeNull()
+    const print = findMachine('host-print')
+    expect(print?.metrics).toBeNull()
   })
 })

@@ -32,37 +32,39 @@ const isEmpty = computed(
 
 const guestTags = computed<TagItem[]>(() => props.guest.tags ?? [])
 
-interface DisplayStack {
-  name: string
-  labeled: boolean
-  containers: Container[]
+const multiStacks = computed(() =>
+  props.guest.stacks.filter((s) => s.containers.length > 1),
+)
+
+const singleStacks = computed(() =>
+  props.guest.stacks.filter((s) => s.containers.length === 1),
+)
+
+interface SingleItem {
+  key: string
+  isStack: boolean
+  name?: string
+  container: Container
 }
 
-const displayStacks = computed<DisplayStack[]>(() => {
-  const result: DisplayStack[] = []
-  const singles: Container[] = [...props.guest.standalone]
-
-  for (const s of props.guest.stacks) {
-    if (s.containers.length > 1) {
-      result.push({
-        name: s.name,
-        labeled: true,
-        containers: s.containers,
-      })
-    } else {
-      singles.push(...s.containers)
-    }
-  }
-
-  if (singles.length > 0) {
-    result.push({
-      name: '',
-      labeled: false,
-      containers: singles,
+const singleItems = computed<SingleItem[]>(() => {
+  const items: SingleItem[] = []
+  for (const s of singleStacks.value) {
+    items.push({
+      key: `stack-${s.name}`,
+      isStack: true,
+      name: s.name,
+      container: s.containers[0],
     })
   }
-
-  return result
+  for (const c of props.guest.standalone) {
+    items.push({
+      key: `standalone-${c.id}`,
+      isStack: false,
+      container: c,
+    })
+  }
+  return items
 })
 </script>
 
@@ -114,13 +116,13 @@ const displayStacks = computed<DisplayStack[]>(() => {
 
     <!-- Stacks and Containers -->
     <div v-if="!isEmpty" class="guest-stacks">
+      <!-- Multi-container stacks -->
       <div
-        v-for="(stack, sIdx) in displayStacks"
-        :key="sIdx"
-        class="stack-box"
-        :class="{ 'is-labeled': stack.labeled }"
+        v-for="stack in multiStacks"
+        :key="stack.name"
+        class="stack-box is-labeled"
       >
-        <div v-if="stack.labeled" class="stack-label">
+        <div class="stack-label">
           {{ stack.name }}
         </div>
         <div class="containers-grid">
@@ -130,6 +132,19 @@ const displayStacks = computed<DisplayStack[]>(() => {
             :container="container"
           />
         </div>
+      </div>
+
+      <!-- Single-container stacks and standalone containers -->
+      <div v-if="singleItems.length > 0" class="containers-grid singles-grid">
+        <template v-for="item in singleItems" :key="item.key">
+          <div v-if="item.isStack" class="stack-box is-labeled is-single">
+            <div class="stack-label">
+              {{ item.name }}
+            </div>
+            <ContainerItem :container="item.container" />
+          </div>
+          <ContainerItem v-else :container="item.container" />
+        </template>
       </div>
     </div>
 
@@ -301,6 +316,8 @@ const displayStacks = computed<DisplayStack[]>(() => {
 }
 
 .stack-box {
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   padding: 2px;
@@ -309,6 +326,12 @@ const displayStacks = computed<DisplayStack[]>(() => {
 }
 .stack-box.is-labeled {
   border-color: var(--color-border-stack);
+}
+.stack-box.is-single {
+  height: 100%;
+}
+.stack-box.is-single .container-node {
+  flex: 1;
 }
 
 .stack-label {
@@ -319,6 +342,9 @@ const displayStacks = computed<DisplayStack[]>(() => {
   text-transform: uppercase;
   color: var(--color-text-stack-label);
   padding: 2px 8px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .containers-grid {
