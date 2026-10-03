@@ -40,6 +40,9 @@ provide(statusPhaseKey, labState.livePhase)
       <NoticeBanner v-if="lab.containerStatusPhase === 'failed'">
         Live container states are unavailable. {{ lab.containerStatusError }}
       </NoticeBanner>
+      <NoticeBanner v-if="lab.proxmoxPhase === 'failed'">
+        Proxmox data is unavailable. {{ lab.proxmoxError }}
+      </NoticeBanner>
 
       <p v-if="lab.view === 'empty'" class="empty-state">
         NetBox returned no machines or containers.

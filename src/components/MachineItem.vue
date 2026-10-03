@@ -28,6 +28,12 @@ const columns = computed(() => balanceMachineUnits(props.machine.guests, props.m
 const isEmpty = computed(
   () => props.machine.guests.length === 0 && props.machine.apps.length === 0,
 )
+
+const metrics = computed(() => props.machine.metrics ?? null)
+const cpuPct = computed(() => metrics.value?.cpu.currentPct ?? '—')
+const memPct = computed(() => metrics.value?.mem.currentPct ?? '—')
+const cpuSpark = computed(() => metrics.value?.cpu.spark ?? null)
+const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 </script>
 
 <template>
@@ -82,20 +88,52 @@ const isEmpty = computed(
         <Tag v-for="tag in machine.tags" :key="tag.name" :tag="tag" size="sm" />
       </div>
 
-      <div class="host-metrics" title="Data collector for CPU and MEM metrics to be configured">
+      <div class="host-metrics">
         <div class="metric-row">
           <span class="metric-label">CPU</span>
-          <div class="metric-slot">
-            <span class="slot-line"></span>
+          <div class="metric-slot" :class="{ 'has-graph': !!cpuSpark }">
+            <svg
+              v-if="cpuSpark"
+              width="50"
+              height="14"
+              viewBox="0 0 50 14"
+              class="metric-spark metric-spark-cpu"
+            >
+              <path :d="cpuSpark.area" fill="currentColor" fill-opacity="0.14" />
+              <path
+                :d="cpuSpark.line"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span v-else class="slot-line"></span>
           </div>
-          <span class="metric-pct">—</span>
+          <span class="metric-pct">{{ cpuPct }}</span>
         </div>
         <div class="metric-row">
           <span class="metric-label">MEM</span>
-          <div class="metric-slot">
-            <span class="slot-line"></span>
+          <div class="metric-slot" :class="{ 'has-graph': !!memSpark }">
+            <svg
+              v-if="memSpark"
+              width="50"
+              height="14"
+              viewBox="0 0 50 14"
+              class="metric-spark metric-spark-mem"
+            >
+              <path :d="memSpark.area" fill="currentColor" fill-opacity="0.14" />
+              <path
+                :d="memSpark.line"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span v-else class="slot-line"></span>
           </div>
-          <span class="metric-pct">—</span>
+          <span class="metric-pct">{{ memPct }}</span>
         </div>
       </div>
     </LinkOrPlain>
@@ -281,6 +319,24 @@ const isEmpty = computed(
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.metric-slot.has-graph {
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.metric-spark {
+  display: block;
+  flex: none;
+}
+
+.metric-spark-cpu {
+  color: var(--color-spark-cpu);
+}
+
+.metric-spark-mem {
+  color: var(--color-spark-mem);
 }
 
 .slot-line {

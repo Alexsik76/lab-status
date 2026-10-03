@@ -15,6 +15,11 @@ import type {
 import { resolveState } from './state'
 import type { StatusEntry } from '../types/status'
 import { resolveContainerState, type DockerStatusIndex } from './containerStatuses'
+import {
+  resolveGuestState,
+  type MachineMetricsIndex,
+  type ProxmoxGuestIndex,
+} from './proxmox'
 
 const MACHINE_ROLE = 'server'
 
@@ -58,6 +63,8 @@ interface BuildContext {
   statuses: StatusIndex
   services: ServicesByParent
   dockerStatuses: DockerStatusIndex
+  proxmoxGuests: ProxmoxGuestIndex
+  machineMetrics: MachineMetricsIndex
 }
 
 function servicesOf(ctx: BuildContext, kind: 'vm' | 'device', id: string): ServiceItem[] {
@@ -107,6 +114,13 @@ function buildStacks(containers: readonly Container[]): Stack[] {
 function buildGuest(ctx: BuildContext, vm: VmRecord & { kind: 'KVM' | 'LXC' }, children: VmRecord[]): Guest {
   const containers = buildContainers(ctx, children)
   const services = servicesOf(ctx, 'vm', vm.id)
+  const proxmoxGuest = ctx.proxmoxGuests.get(vm.id)
+  const { state, blinking } = resolveGuestState(
+    vm,
+    services.map((s) => s.state),
+    proxmoxGuest,
+    containers.map((c) => c.state),
+  )
   return {
     id: vm.id,
     name: vm.name,
@@ -121,11 +135,8 @@ function buildGuest(ctx: BuildContext, vm: VmRecord & { kind: 'KVM' | 'LXC' }, c
     services,
     stacks: buildStacks(containers),
     standalone: containers.filter((c) => c.stack === null),
-    state: resolveState({
-      offline: vm.offline,
-      serviceStates: services.map((s) => s.state),
-      childStates: containers.map((c) => c.state),
-    }),
+    state,
+    blinking,
   }
 }
 
@@ -136,6 +147,7 @@ function buildMachine(
   apps: Container[],
 ): Machine {
   const services = servicesOf(ctx, 'device', device.id)
+  const metrics = ctx.machineMetrics.get(device.name) ?? null
   return {
     id: device.id,
     name: device.name,
@@ -149,6 +161,7 @@ function buildMachine(
     services,
     guests,
     apps,
+    metrics,
     state: resolveState({
       offline: device.offline,
       serviceStates: services.map((s) => s.state),
@@ -169,11 +182,15 @@ export function buildTree(
   inventory: Inventory,
   statuses: StatusIndex = new Map(),
   dockerStatuses: DockerStatusIndex = new Map(),
+  proxmoxGuests: ProxmoxGuestIndex = new Map(),
+  machineMetrics: MachineMetricsIndex = new Map(),
 ): LabTree {
   const ctx: BuildContext = {
     statuses,
     services: groupBy(inventory.services, (s) => (s.parent ? parentKey(s.parent.kind, s.parent.id) : null)),
     dockerStatuses,
+    proxmoxGuests,
+    machineMetrics,
   }
 
   const machineRecords = inventory.devices.filter((d) => d.roleSlug === MACHINE_ROLE)

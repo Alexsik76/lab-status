@@ -17,6 +17,28 @@ export default defineConfig(({ mode }) => {
           rewrite: () => '/graphql/',
           headers: { Authorization: `Bearer ${env.NETBOX_TOKEN}` },
         },
+        '/proxmox/': {
+          target: env.PROXMOX_URL,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/proxmox/, ''),
+          headers: { Authorization: `PVEAPIToken=${env.PROXMOX_TOKEN}` },
+          bypass(req, res) {
+            if (req.method !== 'GET') {
+              res.statusCode = 405
+              res.end('Method Not Allowed')
+              return false
+            }
+            const path = (req.url || '').split('?')[0].replace(/^\/proxmox/, '')
+            const isCluster = path === '/api2/json/cluster/resources'
+            const isRrd = /^\/api2\/json\/nodes\/[^/]+\/rrddata$/.test(path)
+            if (!isCluster && !isRrd) {
+              res.statusCode = 404
+              res.end('Not Found')
+              return false
+            }
+          },
+        },
       },
     },
     test: {

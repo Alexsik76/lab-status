@@ -6,7 +6,7 @@ describe('Tag', () => {
   it('renders a "#" sign with tooltip and accessible sr-only text', () => {
     const wrapper = mount(Tag, {
       props: {
-        tag: { name: 'portainer', color: '9c27b0' },
+        tag: { name: 'portainer', color: '#9c27b0' },
       },
     })
 
@@ -18,7 +18,7 @@ describe('Tag', () => {
     expect(sr.exists()).toBe(true)
     expect(sr.text()).toBe('portainer')
 
-    // Style uses the NetBox color with # prefix
+    // Style uses the normalized tag color
     expect(wrapper.attributes('style')).toContain('color: #9c27b0')
   })
 

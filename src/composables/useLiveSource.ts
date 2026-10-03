@@ -11,17 +11,20 @@ export interface LiveSourceOptions<TData, TIndex> {
 }
 
 /**
- * Generalized composable for live independent data sources (statuses, Docker container states).
- * Clears results when load starts so stale data is never shown during refresh.
+ * Generalized composable for live independent data sources (statuses, Docker container states, Proxmox).
+ * The previous data is kept while a refresh is in flight or after a refresh failed,
+ * so data is never cleared on screen once loaded.
  */
 export function useLiveSource<TData, TIndex = TData>(options: LiveSourceOptions<TData, TIndex>) {
   const { state, isLoading, error, execute } = useAsyncState<TData | null>(options.fetcher, null, {
     shallow: true,
+    resetOnExecute: false,
   })
 
   const phase = computed<LivePhase>(() => {
-    if (state.value) return 'ready'
-    return error.value ? 'failed' : 'loading'
+    if (error.value) return 'failed'
+    if (state.value !== null) return 'ready'
+    return 'loading'
   })
 
   const index = computed(() => {

@@ -30,15 +30,18 @@ they arrive. There is no polling: data loads on open and on **Refresh**.
 |---|---|
 | `NETBOX_URL` | NetBox base URL, e.g. `http://10.10.70.95:8000` (no trailing slash) |
 | `NETBOX_TOKEN` | API token of a read-only NetBox user |
+| `PROXMOX_URL` | Proxmox VE base URL, e.g. `https://10.10.1.60:8006` (self-signed cert supported) |
+| `PROXMOX_TOKEN` | Proxmox API token, e.g. `user@realm!token=uuid` |
 | `VITE_STATUS_URL` | optional, build-time: n8n status endpoint; defaults to `https://n8n.lab.vn.ua/webhook/service-status`. Not a secret: it is bundled and called by the browser directly (CORS is enabled on n8n) |
+| `VITE_CONTAINER_STATUS_URL` | optional, build-time: n8n container status endpoint; defaults to `https://n8n.lab.vn.ua/webhook/container-status`. |
 
-`VITE_STATUS_URL` is also read from `.env.local` by the dev server, and from the
-Portainer stack environment as a Docker build argument.
+`VITE_STATUS_URL` and `VITE_CONTAINER_STATUS_URL` are also read from `.env.local` by the dev server, and from the
+Portainer stack environment as Docker build arguments.
 
-The browser calls `POST /netbox/graphql/`; nginx (or the Vite dev server) forwards it
-to `${NETBOX_URL}/graphql/` with `Authorization: Bearer ${NETBOX_TOKEN}`. In nginx only
-POST is allowed and nothing else from NetBox is proxied. The variables deliberately
-have no `VITE_` prefix: they are read only by `vite.config.ts` and nginx, never bundled.
+The browser calls `POST /netbox/graphql/` and `GET /proxmox/api2/json/...`; nginx (or the Vite dev server) forwards them
+to `${NETBOX_URL}/graphql/` (with `Authorization: Bearer ${NETBOX_TOKEN}`) and `${PROXMOX_URL}/...` (with `Authorization: PVEAPIToken=${PROXMOX_TOKEN}`).
+In nginx and Vite dev server, Proxmox requests are GET-only and limited to `/api2/json/cluster/resources` and `/api2/json/nodes/{node}/rrddata`.
+The URL and token variables deliberately have no `VITE_` prefix: they are read only by `vite.config.ts` and nginx, never bundled.
 
 ## Local development
 

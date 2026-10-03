@@ -13,17 +13,11 @@ const props = withDefaults(
 )
 
 const name = computed(() => (typeof props.tag === 'string' ? props.tag : props.tag.name))
-const hexColor = computed(() => {
-  if (typeof props.tag === 'string') return null
-  const c = props.tag.color
-  if (!c) return null
-  return c.startsWith('#') ? c : `#${c}`
-})
 
 const tagStyle = computed(() => {
-  if (!hexColor.value) return undefined
+  if (typeof props.tag === 'string' || !props.tag.color) return undefined
   return {
-    color: hexColor.value,
+    color: props.tag.color,
   }
 })
 </script>

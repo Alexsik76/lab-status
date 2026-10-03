@@ -71,7 +71,7 @@ const displayStacks = computed<DisplayStack[]>(() => {
     class="guest-node guest-card"
     :class="[
       `state-${guest.state}`,
-      { 'is-empty': isEmpty },
+      { 'is-empty': isEmpty, 'is-blinking': !!guest.blinking },
     ]"
   >
     <!-- Guest header -->
@@ -107,7 +107,7 @@ const displayStacks = computed<DisplayStack[]>(() => {
 
       <span v-if="specs" class="guest-specs">{{ specs }}</span>
 
-      <StateBadge :state="guest.state" variant="guest" />
+      <StateBadge :state="guest.state" variant="guest" :blinking="guest.blinking" />
 
       <span v-if="guestUrl" class="guest-arrow">↗</span>
     </LinkOrPlain>
@@ -338,5 +338,24 @@ const displayStacks = computed<DisplayStack[]>(() => {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-dim);
+}
+
+.is-blinking {
+  animation: blink-guest 1.2s ease-in-out infinite;
+}
+
+@keyframes blink-guest {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-blinking {
+    animation: none;
+  }
 }
 </style>

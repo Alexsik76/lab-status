@@ -100,4 +100,8 @@
   --color-tag-default-text: #58a6ff;
   --color-tag-down-bg: rgba(255, 255, 255, 0.18);
   --color-tag-down-border: rgba(255, 255, 255, 0.35);
+
+  /* Sparklines */
+  --color-spark-cpu: oklch(0.76 0.08 230);
+  --color-spark-mem: oklch(0.76 0.08 300);
 }

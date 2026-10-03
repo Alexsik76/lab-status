@@ -1,8 +1,20 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { containerStatusEntries, netboxResponse, statusEntries } from './__fixtures__'
+import {
+  containerStatusEntries,
+  netboxResponse,
+  proxmoxResources,
+  proxmoxRrdPoints,
+  statusEntries,
+} from './__fixtures__'
 import App from './App.vue'
-import { CONTAINER_STATUS_URL, NETBOX_GRAPHQL_URL, STATUS_URL } from './config'
+import {
+  CONTAINER_STATUS_URL,
+  NETBOX_GRAPHQL_URL,
+  PROXMOX_CLUSTER_RESOURCES_URL,
+  PROXMOX_NODES_URL,
+  STATUS_URL,
+} from './config'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,12 +29,23 @@ function deferred() {
   return { gate, release }
 }
 
-function stubBackend(handlers: { netbox: Handler; status: Handler; containerStatus?: Handler }) {
+function stubBackend(handlers: {
+  netbox: Handler
+  status: Handler
+  containerStatus?: Handler
+  proxmoxResources?: Handler
+  proxmoxRrd?: Handler
+}) {
   const containerStatusHandler = handlers.containerStatus ?? ok(containerStatusEntries)
+  const proxmoxResourcesHandler = handlers.proxmoxResources ?? ok({ data: proxmoxResources })
+  const proxmoxRrdHandler = handlers.proxmoxRrd ?? ok({ data: proxmoxRrdPoints })
+
   const fetchMock = vi.fn(async (url: string) => {
     if (url === NETBOX_GRAPHQL_URL) return handlers.netbox()
     if (url === STATUS_URL) return handlers.status()
     if (url === CONTAINER_STATUS_URL) return containerStatusHandler()
+    if (url === PROXMOX_CLUSTER_RESOURCES_URL) return proxmoxResourcesHandler()
+    if (url.startsWith(PROXMOX_NODES_URL) && url.includes('/rrddata')) return proxmoxRrdHandler()
     throw new Error(`unexpected request ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -70,6 +93,36 @@ describe('App', () => {
     const netboxWorker = findContainer('netbox-docker-netbox-worker-1')
     expect(netboxWorker?.classes()).toContain('state-up')
     expect(netboxWorker?.attributes('title')).toContain('Up 3 days (healthy)')
+
+    const findGuest = (name: string) =>
+      wrapper.findAll('.guest-node').find((g) => g.find('.guest-name').text() === name)
+
+    expect(findGuest('jump')?.classes()).toContain('state-up')
+    expect(findGuest('agent')?.classes()).toContain('state-up')
+    expect(findGuest('caddy-st')?.classes()).toContain('state-stopped')
+
+    const findMachine = (name: string) =>
+      wrapper.findAll('.machine-node').find((m) => m.find('.host-name').text() === name)
+
+    const prox1 = findMachine('prox1')
+    expect(prox1?.findAll('.metric-spark')).toHaveLength(2)
+    expect(prox1?.find('.metric-pct').text()).not.toBe('—')
+
+    const prox2 = findMachine('prox2')
+    expect(prox2?.findAll('.metric-spark')).toHaveLength(2)
+
+    const prox3 = findMachine('prox3')
+    expect(prox3?.findAll('.metric-spark')).toHaveLength(2)
+
+    const truenas = findMachine('truenas')
+    expect(truenas?.findAll('.metric-spark')).toHaveLength(0)
+    expect(truenas?.findAll('.slot-line')).toHaveLength(2)
+    expect(truenas?.find('.metric-pct').text()).toBe('—')
+
+    const prints = findMachine('prints')
+    expect(prints?.findAll('.metric-spark')).toHaveLength(0)
+    expect(prints?.findAll('.slot-line')).toHaveLength(2)
+    expect(prints?.find('.metric-pct').text()).toBe('—')
   })
 
   it('keeps the tree and says so when only the container status service fails', async () => {
@@ -80,6 +133,19 @@ describe('App', () => {
     expect(wrapper.findAll('.machine-node')).toHaveLength(5)
     expect(wrapper.find('.error-page').exists()).toBe(false)
     expect(states(wrapper)).toContain('up')
+  })
+
+  it('keeps the tree and says so when only Proxmox fails', async () => {
+    stubBackend({
+      netbox: ok(netboxResponse),
+      status: ok(statusEntries),
+      proxmoxResources: down,
+    })
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Proxmox data is unavailable'))
+
+    expect(wrapper.findAll('.machine-node')).toHaveLength(5)
+    expect(wrapper.find('.error-page').exists()).toBe(false)
   })
 
   it('shows the tree with pending statuses while the status service is slow', async () => {
@@ -134,10 +200,16 @@ describe('App', () => {
   })
 
   it('keeps the tree and says so when live statuses fail', async () => {
-    stubBackend({ netbox: ok(netboxResponse), status: down, containerStatus: down })
+    stubBackend({
+      netbox: ok(netboxResponse),
+      status: down,
+      containerStatus: down,
+      proxmoxResources: down,
+    })
     const wrapper = await mountApp()
     await vi.waitFor(() => expect(wrapper.text()).toContain('Live statuses are unavailable'))
     expect(wrapper.text()).toContain('Live container states are unavailable')
+    expect(wrapper.text()).toContain('Proxmox data is unavailable')
 
     expect(wrapper.findAll('.machine-node')).toHaveLength(5)
     expect(wrapper.find('.error-page').exists()).toBe(false)
@@ -168,5 +240,88 @@ describe('App', () => {
     await flushPromises()
     expect(wrapper.findAll('.machine-node')).toHaveLength(5)
     expect(wrapper.find('.error-page').exists()).toBe(false)
+  })
+
+  it('does not clear data or show pending while a refresh is in flight', async () => {
+    let proxmoxResourcesHandler: Handler = ok({ data: proxmoxResources })
+    stubBackend({
+      netbox: ok(netboxResponse),
+      status: ok(statusEntries),
+      proxmoxResources: () => proxmoxResourcesHandler(),
+    })
+
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    await vi.waitFor(() => expect(states(wrapper)).not.toContain('pending'))
+
+    const findGuest = (name: string) =>
+      wrapper.findAll('.guest-node').find((g) => g.find('.guest-name').text() === name)
+    const findMachine = (name: string) =>
+      wrapper.findAll('.machine-node').find((m) => m.find('.host-name').text() === name)
+
+    expect(findGuest('jump')?.classes()).toContain('state-up')
+    expect(findGuest('agent')?.classes()).toContain('state-up')
+    expect(findMachine('prox1')?.findAll('.metric-spark')).toHaveLength(2)
+
+    // Trigger a refresh with slow Proxmox response
+    const slow = deferred()
+    proxmoxResourcesHandler = async () => {
+      await slow.gate
+      return ok({ data: proxmoxResources })()
+    }
+
+    await wrapper.find('.toolbar button').trigger('click')
+    // During manual refresh, button shows progress
+    expect(wrapper.find('.toolbar button').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.toolbar button .spinner').exists()).toBe(true)
+
+    // Data MUST NOT be cleared while refresh is in flight!
+    expect(findGuest('jump')?.classes()).toContain('state-up')
+    expect(findGuest('agent')?.classes()).toContain('state-up')
+    expect(findMachine('prox1')?.findAll('.metric-spark')).toHaveLength(2)
+    expect(states(wrapper)).not.toContain('pending')
+
+    slow.release()
+    await vi.waitFor(() =>
+      expect(wrapper.find('.toolbar button').attributes('disabled')).toBeUndefined(),
+    )
+    expect(findGuest('jump')?.classes()).toContain('state-up')
+    expect(findGuest('agent')?.classes()).toContain('state-up')
+    expect(findMachine('prox1')?.findAll('.metric-spark')).toHaveLength(2)
+  })
+
+  it('keeps last Proxmox data, states, and graphs when Proxmox refresh fails', async () => {
+    let proxmoxResourcesHandler: Handler = ok({ data: proxmoxResources })
+    stubBackend({
+      netbox: ok(netboxResponse),
+      status: ok(statusEntries),
+      proxmoxResources: () => proxmoxResourcesHandler(),
+    })
+
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    await vi.waitFor(() => expect(states(wrapper)).not.toContain('pending'))
+
+    const findGuest = (name: string) =>
+      wrapper.findAll('.guest-node').find((g) => g.find('.guest-name').text() === name)
+    const findMachine = (name: string) =>
+      wrapper.findAll('.machine-node').find((m) => m.find('.host-name').text() === name)
+
+    expect(findGuest('jump')?.classes()).toContain('state-up')
+    expect(findGuest('agent')?.classes()).toContain('state-up')
+    expect(findMachine('prox1')?.findAll('.metric-spark')).toHaveLength(2)
+
+    // Proxmox now fails on refresh
+    proxmoxResourcesHandler = down
+    await wrapper.find('.toolbar button').trigger('click')
+
+    // Notice banner must be shown
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Proxmox data is unavailable'))
+
+    // But data is retained: jump/agent are STILL up, prox1 STILL has graphs!
+    expect(findGuest('jump')?.classes()).toContain('state-up')
+    expect(findGuest('agent')?.classes()).toContain('state-up')
+    expect(findMachine('prox1')?.findAll('.metric-spark')).toHaveLength(2)
+    expect(wrapper.findAll('.machine-node')).toHaveLength(5)
   })
 })

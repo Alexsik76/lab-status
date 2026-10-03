@@ -11,3 +11,5 @@ services:
     environment:
       - NETBOX_URL
       - NETBOX_TOKEN
+      - PROXMOX_URL
+      - PROXMOX_TOKEN

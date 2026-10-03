@@ -109,6 +109,21 @@ export interface Stack {
   containers: Container[]
 }
 
+export interface SparklineData {
+  line: string
+  area: string
+}
+
+export interface MetricSeries {
+  currentPct: string
+  spark: SparklineData | null
+}
+
+export interface MachineMetrics {
+  cpu: MetricSeries
+  mem: MetricSeries
+}
+
 export interface Guest extends NodeBase {
   kind: 'KVM' | 'LXC'
   vcpus: number | null
@@ -121,6 +136,7 @@ export interface Guest extends NodeBase {
   stacks: Stack[]
   /** Containers without a stack. */
   standalone: Container[]
+  blinking?: boolean
 }
 
 export interface Machine extends NodeBase {
@@ -134,6 +150,7 @@ export interface Machine extends NodeBase {
   guests: Guest[]
   /** Docker workloads attached straight to the machine. */
   apps: Container[]
+  metrics?: MachineMetrics | null
 }
 
 export interface LabTree {
