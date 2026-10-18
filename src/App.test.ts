@@ -132,6 +132,7 @@ describe('App', () => {
     expect(print?.findAll('.metric-spark')).toHaveLength(0)
     expect(print?.findAll('.slot-line')).toHaveLength(2)
     expect(print?.find('.metric-pct').text()).toBe('—')
+    expect(print?.find('.empty').text()).toBe('No VMs or containers registered in NetBox')
   })
 
   it('keeps the tree and says so when only the container status service fails', async () => {

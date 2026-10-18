@@ -161,7 +161,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 
       <!-- Empty notice if no guests or apps -->
       <div v-if="isEmpty" class="empty no-guests">
-        No guests or apps registered in NetBox
+        No VMs or containers registered in NetBox
       </div>
     </div>
   </li>
