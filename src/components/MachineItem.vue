@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Machine } from '../domain/model'
 import { formatHardware } from '../presentation/hardware'
+import { resolveHostDomainUrl, urlHostLabel } from '../presentation/hostLinks'
 import { balanceMachineUnits } from '../presentation/layout'
 import { getNodePrimaryUrlAndPort } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
@@ -21,8 +22,16 @@ const modelText = computed(() => props.machine.model || props.machine.manufactur
 const serviceInfo = computed(() =>
   getNodePrimaryUrlAndPort(props.machine.services, props.machine.ip),
 )
+/** Raw (ip:port) URL: direct access that bypasses the reverse proxy. */
 const hostUrl = computed(() => serviceInfo.value.url)
 const hostPort = computed(() => serviceInfo.value.portText)
+
+/** Primary URL for the header: the domain if known, otherwise the raw URL. */
+const titleUrl = computed(() => resolveHostDomainUrl(props.machine) ?? hostUrl.value)
+const titleTooltip = computed(() => urlHostLabel(titleUrl.value))
+const ipTooltip = computed(() =>
+  hostUrl.value ? `Direct: ${urlHostLabel(hostUrl.value)}` : undefined,
+)
 
 const columns = computed(() => balanceMachineUnits(props.machine.guests, props.machine.apps))
 const isEmpty = computed(
@@ -45,11 +54,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
     ]"
   >
     <!-- Left Host Sidebar Card -->
-    <LinkOrPlain
-      :href="hostUrl"
-      class="host-card"
-      :class="{ 'is-clickable': !!hostUrl }"
-    >
+    <div class="host-card">
       <div class="host-header">
         <span
           class="drag-handle"
@@ -68,8 +73,16 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
             <circle cx="6" cy="12" r="1.2" />
           </svg>
         </span>
-        <OsIcon :platform="machine.platform" :size="22" />
-        <span class="host-name">{{ machine.name }}</span>
+        <LinkOrPlain
+          :href="titleUrl"
+          as="span"
+          class="host-title"
+          :class="{ 'is-clickable': !!titleUrl }"
+          :title="titleTooltip"
+        >
+          <OsIcon :platform="machine.platform" :size="22" />
+          <span class="host-name">{{ machine.name }}</span>
+        </LinkOrPlain>
         <span class="spacer"></span>
         <StateBadge :state="machine.state" variant="machine" />
       </div>
@@ -77,9 +90,16 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
       <div class="host-meta">
         <span v-if="modelText" class="host-model">{{ modelText }}</span>
         <div class="host-network-hw">
-          <span class="host-ip">
+          <LinkOrPlain
+            :href="hostUrl"
+            as="span"
+            class="host-ip"
+            :class="{ 'is-clickable': !!hostUrl }"
+            :title="ipTooltip"
+          >
             {{ machine.ip }}<span v-if="hostPort" class="host-port">{{ hostPort }}</span>
-          </span>
+            <span v-if="hostUrl" class="host-arrow">↗</span>
+          </LinkOrPlain>
           <span v-if="hwText" class="host-hw">{{ hwText }}</span>
         </div>
       </div>
@@ -136,7 +156,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
           <span class="metric-pct">{{ memPct }}</span>
         </div>
       </div>
-    </LinkOrPlain>
+    </div>
 
     <!-- Right Content Area: 2 Columns Grid -->
     <div class="machine-content">
@@ -195,17 +215,28 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
   gap: 6px;
   background: var(--color-bg-spine);
   border-right: 1px solid var(--color-border-spine);
-  text-decoration: none;
   color: inherit;
-  transition: background 0.12s ease;
   user-select: none;
 }
 
-.host-card.is-clickable {
+/* Header title (icon + name): primary link to the domain */
+.host-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+.host-title.is-clickable {
   cursor: pointer;
 }
-.host-card.is-clickable:hover {
-  background: var(--color-bg-spine-hover);
+.host-title .host-name {
+  transition: color 0.12s ease;
+}
+.host-title.is-clickable:hover .host-name,
+.host-title.is-clickable:focus-visible .host-name {
+  color: var(--color-text-accent);
 }
 
 .host-header {
@@ -275,6 +306,33 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 
 .host-port {
   color: var(--color-text-port);
+}
+
+/* Raw ip:port ↗: secondary link that bypasses the reverse proxy */
+.host-ip {
+  text-decoration: none;
+  color: inherit;
+  white-space: nowrap;
+}
+.host-ip .host-port,
+.host-ip .host-arrow {
+  transition: color 0.12s ease;
+}
+.host-arrow {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.host-ip.is-clickable {
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.host-ip.is-clickable:hover,
+.host-ip.is-clickable:focus-visible,
+.host-ip.is-clickable:hover .host-port,
+.host-ip.is-clickable:focus-visible .host-port,
+.host-ip.is-clickable:hover .host-arrow,
+.host-ip.is-clickable:focus-visible .host-arrow {
+  color: var(--color-text-white);
 }
 .host-hw {
   color: var(--color-text-muted);
