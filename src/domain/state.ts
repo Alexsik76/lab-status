@@ -11,16 +11,16 @@ export interface StateInput {
 
 /**
  * State rules:
- * - from its own checks first: all up -> up, any down -> down;
- * - offline in NetBox (fallback when no live check exists) -> stopped;
+ * - own checks with at least one up: all up -> up, any down -> down;
+ * - offline in NetBox (no up check) -> stopped, even if checks are down;
+ * - own checks, none up, not offline: any down -> down;
  * - with no check of its own: up when something inside it is up;
  * - everything else -> unknown.
  */
 export function resolveState({ offline, serviceStates, childStates }: StateInput): State {
   const checked = serviceStates.filter((s) => s !== 'unknown')
-  if (checked.length > 0) {
-    return checked.includes('down') ? 'down' : 'up'
-  }
+  if (checked.includes('up')) return checked.includes('down') ? 'down' : 'up'
   if (offline) return 'stopped'
+  if (checked.includes('down')) return 'down'
   return childStates.includes('up') ? 'up' : 'unknown'
 }

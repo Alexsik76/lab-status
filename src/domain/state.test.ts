@@ -9,10 +9,10 @@ const resolve = (
 ) => resolveState({ offline, serviceStates, childStates })
 
 describe('resolveState', () => {
-  it('prefers live checks over offline: offline + live running -> up; offline + no live data -> stopped', () => {
+  it('offline wins over down checks; live up beats offline', () => {
     // Live data beats offline
     expect(resolve(['up'], [], true)).toBe('up')
-    expect(resolve(['down'], [], true)).toBe('down')
+    expect(resolve(['down'], [], true)).toBe('stopped')
     // Offline fallback when no live checks exist for the object
     expect(resolve([], [], true)).toBe('stopped')
     expect(resolve([], ['up'], true)).toBe('stopped')
