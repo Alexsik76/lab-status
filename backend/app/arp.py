@@ -63,6 +63,7 @@ class ArpHub:
         self._macs_at = 0.0
         self._rows: dict[str, dict[str, Any]] = {}
         self._raw: dict[str, dict[str, str]] = {}
+        self._leases: dict[str, dict[str, str]] = {}
         self._subscribers: set[asyncio.Queue[Event]] = set()
         self._task: asyncio.Task[None] | None = None
         self.state = "idle"
@@ -107,9 +108,49 @@ class ArpHub:
 
     # ---- events ----
 
+    def _static_lease(self, address: str) -> dict[str, str] | None:
+        for lease in self._leases.values():
+            if lease.get("address") == address and not _flag(lease.get("dynamic")):
+                return lease
+        return None
+
     def enrich(self, row: dict[str, Any]) -> dict[str, Any]:
-        match = self._macs.get(row["mac"])
-        return {**row, "netbox": match.as_json() if match else None}
+        """NetBox match by MAC. An entry without a MAC (failed / incomplete) borrows
+        the MAC of the router's static DHCP lease for its address."""
+        lease = self._static_lease(row["address"])
+        lease_mac = (lease or {}).get("mac-address", "").upper()
+        mac, mac_source = row["mac"], "arp"
+        if not mac and lease_mac:
+            mac, mac_source = lease_mac, "lease"
+        match = self._macs.get(mac) if mac else None
+        lease_info = (
+            {"name": lease.get("comment") or lease.get("host-name") or None, "mac": lease_mac}
+            if lease
+            else None
+        )
+        return {
+            **row,
+            "mac": mac,
+            "macSource": mac_source if mac else None,
+            "lease": lease_info,
+            "netbox": match.as_json() if match else None,
+        }
+
+    def apply_lease(self, attrs: dict[str, str]) -> bool:
+        """Updates the lease table; True when a static lease changed."""
+        lease_id = attrs.get(".id")
+        if not lease_id:
+            return False
+        old = self._leases.get(lease_id)
+        if _flag(attrs.get(".dead")):
+            self._leases.pop(lease_id, None)
+            return old is not None and not _flag(old.get("dynamic"))
+        merged = {**(old or {}), **attrs}
+        self._leases[lease_id] = merged
+        relevant = ("address", "mac-address", "comment", "host-name", "dynamic")
+        changed = old is None or any(old.get(k) != merged.get(k) for k in relevant)
+        was_static = old is not None and not _flag(old.get("dynamic"))
+        return changed and (was_static or not _flag(merged.get("dynamic")))
 
     def _snapshot_event(self) -> Event:
         return {"type": "snapshot", "rows": [self.enrich(r) for r in self._rows.values()]}
@@ -171,20 +212,29 @@ class ArpHub:
         conn = await self._connect()
         self._rows.clear()
         self._raw.clear()
-        printing = True
+        self._leases.clear()
+        pending = {"print", "lease-print"}
         try:
             conn.send(["/ip/arp/listen", ".tag=listen"])
+            conn.send(["/ip/dhcp-server/lease/listen", ".tag=lease-listen"])
             conn.send(["/ip/arp/print", ".tag=print"])
+            conn.send(["/ip/dhcp-server/lease/print", ".tag=lease-print"])
             async for reply in conn.replies():
                 if reply.word in ("!trap", "!fatal"):
                     raise RouterOsError(reply.attrs.get("message", reply.word))
-                if reply.word != "!re" and not (reply.tag == "print" and reply.word == "!done"):
+                printing = bool(pending)
+                if reply.word == "!done" and reply.tag in pending:
+                    pending.discard(reply.tag)
+                    if not pending:
+                        self.state, self.error = "live", None
+                        self._broadcast(self._status_event())
+                        self._broadcast(self._snapshot_event())
                     continue
-                if reply.tag == "print" and reply.word == "!done":
-                    printing = False
-                    self.state, self.error = "live", None
-                    self._broadcast(self._status_event())
-                    self._broadcast(self._snapshot_event())
+                if reply.word != "!re":
+                    continue
+                if reply.tag in ("lease-listen", "lease-print"):
+                    if self.apply_lease(reply.attrs) and not printing:
+                        self._broadcast(self._snapshot_event())
                     continue
                 self.apply(reply.attrs, broadcast=not printing)
                 if not printing and time.monotonic() - self._macs_at > MAC_TTL_S:

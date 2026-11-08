@@ -19,6 +19,8 @@ const row = (id: string, overrides: Partial<ArpRow> = {}): ArpRow => ({
   dhcp: false,
   dynamic: true,
   disabled: false,
+  macSource: 'arp',
+  lease: null,
   netbox: null,
   ...overrides,
 })

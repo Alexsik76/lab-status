@@ -26,6 +26,10 @@ export interface ArpRow {
   dhcp: boolean
   dynamic: boolean
   disabled: boolean
+  /** Where `mac` came from: the ARP entry itself, or the static DHCP lease of its address. */
+  macSource: 'arp' | 'lease' | null
+  /** Static DHCP lease on this address (comment, else host name). */
+  lease: { name: string | null; mac: string } | null
   netbox: ArpNetboxMatch | null
 }
 

@@ -72,7 +72,9 @@ const visible = computed(() =>
           <tr v-for="row in visible" :key="row.id" :class="[`presence-${row.presence}`, { 'is-unknown': !row.netbox }]">
             <td><span class="presence-dot" :title="row.presence"></span></td>
             <td class="mono">{{ row.address }}</td>
-            <td class="mono dim">{{ row.mac || '—' }}</td>
+            <td class="mono dim">
+              {{ row.mac || '—' }}<span v-if="row.macSource === 'lease'" class="flag" title="MAC of the static DHCP lease: the router has no MAC for this entry">lease</span>
+            </td>
             <td class="dim">{{ row.interface }}</td>
             <td class="mono">
               {{ row.status || '—' }}<span v-if="row.dhcp" class="flag" title="DHCP static lease">dhcp</span>
@@ -83,7 +85,10 @@ const visible = computed(() =>
                 <span v-else class="nb-name">{{ row.netbox.name }}</span>
                 <span class="nb-kind">{{ row.netbox.kind === 'vm' ? 'vm' : row.netbox.role ?? 'device' }}</span>
               </template>
-              <span v-else class="unknown-label">unknown</span>
+              <template v-else>
+                <span class="unknown-label">unknown</span>
+                <span v-if="row.lease?.name" class="lease-name" title="Name of the static DHCP lease">{{ row.lease.name }}</span>
+              </template>
             </td>
             <td class="mono dim">{{ row.netbox?.interface ?? '' }}</td>
             <td class="dim">{{ row.netbox?.description ?? '' }}</td>
@@ -234,6 +239,11 @@ a.nb-name:hover { text-decoration: underline; }
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-accent);
+}
+
+.lease-name {
+  margin-left: 6px;
+  color: var(--color-text-secondary);
 }
 
 .empty {

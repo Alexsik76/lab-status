@@ -52,6 +52,7 @@ async def test_session_snapshot_then_live_events() -> None:
         Reply("!re", "print", _attrs("*1", "reachable")),
         Reply("!re", "print", _attrs("*2", "failed", mac="02:00:00:00:00:BB", address="192.0.2.11")),
         Reply("!done", "print"),
+        Reply("!done", "lease-print"),
         Reply("!re", "listen", _attrs("*1", "stale")),
         Reply("!re", "listen", {".id": "*2", ".dead": "true"}),
     ])
@@ -74,7 +75,12 @@ async def test_session_snapshot_then_live_events() -> None:
     assert upsert["type"] == "upsert" and upsert["row"]["status"] == "stale"
     remove = await asyncio.wait_for(queue.get(), 2)
     assert remove == {"type": "remove", "id": "*2"}
-    assert conn.sent == [["/ip/arp/listen", ".tag=listen"], ["/ip/arp/print", ".tag=print"]]
+    assert conn.sent == [
+        ["/ip/arp/listen", ".tag=listen"],
+        ["/ip/dhcp-server/lease/listen", ".tag=lease-listen"],
+        ["/ip/arp/print", ".tag=print"],
+        ["/ip/dhcp-server/lease/print", ".tag=lease-print"],
+    ]
 
     hub.unsubscribe(queue)
     await asyncio.sleep(0.05)
@@ -83,7 +89,11 @@ async def test_session_snapshot_then_live_events() -> None:
 
 
 async def test_second_subscriber_gets_snapshot_immediately() -> None:
-    conn = FakeConnection([Reply("!re", "print", _attrs("*1", "permanent")), Reply("!done", "print")])
+    conn = FakeConnection([
+        Reply("!re", "print", _attrs("*1", "permanent")),
+        Reply("!done", "print"),
+        Reply("!done", "lease-print"),
+    ])
 
     async def connect():
         return conn
@@ -103,3 +113,50 @@ async def test_second_subscriber_gets_snapshot_immediately() -> None:
     hub.unsubscribe(second)
     await asyncio.sleep(0.05)
     assert conn.closed
+
+
+def _lease(id_: str, address: str, mac: str, dynamic: bool = False, comment: str = "") -> dict[str, str]:
+    attrs = {".id": id_, "address": address, "mac-address": mac, "dynamic": "true" if dynamic else "false"}
+    if comment:
+        attrs["comment"] = comment
+    return attrs
+
+
+async def test_entry_without_mac_borrows_the_static_lease_mac() -> None:
+    printer = MacMatch("device", "9", "printer", "IoT", "active", "", "wlan0", None)
+    conn = FakeConnection([
+        Reply("!re", "lease-print", _lease("*L1", "192.0.2.50", "02:00:00:00:00:99", comment="Printer")),
+        Reply("!re", "lease-print", _lease("*L2", "192.0.2.60", "02:00:00:00:00:77")),
+        Reply("!re", "lease-print", _lease("*L3", "192.0.2.70", "02:00:00:00:00:66", dynamic=True)),
+        Reply("!done", "lease-print"),
+        Reply("!re", "print", {".id": "*1", "address": "192.0.2.50", "status": "failed"}),
+        Reply("!re", "print", {".id": "*2", "address": "192.0.2.60", "status": "incomplete"}),
+        Reply("!re", "print", {".id": "*3", "address": "192.0.2.70", "status": "failed"}),
+        Reply("!done", "print"),
+    ])
+
+    async def connect():
+        return conn
+
+    async def load_macs():
+        return {"02:00:00:00:00:99": printer}
+
+    hub = ArpHub(connect, load_macs)
+    queue = hub.subscribe()
+    rows = {r["id"]: r for r in (await _drain(queue, "snapshot"))[-1]["rows"]}
+
+    assert rows["*1"]["mac"] == "02:00:00:00:00:99" and rows["*1"]["macSource"] == "lease"
+    assert rows["*1"]["netbox"]["name"] == "printer"
+    # Static lease without a NetBox match: unknown, but the lease name is still shown.
+    assert rows["*2"]["netbox"] is None and rows["*2"]["lease"] == {"name": None, "mac": "02:00:00:00:00:77"}
+    # Dynamic leases are not used.
+    assert rows["*3"]["mac"] == "" and rows["*3"]["lease"] is None
+    hub.unsubscribe(queue)
+
+
+def test_lease_changes_that_matter() -> None:
+    hub = ArpHub(None, None)  # type: ignore[arg-type]
+    assert hub.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is True
+    assert hub.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is False
+    assert hub.apply_lease(_lease("*D1", "192.0.2.70", "02:00:00:00:00:66", dynamic=True)) is False
+    assert hub.apply_lease({".id": "*L1", ".dead": "true"}) is True
