@@ -1,22 +1,39 @@
 <script setup lang="ts">
-import { provide, reactive } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { computed, provide, reactive, ref } from 'vue'
+import ArpPage from './components/ArpPage.vue'
 import ErrorPage from './components/ErrorPage.vue'
 import InventorySkeleton from './components/InventorySkeleton.vue'
 import LabToolbar from './components/LabToolbar.vue'
 import LabTree from './components/LabTree.vue'
 import NoticeBanner from './components/NoticeBanner.vue'
+import { useArp } from './composables/useArp'
 import { useLab } from './composables/useLab'
 import { statusPhaseKey } from './injection'
 
-const labState = useLab()
+const arp = useArp()
+const labState = useLab(arp.presence)
 const lab = reactive(labState)
 provide(statusPhaseKey, labState.livePhase)
+
+const hash = ref(typeof window === 'undefined' ? '' : window.location.hash)
+useEventListener('hashchange', () => {
+  hash.value = window.location.hash
+})
+const page = computed(() => (hash.value === '#/arp' ? 'arp' : 'lab'))
 </script>
 
 <template>
   <main class="homelab-app">
+    <ArpPage
+      v-if="page === 'arp'"
+      :rows="arp.rows.value"
+      :phase="arp.phase.value"
+      :error-message="arp.errorMessage.value"
+    />
+
     <ErrorPage
-      v-if="lab.view === 'fatal'"
+      v-else-if="lab.view === 'fatal'"
       :message="lab.fatalError ?? 'Unknown error.'"
       :retrying="lab.isRefreshing"
       @retry="labState.refresh"

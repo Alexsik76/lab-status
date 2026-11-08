@@ -44,13 +44,27 @@ server {
         return 404;
     }
 
-    # Service status: GET only
+    # Service status, answered by the backend: GET only
     location = /api/service-status {
         limit_except GET {
             deny all;
         }
-        proxy_pass ${SERVICE_STATUS_URL};
-        proxy_ssl_verify off;
+        proxy_pass http://api:8000/api/service-status;
+    }
+
+    # ARP mirror (Server-Sent Events), answered by the backend: GET only, never buffered.
+    location = /api/arp/stream {
+        limit_except GET {
+            deny all;
+        }
+        proxy_pass http://api:8000/api/arp/stream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+        # nginx consumes the backend's X-Accel-Buffering; re-send it so the outer reverse proxy does not buffer either.
+        add_header X-Accel-Buffering no;
     }
 
     # Container status: GET only

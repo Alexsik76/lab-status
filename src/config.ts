@@ -1,8 +1,11 @@
 /** Same-origin NetBox GraphQL endpoint; the token is injected by nginx / the Vite dev proxy. */
 export const NETBOX_GRAPHQL_URL = '/netbox/graphql/'
 
-/** Same-origin service status endpoint; forwarded by nginx / Vite dev proxy to SERVICE_STATUS_URL. */
+/** Same-origin service status endpoint, answered by the backend. */
 export const STATUS_URL = '/api/service-status'
+
+/** Same-origin Server-Sent Events stream of the router's ARP table, answered by the backend. */
+export const ARP_STREAM_URL = '/api/arp/stream'
 
 /** Same-origin container status endpoint; forwarded by nginx / Vite dev proxy to CONTAINER_STATUS_URL. */
 export const CONTAINER_STATUS_URL = '/api/container-status'

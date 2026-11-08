@@ -3,7 +3,7 @@ import { rawInventory, statusEntries } from '../__fixtures__'
 import type { Guest, Inventory, VmRecord } from './model'
 import { normalizeInventory } from './normalize'
 import { indexStatuses } from './statuses'
-import { buildTree, countTree } from './tree'
+import { applyArpPresence, buildTree, countTree } from './tree'
 import type { StatusEntry } from '../types/status'
 
 const inventory = normalizeInventory(rawInventory)
@@ -158,5 +158,39 @@ describe('buildTree: edge cases', () => {
     const service = { id: '1', name: 's', ports: [], scheme: null, addresses: [], parent: { kind: 'vm' as const, id: machine.id } }
     const tree = buildTree({ ...empty, devices: [machine], services: [service] })
     expect(tree.machines[0].services).toEqual([])
+  })
+})
+
+describe('buildTree with ARP presence', () => {
+  const tree = buildTree(inventory, statuses)
+  const machine = tree.machines[0]
+  const runningGuest = tree.machines.flatMap((m) => m.guests).find((g) => g.state !== 'stopped')!
+  const build = (arp: Map<string, 'up' | 'down'>) =>
+    buildTree(inventory, statuses, new Map(), new Map(), new Map(), arp)
+
+  it('takes machine state from ARP when the machine is in the table', () => {
+    expect(build(new Map([[`device:${machine.id}`, 'up']])).machines[0].state).toBe('up')
+    expect(build(new Map([[`device:${machine.id}`, 'down']])).machines[0].state).toBe('down')
+  })
+
+  it('takes guest state from ARP and does not blink', () => {
+    const guest = (arp: Map<string, 'up' | 'down'>) =>
+      build(arp).machines.flatMap((m) => m.guests).find((g) => g.id === runningGuest.id)!
+    expect(guest(new Map([[`vm:${runningGuest.id}`, 'down']]))).toMatchObject({ state: 'down', blinking: false })
+    expect(guest(new Map([[`vm:${runningGuest.id}`, 'up']]))).toMatchObject({ state: 'up', blinking: false })
+  })
+
+  it('leaves everything else to the other sources', () => {
+    expect(build(new Map())).toEqual(tree)
+  })
+})
+
+describe('applyArpPresence', () => {
+  it('keeps stopped things stopped when they are gone from the network', () => {
+    expect(applyArpPresence('up', 'down', true)).toBe('stopped')
+    expect(applyArpPresence('stopped', 'down', false)).toBe('stopped')
+    expect(applyArpPresence('up', 'down', false)).toBe('down')
+    expect(applyArpPresence('down', 'up', false)).toBe('up')
+    expect(applyArpPresence('unknown', undefined, false)).toBe('unknown')
   })
 })

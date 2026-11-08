@@ -1,4 +1,5 @@
-import { computed, readonly, ref } from 'vue'
+import { computed, readonly, ref, type Ref } from 'vue'
+import type { ArpPresenceIndex } from '../domain/arp'
 import { matchDockerContainers } from '../domain/containerStatuses'
 import { mapMachineMetrics, matchProxmoxGuests } from '../domain/proxmox'
 import { buildTree, countTree } from '../domain/tree'
@@ -10,11 +11,11 @@ import { useStatuses, type StatusPhase } from './useStatuses'
 export type LabView = 'loading' | 'fatal' | 'empty' | 'tree'
 
 /**
- * The four independent sources combined: the tree is built as soon as the
- * inventory is available and re-derived when statuses, container states, or
- * Proxmox guest states / machine metrics arrive.
+ * The independent sources combined: the tree is built as soon as the
+ * inventory is available and re-derived when statuses, container states,
+ * Proxmox guest states / machine metrics, or ARP presence arrive.
  */
-export function useLab() {
+export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
   const inventory = useInventory()
   const statuses = useStatuses()
   const containerStatuses = useContainerStatuses()
@@ -46,6 +47,7 @@ export function useLab() {
           dockerIndex.value,
           proxmoxGuests.value,
           machineMetrics.value,
+          arpPresence?.value,
         )
       : null,
   )

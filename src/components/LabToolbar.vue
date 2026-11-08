@@ -27,6 +27,7 @@ const summary = computed(() => {
     <div class="toolbar-left">
       <span class="homelab-title">homelab</span>
       <span v-if="summary" class="homelab-counts">{{ summary }}</span>
+      <a class="page-link" href="#/arp">arp table →</a>
     </div>
 
     <div class="toolbar-right">
@@ -92,6 +93,16 @@ const summary = computed(() => {
 .homelab-counts {
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+.page-link {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.page-link:hover {
+  color: var(--color-text-title);
+  text-decoration: underline;
 }
 
 .toolbar-right {

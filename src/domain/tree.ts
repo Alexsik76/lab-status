@@ -9,10 +9,12 @@ import type {
   ServiceRecord,
   ServiceState,
   Stack,
+  State,
   TreeCounts,
   VmRecord,
 } from './model'
 import { resolveState } from './state'
+import { arpObjectKey, type ArpPresenceIndex } from './arp'
 import type { StatusEntry } from '../types/status'
 import { resolveContainerState, type DockerStatusIndex } from './containerStatuses'
 import {
@@ -65,6 +67,22 @@ interface BuildContext {
   dockerStatuses: DockerStatusIndex
   proxmoxGuests: ProxmoxGuestIndex
   machineMetrics: MachineMetricsIndex
+  arp: ArpPresenceIndex
+}
+
+/**
+ * For machines and guests seen in the router's ARP table, presence on the network is
+ * the status source: active -> up; disconnected -> down, or stopped when it is stopped
+ * anyway (NetBox offline, Proxmox stopped). Without an ARP entry the other sources decide.
+ */
+export function applyArpPresence(
+  state: State,
+  presence: 'up' | 'down' | undefined,
+  offline: boolean,
+): State {
+  if (presence === undefined) return state
+  if (presence === 'up') return 'up'
+  return offline || state === 'stopped' ? 'stopped' : 'down'
 }
 
 function servicesOf(ctx: BuildContext, kind: 'vm' | 'device', id: string): ServiceItem[] {
@@ -115,12 +133,15 @@ function buildGuest(ctx: BuildContext, vm: VmRecord & { kind: 'KVM' | 'LXC' }, c
   const containers = buildContainers(ctx, children)
   const services = servicesOf(ctx, 'vm', vm.id)
   const proxmoxGuest = ctx.proxmoxGuests.get(vm.id)
-  const { state, blinking } = resolveGuestState(
+  const resolved = resolveGuestState(
     vm,
     services.map((s) => s.state),
     proxmoxGuest,
     containers.map((c) => c.state),
   )
+  const arpPresence = ctx.arp.get(arpObjectKey('vm', vm.id))
+  const state = applyArpPresence(resolved.state, arpPresence, vm.offline)
+  const blinking = arpPresence === undefined ? resolved.blinking : false
   return {
     id: vm.id,
     name: vm.name,
@@ -162,11 +183,15 @@ function buildMachine(
     guests,
     apps,
     metrics,
-    state: resolveState({
-      offline: device.offline,
-      serviceStates: services.map((s) => s.state),
-      childStates: [...guests.map((g) => g.state), ...apps.map((a) => a.state)],
-    }),
+    state: applyArpPresence(
+      resolveState({
+        offline: device.offline,
+        serviceStates: services.map((s) => s.state),
+        childStates: [...guests.map((g) => g.state), ...apps.map((a) => a.state)],
+      }),
+      ctx.arp.get(arpObjectKey('device', device.id)),
+      device.offline,
+    ),
   }
 }
 
@@ -184,6 +209,7 @@ export function buildTree(
   dockerStatuses: DockerStatusIndex = new Map(),
   proxmoxGuests: ProxmoxGuestIndex = new Map(),
   machineMetrics: MachineMetricsIndex = new Map(),
+  arp: ArpPresenceIndex = new Map(),
 ): LabTree {
   const ctx: BuildContext = {
     statuses,
@@ -191,6 +217,7 @@ export function buildTree(
     dockerStatuses,
     proxmoxGuests,
     machineMetrics,
+    arp,
   }
 
   const machineRecords = inventory.devices.filter((d) => d.roleSlug === MACHINE_ROLE)

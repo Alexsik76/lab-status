@@ -3,6 +3,8 @@ services:
     build: .
     container_name: lab-status
     restart: unless-stopped
+    depends_on:
+      - api
     ports:
       - 8081:80
     environment:
@@ -10,5 +12,18 @@ services:
       - NETBOX_TOKEN
       - PROXMOX_URL
       - PROXMOX_TOKEN
-      - SERVICE_STATUS_URL
       - CONTAINER_STATUS_URL
+
+  api:
+    build: ./backend
+    container_name: lab-status-api
+    restart: unless-stopped
+    environment:
+      - NETBOX_URL
+      - NETBOX_TOKEN
+      - NETBOX_PUBLIC_URL
+      - ROUTEROS_HOST
+      - ROUTEROS_PORT
+      - ROUTEROS_USER
+      - ROUTEROS_PASSWORD
+      - SERVICE_CHECK_EXCLUDE

@@ -15,7 +15,8 @@ function parseEndpoint(rawUrl: string | undefined) {
 // are never exposed to the browser bundle.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const serviceStatusUrl = parseEndpoint(env.SERVICE_STATUS_URL)
+  // The backend (backend/) runs separately in development: uvicorn on port 8000 by default.
+  const backendUrl = env.BACKEND_URL || 'http://127.0.0.1:8000'
   const containerStatusUrl = parseEndpoint(env.CONTAINER_STATUS_URL)
 
   return {
@@ -51,19 +52,21 @@ export default defineConfig(({ mode }) => {
           },
         },
         '/api/service-status': {
-          target: serviceStatusUrl ? serviceStatusUrl.origin : 'http://localhost',
-          changeOrigin: true,
-          secure: false,
-          rewrite: () => (serviceStatusUrl ? serviceStatusUrl.pathname + serviceStatusUrl.search : ''),
+          target: backendUrl,
           bypass(req, res) {
             if (req.method !== 'GET') {
               res.statusCode = 405
               res.end('Method Not Allowed')
               return false
             }
-            if (!serviceStatusUrl) {
-              res.statusCode = 502
-              res.end('SERVICE_STATUS_URL is not configured')
+          },
+        },
+        '/api/arp/stream': {
+          target: backendUrl,
+          bypass(req, res) {
+            if (req.method !== 'GET') {
+              res.statusCode = 405
+              res.end('Method Not Allowed')
               return false
             }
           },
