@@ -29,6 +29,7 @@ const nb = (kind: 'device' | 'vm', id: string) => ({
   name: `${kind}-${id}`,
   role: null,
   status: 'active',
+  description: '',
   interface: 'eth0',
   url: null,
 })

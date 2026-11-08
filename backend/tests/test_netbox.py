@@ -55,8 +55,8 @@ def test_mac_directory_resolves_devices_and_vms() -> None:
         "device", "1", "srv-a", "Server", "eth0")
     assert device.url == "https://netbox.example/dcim/devices/1/"
     vm = directory["02:00:00:00:00:BB"]
-    assert (vm.kind, vm.id, vm.url) == (
-        "vm", "10", "https://netbox.example/virtualization/virtual-machines/10/")
+    assert (vm.kind, vm.id, vm.description, vm.url) == (
+        "vm", "10", "Docker host", "https://netbox.example/virtualization/virtual-machines/10/")
 
 
 def test_mac_directory_without_public_url_has_no_links() -> None:

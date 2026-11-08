@@ -65,6 +65,7 @@ const visible = computed(() =>
             <th>status</th>
             <th>netbox</th>
             <th>port</th>
+            <th>description</th>
           </tr>
         </thead>
         <tbody>
@@ -85,9 +86,10 @@ const visible = computed(() =>
               <span v-else class="unknown-label">unknown</span>
             </td>
             <td class="mono dim">{{ row.netbox?.interface ?? '' }}</td>
+            <td class="dim">{{ row.netbox?.description ?? '' }}</td>
           </tr>
           <tr v-if="!visible.length">
-            <td colspan="7" class="empty">{{ phase === 'loading' ? 'Waiting for the router…' : 'No entries.' }}</td>
+            <td colspan="8" class="empty">{{ phase === 'loading' ? 'Waiting for the router…' : 'No entries.' }}</td>
           </tr>
         </tbody>
       </table>

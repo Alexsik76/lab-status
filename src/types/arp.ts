@@ -8,6 +8,7 @@ export interface ArpNetboxMatch {
   name: string
   role: string | null
   status: string | null
+  description: string
   interface: string | null
   /** Link to the object in the NetBox UI, when the backend knows the public NetBox URL. */
   url: string | null

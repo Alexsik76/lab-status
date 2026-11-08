@@ -5,7 +5,7 @@ from app.arp import ArpHub, presence
 from app.netbox import MacMatch
 from app.routeros import Reply
 
-MATCH = MacMatch("device", "1", "srv-a", "Server", "active", "eth0", None)
+MATCH = MacMatch("device", "1", "srv-a", "Server", "active", "", "eth0", None)
 
 
 def _attrs(id_: str, status: str, mac: str = "02:00:00:00:00:AA", address: str = "192.0.2.10") -> dict[str, str]:
