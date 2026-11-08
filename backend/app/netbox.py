@@ -51,7 +51,6 @@ class MacMatch:
     name: str
     role: str | None
     status: str | None
-    description: str
     interface: str | None
     url: str | None
 
@@ -62,7 +61,6 @@ class MacMatch:
             "name": self.name,
             "role": self.role,
             "status": self.status,
-            "description": self.description,
             "interface": self.interface,
             "url": self.url,
         }
@@ -100,7 +98,6 @@ def build_mac_directory(
             name=obj.get("name") or owner.get("name") or "",
             role=((obj.get("role") or {}).get("name")),
             status=_choice(obj.get("status")),
-            description=obj.get("description") or "",
             interface=assigned.get("name"),
             url=f"{public_url}/{path}/{owner['id']}/" if public_url else None,
         )
