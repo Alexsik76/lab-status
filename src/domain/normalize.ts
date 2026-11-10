@@ -163,6 +163,7 @@ function normalizeService(raw: RawService): ServiceRecord {
     name: raw.name ?? `service ${raw.id}`,
     ports: raw.ports ?? [],
     scheme,
+    check: raw.custom_fields?.check === true,
     addresses: (raw.ipaddresses ?? [])
       .map((a) => stripAddressMask(a.address))
       .filter((a): a is string => a !== null),

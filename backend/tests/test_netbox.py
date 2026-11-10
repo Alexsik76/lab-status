@@ -14,10 +14,10 @@ VMS = [
 ]
 
 
-def _service(id_, name, parent_type, parent_id, parent_name, port, scheme="http", ips=()):
+def _service(id_, name, parent_type, parent_id, parent_name, port, scheme="http", ips=(), check=True):
     return {
         "id": id_, "name": name, "ports": [port],
-        "custom_fields": {"scheme": {"value": scheme, "label": scheme} if scheme else None},
+        "custom_fields": {"scheme": {"value": scheme, "label": scheme} if scheme else None, "check": check},
         "parent_object_type": parent_type,
         "parent": {"id": parent_id, "name": parent_name},
         "ipaddresses": [{"address": ip} for ip in ips],
@@ -31,6 +31,9 @@ def test_targets_follow_n8n_rules() -> None:
         _service(102, "app", "virtualization.virtualmachine", 11, "app", 8080),  # container -> host IP
         _service(103, "api", "virtualization.virtualmachine", 10, "vm-a", 9000, ips=["192.0.2.99/24"]),
         _service(104, "ssh", "virtualization.virtualmachine", 10, "vm-a", 22, scheme=None),  # no scheme
+        _service(105, "docs", "dcim.device", 1, "srv-a", 8080, check=False),  # not the health service
+        _service(106, "cam", "dcim.device", 1, "srv-a", 8554, scheme="rtsp"),  # non-HTTP scheme
+        _service(107, "rtc", "dcim.device", 1, "srv-a", 8555, scheme="webrtc"),  # non-HTTP scheme
     ]
     targets = build_targets(services, VMS, DEVICES)
     assert [(t.name, t.url, t.service_id) for t in targets] == [

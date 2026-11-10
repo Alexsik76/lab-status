@@ -53,6 +53,7 @@ function toServiceItem(record: ServiceRecord, statuses: StatusIndex): ServiceIte
     name: record.name,
     ports: record.ports,
     scheme: record.scheme,
+    check: record.check,
     addresses: record.addresses,
     url: entry?.url ?? null,
     state,

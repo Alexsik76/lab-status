@@ -8,7 +8,11 @@ the browser.
 The page shows the lab as a tree, machine -> guest -> stack -> container, from these
 independent sources:
 1. **NetBox inventory**: machines, guests, containers, and services (`POST /netbox/graphql/`);
-2. **HTTP service checks**: run by the backend against the NetBox services (`GET /api/service-status`);
+2. **HTTP service checks**: run by the backend against the NetBox services that have the
+   custom field `check` set and an `http`/`https` `scheme` (one per parent: the service that
+   represents the application's health; `GET /api/service-status`). Only `http`/`https`
+   services are ever links; `rtsp`/`webrtc` services are not clickable (their port may still
+   be shown). The service flagged `check` is the one shown on the node's tile;
 3. **Docker container states**: forwarded to `CONTAINER_STATUS_URL` (`GET /api/container-status`);
 4. **Proxmox**: live guest states, node status, and CPU/memory load graphs (`GET /proxmox/api2/json/...`);
 5. **Router ARP table**: a live mirror streamed by the backend (`GET /api/arp/stream`, Server-Sent Events).

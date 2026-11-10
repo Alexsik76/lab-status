@@ -8,6 +8,7 @@ function mockService(partial: Partial<ServiceItem>): ServiceItem {
     name: 'test-svc',
     ports: [],
     scheme: null,
+    check: false,
     addresses: [],
     url: null,
     state: 'up',
@@ -46,6 +47,11 @@ describe('resolveServiceUrl', () => {
     expect(resolveServiceUrl(svc)).toBeNull()
   })
 
+  it.each(['rtsp', 'webrtc'])('never links a %s service', (scheme) => {
+    const svc = mockService({ scheme, ports: [8554], addresses: ['192.0.2.10'], url: 'http://192.0.2.10:8554' })
+    expect(resolveServiceUrl(svc, '192.0.2.1')).toBeNull()
+  })
+
   it('returns null when no IP is available', () => {
     const svc = mockService({ scheme: 'http', ports: [80], addresses: [] })
     expect(resolveServiceUrl(svc, null)).toBeNull()
@@ -57,6 +63,22 @@ describe('getNodePrimaryUrlAndPort', () => {
     const svc = mockService({ scheme: null, ports: [5433] })
     const res = getNodePrimaryUrlAndPort([svc], '192.0.2.10')
     expect(res).toEqual({ url: null, portText: ':5433' })
+  })
+
+  it('picks the service flagged check, not the first one with a scheme', () => {
+    const other = mockService({ id: '1', scheme: 'http', ports: [80], addresses: ['192.0.2.10'] })
+    const checked = mockService({ id: '2', scheme: 'https', ports: [8443], addresses: ['192.0.2.10'], check: true })
+    expect(getNodePrimaryUrlAndPort([other, checked])).toEqual({ url: 'https://192.0.2.10:8443', portText: ':8443' })
+  })
+
+  it('shows the port but no link when the check service is not http/https', () => {
+    const svc = mockService({ scheme: 'rtsp', ports: [8554], addresses: ['192.0.2.10'], check: true })
+    expect(getNodePrimaryUrlAndPort([svc])).toEqual({ url: null, portText: ':8554' })
+  })
+
+  it('has no link without a check service, only the first port', () => {
+    const svc = mockService({ scheme: 'http', ports: [8080], addresses: ['192.0.2.10'] })
+    expect(getNodePrimaryUrlAndPort([svc], '192.0.2.10')).toEqual({ url: null, portText: ':8080' })
   })
 
   it('returns empty info when services list is empty', () => {

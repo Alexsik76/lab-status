@@ -122,6 +122,14 @@ describe('normalizeInventory (real data)', () => {
     expect(allIps.every((ip) => !ip.includes('/'))).toBe(true)
   })
 
+  it('maps the check custom field to a boolean, true only for an explicit true', () => {
+    const check = (name: string) => inventory.services.find((s) => s.name === name)?.check
+    expect(check('ingress-80')).toBe(true)
+    expect(check('ingress-81')).toBe(false)
+    expect(check('metrics-db')).toBe(false)
+    expect(inventory.services.filter((s) => s.parent?.id === '23' && s.check)).toHaveLength(1)
+  })
+
   it('maps VM kinds, hosts and stacks', () => {
     const kinds = new Set(inventory.vms.map((vm) => vm.kind))
     expect(kinds).toEqual(new Set(['KVM', 'LXC', 'Docker']))

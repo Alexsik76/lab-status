@@ -63,6 +63,8 @@ export interface ServiceRecord {
   name: string
   ports: number[]
   scheme: string | null
+  /** The service that represents the application's health (custom field `check`). */
+  check: boolean
   addresses: string[]
   parent: { kind: 'vm' | 'device'; id: string } | null
 }
@@ -80,6 +82,7 @@ export interface ServiceItem {
   name: string
   ports: number[]
   scheme: string | null
+  check: boolean
   addresses: string[]
   /** Link target: the url of the matching status entry. */
   url: string | null

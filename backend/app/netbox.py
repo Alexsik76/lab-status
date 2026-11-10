@@ -117,6 +117,9 @@ async def fetch_mac_directory(netbox: NetBoxClient, public_url: str) -> dict[str
 # ---- Service check targets -------------------------------------------------------------
 
 
+CHECK_SCHEMES = ("http", "https")
+
+
 @dataclass(frozen=True)
 class Target:
     name: str
@@ -127,18 +130,20 @@ class Target:
 def build_targets(services: list[Json], vms: list[Json], devices: list[Json]) -> list[Target]:
     """Same rules as the n8n `Service targets ← NetBox` sync.
 
-    Only services with a `scheme`; services whose parent is offline are skipped. Address:
-    the IP bound to the service, else the host VM's primary IP for a container, else the
-    parent's own primary IP.
+    Only services with the `check` custom field set (the one that represents the application's
+    health) and an http or https `scheme`; services whose parent is offline are skipped.
+    Address: the IP bound to the service, else the host VM's primary IP for a container,
+    else the parent's own primary IP.
     """
     vm_by_id = {vm["id"]: vm for vm in vms}
     device_by_id = {device["id"]: device for device in devices}
     targets: list[Target] = []
     for service in services:
-        scheme = _choice((service.get("custom_fields") or {}).get("scheme"))
+        fields = service.get("custom_fields") or {}
+        scheme = _choice(fields.get("scheme"))
         ports = service.get("ports") or []
         parent_ref = service.get("parent") or {}
-        if not scheme or not ports or not parent_ref:
+        if fields.get("check") is not True or scheme not in CHECK_SCHEMES or not ports or not parent_ref:
             continue
         on_device = service.get("parent_object_type") == "dcim.device"
         parent = (device_by_id if on_device else vm_by_id).get(parent_ref.get("id"))
