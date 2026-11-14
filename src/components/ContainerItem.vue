@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Container } from '../domain/model'
-import { getNodePrimaryUrlAndPort } from '../presentation/url'
+import { urlHostLabel } from '../presentation/hostLinks'
+import { getNodePrimaryUrlAndPort, secondaryDirectUrl } from '../presentation/url'
 import LinkOrPlain from './LinkOrPlain.vue'
 import OsIcon from './OsIcon.vue'
 import StateBadge from './StateBadge.vue'
@@ -18,19 +19,24 @@ const props = withDefaults(
 const serviceInfo = computed(() => getNodePrimaryUrlAndPort(props.container.services))
 const url = computed(() => serviceInfo.value.url)
 const portText = computed(() => serviceInfo.value.portText)
+/** Raw (ip:port) URL, linked separately only when the primary link is the public domain. */
+const directUrl = computed(() => secondaryDirectUrl(serviceInfo.value))
+const directTooltip = computed(() =>
+  directUrl.value ? `Direct: ${urlHostLabel(directUrl.value)}` : undefined,
+)
 
 const titleText = computed(() => {
   const parts = [props.container.name]
   if (props.container.dockerStatus) parts.push(props.container.dockerStatus)
   if (props.container.image) parts.push(`image: ${props.container.image}`)
-  if (serviceInfo.value.url) parts.push(serviceInfo.value.url)
+  const host = urlHostLabel(serviceInfo.value.url)
+  if (host) parts.push(host)
   return parts.join(' | ')
 })
 </script>
 
 <template>
-  <LinkOrPlain
-    :href="url"
+  <div
     class="container-node"
     :class="[
       `state-${container.state}`,
@@ -53,18 +59,29 @@ const titleText = computed(() => {
         :size="14"
         :dim="container.state === 'stopped' || container.state === 'unknown'"
       />
-      <span class="container-name">{{ container.name }}</span>
+      <LinkOrPlain :href="url" as="span" class="container-name container-link" :title="titleText">
+        {{ container.name }}
+      </LinkOrPlain>
       <span v-if="container.tags?.length" class="container-tags">
         <Tag v-for="tag in container.tags" :key="tag.name" :tag="tag" size="sm" />
       </span>
       <span class="spacer"></span>
-      <span v-if="portText" class="container-port">{{ portText }}</span>
+      <LinkOrPlain
+        v-if="portText"
+        :href="directUrl"
+        as="span"
+        class="container-port"
+        :class="{ 'is-clickable': !!directUrl }"
+        :title="directTooltip"
+      >
+        {{ portText }}
+      </LinkOrPlain>
       <span v-if="url" class="container-arrow">↗</span>
     </div>
     <span v-if="container.image" class="container-image">
       {{ container.image }}
     </span>
-  </LinkOrPlain>
+  </div>
 </template>
 
 <style scoped>
@@ -88,7 +105,21 @@ const titleText = computed(() => {
 .is-clickable {
   cursor: pointer;
 }
-.is-clickable:hover {
+.container-node.is-clickable {
+  position: relative;
+}
+
+/* Primary link (public domain, else ip:port); stretched over the whole tile */
+.container-link {
+  text-decoration: none;
+}
+.container-link[href]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.container-node.is-clickable:hover {
   background: var(--color-bg-hover);
 }
 
@@ -125,6 +156,16 @@ const titleText = computed(() => {
   font-size: 11px;
   color: var(--color-text-port);
   flex: none;
+}
+/* Direct ip:port: secondary link that bypasses the reverse proxy, above the stretched one */
+.container-port.is-clickable {
+  position: relative;
+  z-index: 1;
+  text-decoration: none;
+}
+.container-port.is-clickable:hover,
+.container-port.is-clickable:focus-visible {
+  color: var(--color-text-white);
 }
 
 .container-arrow {

@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import type { Container, Guest, Stack, TagItem } from '../domain/model'
 import { formatMemory } from '../format'
-import { getNodePrimaryUrlAndPort } from '../presentation/url'
+import { urlHostLabel } from '../presentation/hostLinks'
+import { getNodePrimaryUrlAndPort, secondaryDirectUrl } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
 import LinkOrPlain from './LinkOrPlain.vue'
 import OsIcon from './OsIcon.vue'
@@ -17,6 +18,12 @@ const serviceInfo = computed(() =>
   getNodePrimaryUrlAndPort(props.guest.services, props.guest.ip),
 )
 const guestUrl = computed(() => serviceInfo.value.url)
+/** Raw (ip:port) URL, linked separately only when the primary link is the public domain. */
+const directUrl = computed(() => secondaryDirectUrl(serviceInfo.value))
+const guestTooltip = computed(() => urlHostLabel(guestUrl.value))
+const directTooltip = computed(() =>
+  directUrl.value ? `Direct: ${urlHostLabel(directUrl.value)}` : undefined,
+)
 const guestPort = computed(() => serviceInfo.value.portText)
 
 const specs = computed(() => {
@@ -77,42 +84,47 @@ const singleItems = computed<SingleItem[]>(() => {
     ]"
   >
     <!-- Guest header -->
-    <LinkOrPlain
-      :href="guestUrl"
-      class="guest-header"
-      :class="{ 'is-clickable': !!guestUrl }"
-    >
-      <span
-        class="kind-badge"
-        :class="{ 'is-inactive': guest.state === 'stopped' || guest.state === 'unknown' }"
-      >
-        <OsIcon
-          :platform="guest.platform"
-          :size="16"
-          :dim="guest.state === 'stopped' || guest.state === 'unknown'"
-        />
-        <span class="kind-text">{{ displayKind }}</span>
-      </span>
+    <div class="guest-header" :class="{ 'is-clickable': !!guestUrl }">
+      <LinkOrPlain :href="guestUrl" as="span" class="guest-link" :title="guestTooltip">
+        <span
+          class="kind-badge"
+          :class="{ 'is-inactive': guest.state === 'stopped' || guest.state === 'unknown' }"
+        >
+          <OsIcon
+            :platform="guest.platform"
+            :size="16"
+            :dim="guest.state === 'stopped' || guest.state === 'unknown'"
+          />
+          <span class="kind-text">{{ displayKind }}</span>
+        </span>
 
-      <span class="guest-name">{{ guest.name }}</span>
+        <span class="guest-name">{{ guest.name }}</span>
 
-      <!-- GitHub-style tags with NetBox colors -->
-      <span v-if="guestTags.length" class="guest-tags">
-        <Tag v-for="tag in guestTags" :key="tag.name" :tag="tag" size="md" />
-      </span>
+        <!-- GitHub-style tags with NetBox colors -->
+        <span v-if="guestTags.length" class="guest-tags">
+          <Tag v-for="tag in guestTags" :key="tag.name" :tag="tag" size="md" />
+        </span>
+      </LinkOrPlain>
 
       <span class="spacer"></span>
 
-      <span v-if="guest.ip" class="guest-ip">
+      <LinkOrPlain
+        v-if="guest.ip"
+        :href="directUrl"
+        as="span"
+        class="guest-ip"
+        :class="{ 'is-clickable': !!directUrl }"
+        :title="directTooltip"
+      >
         {{ guest.ip }}<span v-if="guestPort" class="guest-port">{{ guestPort }}</span>
-      </span>
+      </LinkOrPlain>
 
       <span v-if="specs" class="guest-specs">{{ specs }}</span>
 
       <StateBadge :state="guest.state" variant="guest" :blinking="guest.blinking" />
 
       <span v-if="guestUrl" class="guest-arrow">↗</span>
-    </LinkOrPlain>
+    </div>
 
     <!-- Stacks and Containers -->
     <div v-if="!isEmpty" class="guest-stacks">
@@ -193,7 +205,24 @@ const singleItems = computed<SingleItem[]>(() => {
 }
 
 .guest-header.is-clickable {
+  position: relative;
   cursor: pointer;
+}
+
+/* Primary link (public domain, else ip:port); stretched over the whole header */
+.guest-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.guest-link[href]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
 }
 .guest-header.is-clickable:hover {
   background: var(--color-bg-hover);
@@ -282,6 +311,19 @@ const singleItems = computed<SingleItem[]>(() => {
 }
 .guest-port {
   color: var(--color-text-port);
+}
+/* Direct ip:port: secondary link that bypasses the reverse proxy, above the stretched one */
+.guest-ip.is-clickable {
+  position: relative;
+  z-index: 1;
+  text-decoration: none;
+  transition: color 0.12s ease;
+}
+.guest-ip.is-clickable:hover,
+.guest-ip.is-clickable:focus-visible,
+.guest-ip.is-clickable:hover .guest-port,
+.guest-ip.is-clickable:focus-visible .guest-port {
+  color: var(--color-text-white);
 }
 .state-down .guest-ip,
 .state-down .guest-port {

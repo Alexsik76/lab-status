@@ -12,7 +12,12 @@ independent sources:
    custom field `check` set and an `http`/`https` `scheme` (one per parent: the service that
    represents the application's health; `GET /api/service-status`). Only `http`/`https`
    services are ever links; `rtsp`/`webrtc` services are not clickable (their port may still
-   be shown). The service flagged `check` is the one shown on the node's tile;
+   be shown). The service flagged `check` is the one shown on the node's tile. When an
+   enabled Nginx Proxy Manager proxy host forwards to the checked `ip:port`, the entry also
+   carries its `public_url` (`https://<first domain>` with a certificate, else `http://`):
+   the tile then links to the domain and shows the direct address as a secondary link
+   (proxy hosts are read on demand and cached for 5 min; an NPM failure keeps the last
+   known links and never fails the checks);
 3. **Docker container states**: forwarded to `CONTAINER_STATUS_URL` (`GET /api/container-status`);
 4. **Proxmox**: live guest states, node status, and CPU/memory load graphs (`GET /proxmox/api2/json/...`);
 5. **Router ARP table**: a live mirror streamed by the backend (`GET /api/arp/stream`, Server-Sent Events).
@@ -50,7 +55,7 @@ closes, the session is closed. There is no polling.
 | `src/composables/` | async state (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`) combined in `useLab` |
 | `src/components/` | render-only components: the tree, the ARP page, error page, skeleton |
 | `src/__fixtures__/` | synthetic responses covering all topology cases, used by the tests |
-| `backend/app/` | FastAPI: RouterOS API client, ARP hub, NetBox reads, service checks |
+| `backend/app/` | FastAPI: RouterOS API client, ARP hub, NetBox reads, service checks, NPM public URLs |
 | `backend/tests/` | pytest suite |
 | `nginx/default.conf.template` | nginx config template; env variables are substituted at container start |
 | `Dockerfile` | stage 1: Node builds the app; stage 2: `nginx:alpine` serves `dist/` |
@@ -71,6 +76,8 @@ closes, the session is closed. There is no polling.
 | `ROUTEROS_USER` / `ROUTEROS_PASSWORD` | api | RouterOS user in a group with `read,api` policies |
 | `NETBOX_PUBLIC_URL` | api | optional: NetBox UI base URL, for links on the ARP page |
 | `SERVICE_CHECK_EXCLUDE` | api | optional: comma-separated check names (`parent/service`) never checked |
+| `NPM_URL` | api | optional: direct Nginx Proxy Manager admin/API base URL, e.g. `http://192.0.2.15:81` |
+| `NPM_IDENTITY` / `NPM_SECRET` | api | optional: NPM user (e-mail) and password; the user needs view rights on proxy hosts. Public links are off unless all three NPM variables are set |
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 
 The browser calls its own origin only:

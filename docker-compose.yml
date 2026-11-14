@@ -27,3 +27,6 @@ services:
       - ROUTEROS_USER
       - ROUTEROS_PASSWORD
       - SERVICE_CHECK_EXCLUDE
+      - NPM_URL
+      - NPM_IDENTITY
+      - NPM_SECRET

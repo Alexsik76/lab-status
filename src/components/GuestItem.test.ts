@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import type { Container, Guest } from '../domain/model'
+import type { Container, Guest, ServiceItem } from '../domain/model'
 import GuestItem from './GuestItem.vue'
 
 function makeContainer(id: string, name: string, stack: string | null = null): Container {
@@ -121,5 +121,56 @@ describe('GuestItem: stack framing and grouping', () => {
     const container = wrapper.find('.container-node')
     expect(container.exists()).toBe(true)
     expect(container.text()).toContain('cluster-agent-auth')
+  })
+})
+
+function checkedService(publicUrl: string | null): ServiceItem {
+  return {
+    id: 's1',
+    name: 'web',
+    ports: [9428],
+    scheme: 'http',
+    check: true,
+    addresses: [],
+    url: 'http://198.51.100.20:9428',
+    publicUrl,
+    state: 'up',
+    httpCode: 200,
+    error: null,
+  }
+}
+
+describe('GuestItem and ContainerItem: public and direct links', () => {
+  it('links the guest header to the public domain and its ip:port to the direct address', () => {
+    const guest = { ...makeGuestWithItems({}), services: [checkedService('https://logs.example.com')] }
+    const wrapper = mount(GuestItem, { props: { guest } })
+
+    const primary = wrapper.find('a.guest-link')
+    expect(primary.attributes('href')).toBe('https://logs.example.com')
+    expect(primary.attributes('title')).toBe('logs.example.com')
+
+    const direct = wrapper.find('a.guest-ip')
+    expect(direct.attributes('href')).toBe('http://198.51.100.20:9428')
+    expect(direct.attributes('title')).toBe('Direct: 198.51.100.20:9428')
+  })
+
+  it('keeps a single direct link when there is no public URL', () => {
+    const guest = { ...makeGuestWithItems({}), services: [checkedService(null)] }
+    const wrapper = mount(GuestItem, { props: { guest } })
+
+    expect(wrapper.find('a.guest-link').attributes('href')).toBe('http://198.51.100.20:9428')
+    expect(wrapper.find('a.guest-ip').exists()).toBe(false)
+    expect(wrapper.find('.guest-ip').text()).toBe('198.51.100.20:9428')
+  })
+
+  it('links a container to the public domain and its port to the direct address', () => {
+    const container = { ...makeContainer('c1', 'logs'), services: [checkedService('https://logs.example.com')] }
+    const wrapper = mount(GuestItem, { props: { guest: makeGuestWithItems({ standalone: [container] }) } })
+
+    const tile = wrapper.find('.container-node')
+    expect(tile.find('a.container-link').attributes('href')).toBe('https://logs.example.com')
+    expect(tile.find('a.container-link').attributes('title')).toContain('logs.example.com')
+    expect(tile.find('a.container-port').attributes('href')).toBe('http://198.51.100.20:9428')
+    expect(tile.find('a.container-port').attributes('title')).toBe('Direct: 198.51.100.20:9428')
   })
 })

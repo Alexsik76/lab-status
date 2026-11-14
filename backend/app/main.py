@@ -14,6 +14,7 @@ from .arp import ArpHub
 from .checks import ServiceChecker
 from .config import Settings
 from .netbox import NetBoxClient, fetch_mac_directory, fetch_targets
+from .npm import NpmClient, PublicUrls, fetch_public_url_map
 from .routeros import RouterOsConnection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -27,6 +28,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     netbox_http = httpx.AsyncClient()
     checks_http = httpx.AsyncClient(verify=False)
     netbox = NetBoxClient(settings, netbox_http)
+    npm_http = httpx.AsyncClient()
+    public_urls = None
+    if settings.npm_enabled:
+        npm = NpmClient(settings, npm_http)
+        public_urls = PublicUrls(lambda: fetch_public_url_map(npm))
 
     async def connect() -> RouterOsConnection:
         return await RouterOsConnection.open(
@@ -38,12 +44,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.settings = settings
     app.state.arp = ArpHub(connect, lambda: fetch_mac_directory(netbox, settings.netbox_public_url))
-    app.state.checks = ServiceChecker(lambda: fetch_targets(netbox), checks_http, settings.service_check_exclude)
+    app.state.checks = ServiceChecker(
+        lambda: fetch_targets(netbox), checks_http, settings.service_check_exclude, public_urls
+    )
     try:
         yield
     finally:
         await netbox_http.aclose()
         await checks_http.aclose()
+        await npm_http.aclose()
 
 
 app = FastAPI(title="lab-status-api", lifespan=lifespan, docs_url=None, redoc_url=None)

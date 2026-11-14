@@ -20,6 +20,14 @@ class Settings:
     netbox_public_url: str = ""
     #: Service check names (`parent/service`) that are never checked.
     service_check_exclude: frozenset[str] = field(default_factory=frozenset)
+    #: Nginx Proxy Manager admin/API base URL and its login; public links are off unless all are set.
+    npm_url: str = ""
+    npm_identity: str = ""
+    npm_secret: str = ""
+
+    @property
+    def npm_enabled(self) -> bool:
+        return bool(self.npm_url and self.npm_identity and self.npm_secret)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -33,4 +41,7 @@ class Settings:
             netbox_token=env.get("NETBOX_TOKEN", ""),
             netbox_public_url=env.get("NETBOX_PUBLIC_URL", "").rstrip("/"),
             service_check_exclude=_csv(env.get("SERVICE_CHECK_EXCLUDE")),
+            npm_url=env.get("NPM_URL", "").rstrip("/"),
+            npm_identity=env.get("NPM_IDENTITY", ""),
+            npm_secret=env.get("NPM_SECRET", ""),
         )

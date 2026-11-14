@@ -56,6 +56,7 @@ function toServiceItem(record: ServiceRecord, statuses: StatusIndex): ServiceIte
     check: record.check,
     addresses: record.addresses,
     url: entry?.url ?? null,
+    publicUrl: entry?.public_url ?? null,
     state,
     httpCode: entry?.code ?? null,
     error: entry?.error || null,

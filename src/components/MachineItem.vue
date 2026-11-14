@@ -23,11 +23,11 @@ const serviceInfo = computed(() =>
   getNodePrimaryUrlAndPort(props.machine.services, props.machine.ip),
 )
 /** Raw (ip:port) URL: direct access that bypasses the reverse proxy. */
-const hostUrl = computed(() => serviceInfo.value.url)
+const hostUrl = computed(() => serviceInfo.value.directUrl)
 const hostPort = computed(() => serviceInfo.value.portText)
 
-/** Primary URL for the header: the domain if known, otherwise the raw URL. */
-const titleUrl = computed(() => resolveHostDomainUrl(props.machine) ?? hostUrl.value)
+/** Primary URL for the header: the domain if known (configured, else from NPM), otherwise the raw URL. */
+const titleUrl = computed(() => resolveHostDomainUrl(props.machine) ?? serviceInfo.value.url)
 const titleTooltip = computed(() => urlHostLabel(titleUrl.value))
 const ipTooltip = computed(() =>
   hostUrl.value ? `Direct: ${urlHostLabel(hostUrl.value)}` : undefined,

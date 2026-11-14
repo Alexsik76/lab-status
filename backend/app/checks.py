@@ -4,10 +4,12 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from .netbox import Target
+from .npm import PublicUrlMap, PublicUrls
 
 TARGETS_TTL_S = 300
 CHECK_TIMEOUT_S = 3.0
@@ -43,16 +45,25 @@ async def check_target(client: httpx.AsyncClient, target: Target) -> dict[str, A
     }
 
 
+def _ip_port(url: str) -> tuple[str, int] | None:
+    parts = urlsplit(url)
+    if not parts.hostname:
+        return None
+    return parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
+
+
 class ServiceChecker:
     def __init__(
         self,
         load_targets: Callable[[], Awaitable[list[Target]]],
         client: httpx.AsyncClient,
         exclude: frozenset[str] = frozenset(),
+        public_urls: PublicUrls | None = None,
     ) -> None:
         self._load_targets = load_targets
         self._client = client
         self._exclude = exclude
+        self._public_urls = public_urls
         self._targets: list[Target] | None = None
         self._loaded_at = 0.0
         self._lock = asyncio.Lock()
@@ -70,6 +81,15 @@ class ServiceChecker:
                     # NetBox is unreachable: keep checking the last known list.
             return [t for t in self._targets if t.name not in self._exclude]
 
+    async def _public_url_map(self) -> PublicUrlMap:
+        return await self._public_urls.get() if self._public_urls else {}
+
     async def run(self) -> list[dict[str, Any]]:
         targets = await self.targets()
-        return list(await asyncio.gather(*(check_target(self._client, t) for t in targets)))
+        public, *results = await asyncio.gather(
+            self._public_url_map(), *(check_target(self._client, t) for t in targets)
+        )
+        for target, result in zip(targets, results):
+            key = _ip_port(target.url)
+            result["public_url"] = public.get(key) if key else None
+        return results

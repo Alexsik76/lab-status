@@ -86,6 +86,8 @@ export interface ServiceItem {
   addresses: string[]
   /** Link target: the url of the matching status entry. */
   url: string | null
+  /** Public (reverse-proxy) URL of the matching status entry; preferred over `url` for links. */
+  publicUrl: string | null
   state: ServiceState
   httpCode: number | null
   error: string | null

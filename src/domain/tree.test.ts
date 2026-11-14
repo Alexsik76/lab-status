@@ -82,6 +82,18 @@ describe('buildTree (real data)', () => {
     expect(alpha?.services[0].url).toBe(statusEntries.find((e) => e.service_id === 17)?.url)
   })
 
+  it('takes the public URL from the status entry, null when the entry has none', () => {
+    const all = [
+      ...tree.machines.flatMap((m) => m.services),
+      ...tree.machines.flatMap((m) => m.guests).flatMap((g) => g.services),
+      ...tree.machines
+        .flatMap((m) => [...m.apps, ...m.guests.flatMap((g) => [...g.standalone, ...g.stacks.flatMap((s) => s.containers)])])
+        .flatMap((c) => c.services),
+    ]
+    expect(all.find((s) => s.id === '1')?.publicUrl).toBe('https://workflow.example.com')
+    expect(all.find((s) => s.id === '17')?.publicUrl).toBeNull()
+  })
+
   it('keeps services without a status entry as unknown, without a link', () => {
     const control = guestByName('vm-control', tree)
     const ingress = control.stacks.flatMap((s) => s.containers).find((c) => c.name.includes('ingress-proxy'))
