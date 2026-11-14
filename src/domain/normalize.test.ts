@@ -4,6 +4,7 @@ import {
   normalizeInventory,
   normalizeTags,
   parseHardware,
+  parseChoice,
   parseHostId,
   parseImage,
   parseStack,
@@ -42,6 +43,19 @@ describe('parsers', () => {
     expect(resolveImage({}, description)).toBe('from-description')
     expect(resolveImage(null, '')).toBeNull()
     expect(resolveImage({ image: 'only-field' }, null)).toBe('only-field')
+  })
+
+  it('reads select-type custom fields in object and string form', () => {
+    expect(parseChoice({ value: 'https', label: 'HTTPS' })).toBe('https')
+    expect(parseChoice({ value: ' HTTP ', label: 'HTTP' })).toBe('http')
+    expect(parseChoice('  HTTPS ')).toBe('https')
+    expect(parseChoice({ value: '', label: '' })).toBeNull()
+    expect(parseChoice({ value: null, label: null })).toBeNull()
+    expect(parseChoice({ label: 'HTTP' })).toBeNull()
+    expect(parseChoice('  ')).toBeNull()
+    expect(parseChoice(null)).toBeNull()
+    expect(parseChoice(undefined)).toBeNull()
+    expect(parseChoice(42)).toBeNull()
   })
 
   it('reads the host id from the custom field', () => {
@@ -128,6 +142,14 @@ describe('normalizeInventory (real data)', () => {
     expect(check('ingress-81')).toBe(false)
     expect(check('metrics-db')).toBe(false)
     expect(inventory.services.filter((s) => s.parent?.id === '23' && s.check)).toHaveLength(1)
+  })
+
+  it('reads the scheme of services from both GraphQL forms', () => {
+    const scheme = (name: string) => inventory.services.find((s) => s.name === name)?.scheme
+    expect(scheme('nas-web')).toBe('https') // {"value":"https","label":"HTTPS"}
+    expect(scheme('ingress-80')).toBe('http')
+    expect(scheme('cups-web')).toBe('http') // plain string
+    expect(scheme('metrics-db')).toBeNull()
   })
 
   it('maps VM kinds, hosts and stacks', () => {

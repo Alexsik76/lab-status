@@ -90,6 +90,18 @@ export function parseHostId(customFields: Record<string, unknown> | null | undef
   return null
 }
 
+/**
+ * Select-type custom field: NetBox GraphQL returns `{ value, label }`, older responses a plain
+ * string. Returns the trimmed, lower-cased value, or null when empty.
+ */
+export function parseChoice(field: unknown): string | null {
+  const value =
+    typeof field === 'object' && field !== null ? (field as { value?: unknown }).value : field
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  return normalized === '' ? null : normalized
+}
+
 export function parseAlias(customFields: Record<string, unknown> | null | undefined): string | null {
   const alias = customFields?.alias
   if (typeof alias === 'string' && alias.trim() !== '') {
@@ -154,15 +166,11 @@ function normalizeService(raw: RawService): ServiceRecord {
     if (parent.__typename === 'VirtualMachineType') link = { kind: 'vm', id: parent.id }
     else if (parent.__typename === 'DeviceType') link = { kind: 'device', id: parent.id }
   }
-  const scheme =
-    typeof raw.custom_fields?.scheme === 'string' && raw.custom_fields.scheme.trim() !== ''
-      ? raw.custom_fields.scheme.trim().toLowerCase()
-      : null
   return {
     id: raw.id,
     name: raw.name ?? `service ${raw.id}`,
     ports: raw.ports ?? [],
-    scheme,
+    scheme: parseChoice(raw.custom_fields?.scheme),
     check: raw.custom_fields?.check === true,
     addresses: (raw.ipaddresses ?? [])
       .map((a) => stripAddressMask(a.address))

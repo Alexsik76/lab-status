@@ -956,7 +956,10 @@
           80
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -972,7 +975,10 @@
           81
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": false
         },
         "ipaddresses": [],
@@ -988,7 +994,10 @@
           443
         ],
         "custom_fields": {
-          "scheme": "https",
+          "scheme": {
+            "value": "https",
+            "label": "HTTPS"
+          },
           "check": false
         },
         "ipaddresses": [],
@@ -1004,7 +1013,10 @@
           443
         ],
         "custom_fields": {
-          "scheme": "https",
+          "scheme": {
+            "value": "https",
+            "label": "HTTPS"
+          },
           "check": true
         },
         "ipaddresses": [
@@ -1060,7 +1072,10 @@
           5678
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1076,7 +1091,10 @@
           8000
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1092,7 +1110,10 @@
           8001
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1108,7 +1129,10 @@
           8006
         ],
         "custom_fields": {
-          "scheme": "https",
+          "scheme": {
+            "value": "https",
+            "label": "HTTPS"
+          },
           "check": true
         },
         "ipaddresses": [
@@ -1128,7 +1152,10 @@
           8006
         ],
         "custom_fields": {
-          "scheme": "https",
+          "scheme": {
+            "value": "https",
+            "label": "HTTPS"
+          },
           "check": true
         },
         "ipaddresses": [
@@ -1148,7 +1175,10 @@
           8006
         ],
         "custom_fields": {
-          "scheme": "https",
+          "scheme": {
+            "value": "https",
+            "label": "HTTPS"
+          },
           "check": true
         },
         "ipaddresses": [
@@ -1168,7 +1198,10 @@
           8080
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1184,7 +1217,10 @@
           8081
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1200,7 +1236,10 @@
           8088
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1216,7 +1255,10 @@
           8100
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1232,7 +1274,10 @@
           8123
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [
@@ -1252,7 +1297,10 @@
           9443
         ],
         "custom_fields": {
-          "scheme": "https",
+          "scheme": {
+            "value": "https",
+            "label": "HTTPS"
+          },
           "check": true
         },
         "ipaddresses": [],
@@ -1268,7 +1316,10 @@
           32400
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [
@@ -1288,7 +1339,10 @@
           9091
         ],
         "custom_fields": {
-          "scheme": "http",
+          "scheme": {
+            "value": "http",
+            "label": "HTTP"
+          },
           "check": true
         },
         "ipaddresses": [
