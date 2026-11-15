@@ -18,6 +18,7 @@ import { arpObjectKey, type ArpPresenceIndex } from './arp'
 import type { StatusEntry } from '../types/status'
 import { resolveContainerState, type DockerStatusIndex } from './containerStatuses'
 import {
+  applyProxmoxNodeStatus,
   resolveGuestState,
   type MachineMetricsIndex,
   type ProxmoxGuestIndex,
@@ -185,13 +186,17 @@ function buildMachine(
     guests,
     apps,
     metrics,
-    state: applyArpPresence(
-      resolveState({
-        offline: device.offline,
-        serviceStates: services.map((s) => s.state),
-        childStates: [...guests.map((g) => g.state), ...apps.map((a) => a.state)],
-      }),
-      ctx.arp.get(arpObjectKey('device', device.id)),
+    state: applyProxmoxNodeStatus(
+      applyArpPresence(
+        resolveState({
+          offline: device.offline,
+          serviceStates: services.map((s) => s.state),
+          childStates: [...guests.map((g) => g.state), ...apps.map((a) => a.state)],
+        }),
+        ctx.arp.get(arpObjectKey('device', device.id)),
+        device.offline,
+      ),
+      metrics?.nodeStatus,
       device.offline,
     ),
   }

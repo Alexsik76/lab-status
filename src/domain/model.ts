@@ -127,6 +127,8 @@ export interface MetricSeries {
 export interface MachineMetrics {
   cpu: MetricSeries
   mem: MetricSeries
+  /** Status of the Proxmox node as reported by cluster/resources ("online" / "offline"). */
+  nodeStatus: string
 }
 
 export interface Guest extends NodeBase {

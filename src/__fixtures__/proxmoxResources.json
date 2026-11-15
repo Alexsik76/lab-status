@@ -49,6 +49,14 @@
       "hastate": "online"
     },
     {
+      "id": "node/node-delta",
+      "type": "node",
+      "node": "node-delta",
+      "status": "offline",
+      "level": "",
+      "hastate": "offline"
+    },
+    {
       "id": "qemu/100",
       "type": "qemu",
       "vmid": 100,

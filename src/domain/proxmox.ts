@@ -127,6 +127,26 @@ export function resolveGuestState(
 }
 
 /**
+ * For machines that are Proxmox nodes, the node status from cluster/resources wins over
+ * the other sources (ARP presence included): online -> up; offline -> stopped when the
+ * machine is offline in NetBox, otherwise down. Without a known node status the state is kept.
+ */
+export function applyProxmoxNodeStatus(
+  state: State,
+  nodeStatus: string | undefined,
+  offline: boolean,
+): State {
+  switch (nodeStatus?.toLowerCase()) {
+    case 'online':
+      return 'up'
+    case 'offline':
+      return offline ? 'stopped' : 'down'
+    default:
+      return state
+  }
+}
+
+/**
  * Maps Proxmox node resources and RRD points into MachineMetrics indexed by machine name.
  * Only machines that exist as Proxmox nodes get metrics.
  */
@@ -165,6 +185,7 @@ export function mapMachineMetrics(
         currentPct: memPct,
         spark: buildSparkline(memVals, 50, 14),
       },
+      nodeStatus: node.status,
     })
   }
 

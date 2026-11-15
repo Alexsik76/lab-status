@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyProxmoxNodeStatus,
   buildSparkline,
   mapMachineMetrics,
   matchProxmoxGuests,
@@ -324,5 +325,86 @@ describe('buildTree with Proxmox integration', () => {
 
     const print = findMachine('host-print')
     expect(print?.metrics).toBeNull()
+  })
+})
+
+describe('applyProxmoxNodeStatus', () => {
+  it('takes the state from the node status, offline NetBox machines stay stopped', () => {
+    expect(applyProxmoxNodeStatus('unknown', 'online', false)).toBe('up')
+    expect(applyProxmoxNodeStatus('up', 'offline', false)).toBe('down')
+    expect(applyProxmoxNodeStatus('up', 'offline', true)).toBe('stopped')
+  })
+
+  it('keeps the state when the node status is missing or unknown', () => {
+    expect(applyProxmoxNodeStatus('down', undefined, false)).toBe('down')
+    expect(applyProxmoxNodeStatus('up', 'unknown', false)).toBe('up')
+  })
+})
+
+describe('buildTree: machine state from the Proxmox node status', () => {
+  const inventory = normalizeInventory(rawInventory)
+  const statusMap = indexStatuses(statusEntries)
+  const alpha = inventory.devices.find((d) => d.name === 'node-alpha')!
+  const storage = inventory.devices.find((d) => d.name === 'storage-nas')!
+  // A NetBox machine matching the offline Proxmox node of the fixture.
+  const delta = { ...alpha, id: '990', name: 'node-delta' }
+  const withDelta = (offline: boolean) => ({
+    ...inventory,
+    devices: [...inventory.devices, { ...delta, offline }],
+  })
+  const metrics = mapMachineMetrics(proxmoxResources, {})
+  const arp = (...entries: [string, 'up' | 'down'][]) =>
+    new Map(entries.map(([id, presence]) => [`device:${id}`, presence]))
+  const machine = (tree: ReturnType<typeof buildTree>, name: string) =>
+    tree.machines.find((m) => m.name === name)!
+
+  it('fixture contains an offline node', () => {
+    expect(metrics.get('node-delta')?.nodeStatus).toBe('offline')
+    expect(metrics.get('node-alpha')?.nodeStatus).toBe('online')
+  })
+
+  it('online node without an ARP entry is up', () => {
+    const failing = indexStatuses(statusEntries.map((e) => ({ ...e, up: false })))
+    const tree = buildTree(inventory, failing, new Map(), new Map(), metrics, new Map())
+    expect(machine(tree, 'node-alpha').state).toBe('up')
+  })
+
+  it('online node wins over ARP presence down', () => {
+    const tree = buildTree(inventory, statusMap, new Map(), new Map(), metrics, arp([alpha.id, 'down']))
+    expect(machine(tree, 'node-alpha').state).toBe('up')
+  })
+
+  it('offline node is down while its ARP presence (iLO) is up', () => {
+    const tree = buildTree(withDelta(false), statusMap, new Map(), new Map(), metrics, arp([delta.id, 'up']))
+    expect(machine(tree, 'node-delta').state).toBe('down')
+  })
+
+  it('offline node is stopped when the machine is offline in NetBox', () => {
+    const tree = buildTree(withDelta(true), statusMap, new Map(), new Map(), metrics, arp([delta.id, 'up']))
+    expect(machine(tree, 'node-delta').state).toBe('stopped')
+  })
+
+  it('without Proxmox data ARP presence decides', () => {
+    const up = buildTree(withDelta(false), statusMap, new Map(), new Map(), new Map(), arp([delta.id, 'up']))
+    expect(machine(up, 'node-delta').state).toBe('up')
+    const down = buildTree(inventory, statusMap, new Map(), new Map(), new Map(), arp([alpha.id, 'down']))
+    expect(machine(down, 'node-alpha').state).toBe('down')
+  })
+
+  it('without a node entry for the machine ARP presence decides', () => {
+    const partial = mapMachineMetrics(
+      proxmoxResources.filter((r) => !(r.type === 'node' && r.node === 'node-alpha')),
+      {},
+    )
+    const tree = buildTree(inventory, statusMap, new Map(), new Map(), partial, arp([alpha.id, 'down']))
+    expect(machine(tree, 'node-alpha').state).toBe('down')
+  })
+
+  it('leaves machines that are not Proxmox nodes unaffected', () => {
+    const presence = arp([storage.id, 'down'])
+    const withProxmox = buildTree(inventory, statusMap, new Map(), new Map(), metrics, presence)
+    const without = buildTree(inventory, statusMap, new Map(), new Map(), new Map(), presence)
+    expect(machine(withProxmox, 'storage-nas').state).toBe('down')
+    expect(machine(withProxmox, 'storage-nas').state).toBe(machine(without, 'storage-nas').state)
   })
 })
