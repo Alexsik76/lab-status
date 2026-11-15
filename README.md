@@ -103,12 +103,37 @@ npm run dev
 
 ## Deployment
 
-Deployed as a Docker Compose stack built from this Git repository. Set the variables
-above in the stack environment.
+Production runs as a **Portainer Git stack** (Docker Compose) built from this repository:
+
+| Setting | Value |
+|---|---|
+| Repository / reference | this repository, `refs/heads/main` |
+| Compose file | `docker-compose.yml` |
+| Images | built on the Docker host at deploy time (`build:`), nothing is pulled from a registry |
+| Environment | the variables from [Configuration](#configuration), set in the stack (not in the repository) |
+| Exposed port | `web` on host port `8081`; `api` is reachable only inside the stack network |
+| Automatic updates | off: a push to `main` changes nothing until the stack is redeployed |
+
+Flow:
+1. Merge into `main` and push.
+2. Redeploy the stack: in Portainer **Pull and redeploy** (re-pull the repository and rebuild),
+   or via the API:
+   ```
+   PUT /api/stacks/<id>/git/redeploy?endpointId=<endpointId>
+   {"repositoryReferenceName": "refs/heads/main", "env": [...], "pullImage": true, "prune": false}
+   ```
+   The API call replaces the stack environment with `env`: send the stack's current `Env` back unchanged.
+3. Verify: containers `lab-status` and `lab-status-api` are running without restarts, the
+   stack's deployed commit (`GitConfig.ConfigHash`) equals the merge commit, and the page loads
+   with data.
 
 > **Warning:** nginx will not start if any of `NETBOX_URL`, `NETBOX_TOKEN`, `PROXMOX_URL`,
 > `PROXMOX_TOKEN`, `CONTAINER_STATUS_URL` is missing, because template substitution
 > (`envsubst`) requires all of them.
+
+The public address is served by a reverse proxy in front of host port `8081` (e.g.
+`https://status.example.com` -> `http://192.0.2.20:8081`). It must not buffer
+`/api/arp/stream` (Server-Sent Events); nginx sends `X-Accel-Buffering: no` for it.
 
 The router must accept API connections from the stack's host: the API service's
 `available-from`, the user's `address`, and the router firewall.
