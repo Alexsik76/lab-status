@@ -1,6 +1,6 @@
 import type { Container, Guest } from '../domain/model'
 
-export interface ColumnUnit {
+export interface MachineUnit {
   id: string
   isGuest: boolean
   isAppGroup: boolean
@@ -14,17 +14,17 @@ export function countGuestContainers(g: Guest): number {
 }
 
 /**
- * Balances guests and apps across 2 columns to optimize vertical alignment.
- * Guests with more containers are sorted first so they appear on the left.
+ * Units of a machine (guests, then the group of apps attached straight to it), biggest first.
+ * `est` is the estimated height; CSS wraps the units by their content.
  */
-export function balanceMachineUnits(guests: Guest[], apps: Container[]): { items: ColumnUnit[] }[] {
+export function orderMachineUnits(guests: Guest[], apps: Container[]): MachineUnit[] {
   const sortedGuests = [...guests].sort((a, b) => {
     const diff = countGuestContainers(b) - countGuestContainers(a)
     if (diff !== 0) return diff
     return a.name.localeCompare(b.name)
   })
 
-  const units: ColumnUnit[] = []
+  const units: MachineUnit[] = []
 
   for (const g of sortedGuests) {
     const multiStacks = g.stacks.filter((s) => s.containers.length > 1)
@@ -58,25 +58,6 @@ export function balanceMachineUnits(guests: Guest[], apps: Container[]): { items
     })
   }
 
-  const cols: { items: ColumnUnit[]; h: number }[] = [
-    { items: [], h: 0 },
-    { items: [], h: 0 },
-  ]
-
-  for (const u of units) {
-    const c = cols.reduce((a, b) => (b.h < a.h ? b : a))
-    c.items.push(u)
-    c.h += u.est + 0.3
-  }
-
-  return cols.map((c) => ({ items: c.items }))
-}
-
-/**
- * A machine whose only unit is one guest shows it across the full width (one column):
- * less height, and the guest lays its stacks out side by side.
- */
-export function isSingleGuestLayout(cols: readonly { items: ColumnUnit[] }[]): boolean {
-  const units = cols.flatMap((c) => c.items)
-  return units.length === 1 && units[0].isGuest
+  // Stable sort: equal estimates keep the guests' order (container count, then name).
+  return units.sort((a, b) => b.est - a.est)
 }

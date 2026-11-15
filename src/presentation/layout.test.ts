@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Container, Guest } from '../domain/model'
-import { balanceMachineUnits, countGuestContainers, isSingleGuestLayout } from './layout'
+import { countGuestContainers, orderMachineUnits } from './layout'
 
 function makeContainer(id: string, name: string): Container {
   return {
@@ -58,104 +58,59 @@ describe('layout: countGuestContainers', () => {
   })
 })
 
-describe('layout: balanceMachineUnits', () => {
-  it('always produces exactly 2 columns', () => {
-    const cols = balanceMachineUnits([], [])
-    expect(cols).toHaveLength(2)
-    expect(cols[0].items).toHaveLength(0)
-    expect(cols[1].items).toHaveLength(0)
+describe('layout: orderMachineUnits', () => {
+  it('returns nothing for an empty machine', () => {
+    expect(orderMachineUnits([], [])).toEqual([])
   })
 
-  it('places the guest with more containers on the left (column 0)', () => {
-    const guestA = makeGuest('ga', 'guest-a', 0) // 0 containers
-    const guestB = makeGuest('gb', 'guest-b', 4, [6]) // 10 containers
-
-    // Pass them in alphabetical order (guest-a, guest-b)
-    const cols = balanceMachineUnits([guestA, guestB], [])
-
-    expect(cols).toHaveLength(2)
-    // Left column must contain guest-b (10 containers)
-    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['guest-b'])
-    // Right column must contain guest-a (0 containers)
-    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['guest-a'])
-  })
-
-  it('places a heavy VM on the left and balances lighter LXCs on the right', () => {
-    const heavyVm = makeGuest('heavy', 'heavy-vm', 1, [6]) // 7 containers
-    const light1 = makeGuest('l1', 'light-1', 0) // 0 containers
-    const light2 = makeGuest('l2', 'light-2', 0) // 0 containers
-    const light3 = makeGuest('l3', 'light-3', 0) // 0 containers
-
-    const cols = balanceMachineUnits([light1, light2, light3, heavyVm], [])
-
-    expect(cols).toHaveLength(2)
-    // Left column has heavyVm
-    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['heavy-vm'])
-    // Right column has the other 3
-    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['light-1', 'light-2', 'light-3'])
+  it('puts the guest with more containers first', () => {
+    const guestA = makeGuest('ga', 'guest-a', 0)
+    const guestB = makeGuest('gb', 'guest-b', 4, [6])
+    expect(orderMachineUnits([guestA, guestB], []).map((u) => u.guest?.name)).toEqual([
+      'guest-b',
+      'guest-a',
+    ])
   })
 
   it('tie-breaks equal container counts alphabetically', () => {
     const vmB = makeGuest('b', 'beta', 2)
     const vmA = makeGuest('a', 'alpha', 2)
-
-    const cols = balanceMachineUnits([vmB, vmA], [])
-
-    expect(cols).toHaveLength(2)
-    // Alpha should be processed first into col 0, Beta into col 1
-    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['alpha'])
-    expect(cols[1].items.map((u) => u.guest?.name)).toEqual(['beta'])
+    expect(orderMachineUnits([vmB, vmA], []).map((u) => u.guest?.name)).toEqual(['alpha', 'beta'])
   })
 
-  it('handles host apps alongside guests', () => {
+  it('adds the apps attached straight to the machine as one group, ordered by size', () => {
     const vm = makeGuest('vm1', 'vm1', 3)
+    const empty = makeGuest('vm2', 'vm2', 0)
     const apps = [makeContainer('app1', 'app1'), makeContainer('app2', 'app2')]
-
-    const cols = balanceMachineUnits([vm], apps)
-
-    expect(cols).toHaveLength(2)
-    expect(cols[0].items.map((u) => u.guest?.name)).toEqual(['vm1'])
-    expect(cols[1].items[0].isAppGroup).toBe(true)
+    const units = orderMachineUnits([vm, empty], apps)
+    expect(units.map((u) => (u.isAppGroup ? 'apps' : u.guest?.name))).toEqual(['vm1', 'apps', 'vm2'])
+    expect(units[1].apps).toHaveLength(2)
   })
 
   it('accounts for 1-container stacks sharing rows and adding a label line', () => {
     // 2 standalone containers: 1 row, 0 label lines -> est = 1 + 1.4 = 2.4
     const gStandalone = makeGuest('g-std', 'g-std', 2, [])
-    const [c1] = balanceMachineUnits([gStandalone], [])
-    expect(c1.items[0].est).toBeCloseTo(2.4)
+    const [u1] = orderMachineUnits([gStandalone], [])
+    expect(u1.est).toBeCloseTo(2.4)
 
     // 2 one-container stacks: share 1 row, 1 label line -> est = 1 + 1.4 + 0.5 = 2.9
     const g2SingleStacks = makeGuest('g-2s', 'g-2s', 0, [1, 1])
-    const [c2] = balanceMachineUnits([g2SingleStacks], [])
-    expect(c2.items[0].est).toBeCloseTo(2.9)
+    const [u2] = orderMachineUnits([g2SingleStacks], [])
+    expect(u2.est).toBeCloseTo(2.9)
 
     // 1 one-container stack + 1 standalone: share 1 row, 1 label line -> est = 1 + 1.4 + 0.5 = 2.9
     const gMixedRow = makeGuest('g-mix', 'g-mix', 1, [1])
-    const [c3] = balanceMachineUnits([gMixedRow], [])
-    expect(c3.items[0].est).toBeCloseTo(2.9)
+    const [u3] = orderMachineUnits([gMixedRow], [])
+    expect(u3.est).toBeCloseTo(2.9)
 
     // 3 one-container stacks: 2 rows, both rows have label line -> est = 1 + 2.8 + 1.0 = 4.8
     const g3SingleStacks = makeGuest('g-3s', 'g-3s', 0, [1, 1, 1])
-    const [c4] = balanceMachineUnits([g3SingleStacks], [])
-    expect(c4.items[0].est).toBeCloseTo(4.8)
+    const [u4] = orderMachineUnits([g3SingleStacks], [])
+    expect(u4.est).toBeCloseTo(4.8)
 
     // 2 one-container stacks + 1 standalone: 2 rows, only first row has label line -> est = 1 + 2.8 + 0.5 = 4.3
     const g2Single1Std = makeGuest('g-2s1std', 'g-2s1std', 1, [1, 1])
-    const [c5] = balanceMachineUnits([g2Single1Std], [])
-    expect(c5.items[0].est).toBeCloseTo(4.3)
-  })
-})
-
-
-describe('layout: isSingleGuestLayout', () => {
-  it('is true only when the machine has exactly one guest and no apps', () => {
-    const vm = makeGuest('vm1', 'vm1', 3, [5, 2])
-    const other = makeGuest('vm2', 'vm2', 1)
-    const app = makeContainer('app1', 'app1')
-    expect(isSingleGuestLayout(balanceMachineUnits([vm], []))).toBe(true)
-    expect(isSingleGuestLayout(balanceMachineUnits([vm, other], []))).toBe(false)
-    expect(isSingleGuestLayout(balanceMachineUnits([vm], [app]))).toBe(false)
-    expect(isSingleGuestLayout(balanceMachineUnits([], [app]))).toBe(false)
-    expect(isSingleGuestLayout(balanceMachineUnits([], []))).toBe(false)
+    const [u5] = orderMachineUnits([g2Single1Std], [])
+    expect(u5.est).toBeCloseTo(4.3)
   })
 })

@@ -107,8 +107,10 @@ const summary = computed(() => {
 
 .toolbar-right {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 6px 14px;
+  min-width: 0;
 }
 
 .refresh-btn {

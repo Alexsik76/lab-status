@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { Machine } from '../domain/model'
 import { formatHardware } from '../presentation/hardware'
 import { resolveHostDomainUrl, urlHostLabel } from '../presentation/hostLinks'
-import { balanceMachineUnits, isSingleGuestLayout } from '../presentation/layout'
+import { orderMachineUnits } from '../presentation/layout'
 import { getNodePrimaryUrlAndPort } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
 import GuestItem from './GuestItem.vue'
@@ -33,11 +33,8 @@ const ipTooltip = computed(() =>
   hostUrl.value ? `Direct: ${urlHostLabel(hostUrl.value)}` : undefined,
 )
 
-const balanced = computed(() => balanceMachineUnits(props.machine.guests, props.machine.apps))
-const isWide = computed(() => isSingleGuestLayout(balanced.value))
-const columns = computed(() =>
-  isWide.value ? balanced.value.filter((c) => c.items.length > 0) : balanced.value,
-)
+/** Units in one flow, biggest first: CSS wraps them by their content. */
+const units = computed(() => orderMachineUnits(props.machine.guests, props.machine.apps))
 const isEmpty = computed(
   () => props.machine.guests.length === 0 && props.machine.apps.length === 0,
 )
@@ -163,25 +160,23 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
     </div>
 
     <!-- Right Content Area: 2 Columns Grid -->
-    <div class="machine-content" :class="{ 'is-wide': isWide }">
-      <div v-for="(col, colIdx) in columns" :key="colIdx" class="content-col">
-        <template v-for="unit in col.items" :key="unit.id">
-          <!-- Guest Unit -->
-          <GuestItem v-if="unit.isGuest && unit.guest" :guest="unit.guest" />
+    <div class="machine-content">
+      <template v-for="unit in units" :key="unit.id">
+        <!-- Guest Unit -->
+        <GuestItem v-if="unit.isGuest && unit.guest" :guest="unit.guest" />
 
-          <!-- Host Apps Group -->
-          <div v-else-if="unit.isAppGroup && unit.apps" class="app-group-card">
-            <div class="apps-grid">
-              <ContainerItem
-                v-for="app in unit.apps"
-                :key="app.id"
-                :container="app"
-                kind="app"
-              />
-            </div>
+        <!-- Host Apps Group -->
+        <div v-else-if="unit.isAppGroup && unit.apps" class="app-group-card">
+          <div class="apps-grid">
+            <ContainerItem
+              v-for="app in unit.apps"
+              :key="app.id"
+              :container="app"
+              kind="app"
+            />
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
 
       <!-- Empty notice if no guests or apps -->
       <div v-if="isEmpty" class="empty no-guests">
@@ -418,22 +413,21 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
   flex: 1;
   min-width: 0;
   padding: 8px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  align-items: start;
+  align-items: flex-start;
   align-content: center;
 }
 
-.machine-content.is-wide {
-  grid-template-columns: minmax(0, 1fr);
+/* Units wrap by content: an empty guest needs little room, one with containers more. */
+.machine-content > :deep(.guest-card),
+.machine-content > .app-group-card {
+  flex: 1 1 260px;
 }
-
-.content-col {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.machine-content > :deep(.guest-card:has(.container-node)),
+.machine-content > .app-group-card {
+  flex-basis: 480px;
 }
 
 .app-group-card {
@@ -445,7 +439,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 
 .apps-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 2px;
   padding: 3px;
   border-radius: var(--radius-sm);
@@ -469,9 +463,6 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--color-border-spine);
-  }
-  .machine-content {
-    grid-template-columns: 1fr;
   }
 }
 </style>

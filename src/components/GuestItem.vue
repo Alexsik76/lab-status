@@ -105,25 +105,21 @@ const singleItems = computed<SingleItem[]>(() => {
           <Tag v-for="tag in guestTags" :key="tag.name" :tag="tag" size="md" />
         </span>
       </LinkOrPlain>
-
-      <span class="spacer"></span>
-
-      <LinkOrPlain
-        v-if="guest.ip"
-        :href="directUrl"
-        as="span"
-        class="guest-ip"
-        :class="{ 'is-clickable': !!directUrl }"
-        :title="directTooltip"
-      >
-        {{ guest.ip }}<span v-if="guestPort" class="guest-port">{{ guestPort }}</span>
-      </LinkOrPlain>
-
-      <span v-if="specs" class="guest-specs">{{ specs }}</span>
-
-      <StateBadge :state="guest.state" variant="guest" :blinking="guest.blinking" />
-
-      <span v-if="guestUrl" class="guest-arrow">↗</span>
+      <span class="guest-meta">
+        <LinkOrPlain
+          v-if="guest.ip"
+          :href="directUrl"
+          as="span"
+          class="guest-ip"
+          :class="{ 'is-clickable': !!directUrl }"
+          :title="directTooltip"
+        >
+          {{ guest.ip }}<span v-if="guestPort" class="guest-port">{{ guestPort }}</span>
+        </LinkOrPlain>
+        <span v-if="specs" class="guest-specs">{{ specs }}</span>
+        <StateBadge :state="guest.state" variant="guest" :blinking="guest.blinking" />
+        <span v-if="guestUrl" class="guest-arrow">↗</span>
+      </span>
     </div>
 
     <!-- Stacks and Containers -->
@@ -168,7 +164,6 @@ const singleItems = computed<SingleItem[]>(() => {
 
 <style scoped>
 .guest-card {
-  container-type: inline-size;
   min-width: 0;
   box-sizing: border-box;
   background: var(--color-bg-guest);
@@ -194,8 +189,9 @@ const singleItems = computed<SingleItem[]>(() => {
 
 .guest-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   padding: 5px 8px;
   border-radius: var(--radius-sm);
   text-decoration: none;
@@ -216,6 +212,9 @@ const singleItems = computed<SingleItem[]>(() => {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  /* The name keeps its width; address and specs wrap to a second line when the card is narrow. */
+  flex: none;
+  max-width: 100%;
   color: inherit;
   text-decoration: none;
 }
@@ -300,8 +299,15 @@ const singleItems = computed<SingleItem[]>(() => {
   color: var(--color-text-unknown);
 }
 
-.spacer {
-  flex: 1;
+/* Address, specs and state wrap together below the name when the card is narrow. */
+.guest-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px 10px;
+  max-width: 100%;
+  margin-left: auto;
 }
 
 .guest-ip {
@@ -352,10 +358,17 @@ const singleItems = computed<SingleItem[]>(() => {
 }
 
 .guest-stacks {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  /* As many stack columns as fit; stacks never split, columns balance their height. */
+  columns: 460px;
+  column-gap: 4px;
   padding: 0 2px 2px;
+}
+.guest-stacks > .stack-box {
+  break-inside: avoid;
+  margin-bottom: 4px;
+}
+.guest-stacks > .singles-grid {
+  column-span: all;
 }
 
 .stack-box {
@@ -392,25 +405,8 @@ const singleItems = computed<SingleItem[]>(() => {
 
 .containers-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 2px;
-}
-
-/* A wide guest (alone on its machine) flows its stacks into two balanced columns. */
-@container (min-width: 900px) {
-  .guest-stacks {
-    display: block;
-    columns: 2;
-    column-gap: 4px;
-  }
-  .guest-stacks > .stack-box {
-    break-inside: avoid;
-    margin-bottom: 4px;
-  }
-  .guest-stacks > .singles-grid {
-    column-span: all;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 600px) {
