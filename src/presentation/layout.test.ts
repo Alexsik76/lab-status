@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Container, Guest } from '../domain/model'
-import { balanceMachineUnits, countGuestContainers } from './layout'
+import { balanceMachineUnits, countGuestContainers, isSingleGuestLayout } from './layout'
 
 function makeContainer(id: string, name: string): Container {
   return {
@@ -146,3 +146,16 @@ describe('layout: balanceMachineUnits', () => {
   })
 })
 
+
+describe('layout: isSingleGuestLayout', () => {
+  it('is true only when the machine has exactly one guest and no apps', () => {
+    const vm = makeGuest('vm1', 'vm1', 3, [5, 2])
+    const other = makeGuest('vm2', 'vm2', 1)
+    const app = makeContainer('app1', 'app1')
+    expect(isSingleGuestLayout(balanceMachineUnits([vm], []))).toBe(true)
+    expect(isSingleGuestLayout(balanceMachineUnits([vm, other], []))).toBe(false)
+    expect(isSingleGuestLayout(balanceMachineUnits([vm], [app]))).toBe(false)
+    expect(isSingleGuestLayout(balanceMachineUnits([], [app]))).toBe(false)
+    expect(isSingleGuestLayout(balanceMachineUnits([], []))).toBe(false)
+  })
+})

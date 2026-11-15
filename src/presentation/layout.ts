@@ -71,3 +71,12 @@ export function balanceMachineUnits(guests: Guest[], apps: Container[]): { items
 
   return cols.map((c) => ({ items: c.items }))
 }
+
+/**
+ * A machine whose only unit is one guest shows it across the full width (one column):
+ * less height, and the guest lays its stacks out side by side.
+ */
+export function isSingleGuestLayout(cols: readonly { items: ColumnUnit[] }[]): boolean {
+  const units = cols.flatMap((c) => c.items)
+  return units.length === 1 && units[0].isGuest
+}

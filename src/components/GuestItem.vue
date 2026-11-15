@@ -168,6 +168,7 @@ const singleItems = computed<SingleItem[]>(() => {
 
 <style scoped>
 .guest-card {
+  container-type: inline-size;
   min-width: 0;
   box-sizing: border-box;
   background: var(--color-bg-guest);
@@ -393,6 +394,23 @@ const singleItems = computed<SingleItem[]>(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px;
+}
+
+/* A wide guest (alone on its machine) flows its stacks into two balanced columns. */
+@container (min-width: 900px) {
+  .guest-stacks {
+    display: block;
+    columns: 2;
+    column-gap: 4px;
+  }
+  .guest-stacks > .stack-box {
+    break-inside: avoid;
+    margin-bottom: 4px;
+  }
+  .guest-stacks > .singles-grid {
+    column-span: all;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 600px) {

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { Machine } from '../domain/model'
 import { formatHardware } from '../presentation/hardware'
 import { resolveHostDomainUrl, urlHostLabel } from '../presentation/hostLinks'
-import { balanceMachineUnits } from '../presentation/layout'
+import { balanceMachineUnits, isSingleGuestLayout } from '../presentation/layout'
 import { getNodePrimaryUrlAndPort } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
 import GuestItem from './GuestItem.vue'
@@ -33,7 +33,11 @@ const ipTooltip = computed(() =>
   hostUrl.value ? `Direct: ${urlHostLabel(hostUrl.value)}` : undefined,
 )
 
-const columns = computed(() => balanceMachineUnits(props.machine.guests, props.machine.apps))
+const balanced = computed(() => balanceMachineUnits(props.machine.guests, props.machine.apps))
+const isWide = computed(() => isSingleGuestLayout(balanced.value))
+const columns = computed(() =>
+  isWide.value ? balanced.value.filter((c) => c.items.length > 0) : balanced.value,
+)
 const isEmpty = computed(
   () => props.machine.guests.length === 0 && props.machine.apps.length === 0,
 )
@@ -159,7 +163,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
     </div>
 
     <!-- Right Content Area: 2 Columns Grid -->
-    <div class="machine-content">
+    <div class="machine-content" :class="{ 'is-wide': isWide }">
       <div v-for="(col, colIdx) in columns" :key="colIdx" class="content-col">
         <template v-for="unit in col.items" :key="unit.id">
           <!-- Guest Unit -->
@@ -419,6 +423,10 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
   gap: 8px;
   align-items: start;
   align-content: center;
+}
+
+.machine-content.is-wide {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .content-col {
