@@ -19,31 +19,6 @@ server {
         return 404;
     }
 
-    # Proxmox cluster resources: GET only
-    location = /proxmox/api2/json/cluster/resources {
-        limit_except GET {
-            deny all;
-        }
-        proxy_pass ${PROXMOX_URL}/api2/json/cluster/resources;
-        proxy_set_header Authorization "PVEAPIToken=${PROXMOX_TOKEN}";
-        proxy_ssl_verify off;
-    }
-
-    # Proxmox node rrddata: GET only
-    location ~ ^/proxmox/api2/json/nodes/([^/]+)/rrddata$ {
-        limit_except GET {
-            deny all;
-        }
-        proxy_pass ${PROXMOX_URL}/api2/json/nodes/$1/rrddata$is_args$args;
-        proxy_set_header Authorization "PVEAPIToken=${PROXMOX_TOKEN}";
-        proxy_ssl_verify off;
-    }
-
-    # Anything else under /proxmox/ is not proxied.
-    location /proxmox/ {
-        return 404;
-    }
-
     # Service status, answered by the backend: GET only
     location = /api/service-status {
         limit_except GET {

@@ -88,7 +88,6 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
         inventory.refresh(),
         statuses.refresh(),
         containerStatuses.refresh(),
-        proxmox.refresh(),
       ])
     } finally {
       isManualRefreshing.value = false

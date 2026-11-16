@@ -35,14 +35,6 @@ export interface ProxmoxRrdPoint {
   maxcpu?: number | null
 }
 
-export interface ProxmoxResourcesResponse {
-  data: ProxmoxResourceItem[]
-}
-
-export interface ProxmoxRrdResponse {
-  data: ProxmoxRrdPoint[]
-}
-
 export interface ProxmoxData {
   resources: ProxmoxResourceItem[]
   rrdByNode: Record<string, ProxmoxRrdPoint[]>

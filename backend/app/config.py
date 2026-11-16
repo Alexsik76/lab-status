@@ -24,8 +24,18 @@ class Settings:
     npm_url: str = ""
     npm_identity: str = ""
     npm_secret: str = ""
+    #: Proxmox VE API base URL (e.g. https://192.0.2.5:8006) and API token (`user@realm!id=secret`);
+    #: the Proxmox sources are off unless both are set. TLS is not verified.
+    proxmox_url: str = ""
+    proxmox_token: str = ""
+    proxmox_period_s: float = 15.0
+    proxmox_metrics_period_s: float = 60.0
     #: Seconds the stream sources keep running after the last page disconnected.
     stream_grace_s: float = 10.0
+
+    @property
+    def proxmox_enabled(self) -> bool:
+        return bool(self.proxmox_url and self.proxmox_token)
 
     @property
     def npm_enabled(self) -> bool:
@@ -46,5 +56,9 @@ class Settings:
             npm_url=env.get("NPM_URL", "").rstrip("/"),
             npm_identity=env.get("NPM_IDENTITY", ""),
             npm_secret=env.get("NPM_SECRET", ""),
+            proxmox_url=env.get("PROXMOX_URL", "").rstrip("/"),
+            proxmox_token=env.get("PROXMOX_TOKEN", ""),
+            proxmox_period_s=float(env.get("PROXMOX_PERIOD_S") or 15.0),
+            proxmox_metrics_period_s=float(env.get("PROXMOX_METRICS_PERIOD_S") or 60.0),
             stream_grace_s=float(env.get("STREAM_GRACE_S") or 10.0),
         )
