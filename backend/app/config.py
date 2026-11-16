@@ -24,6 +24,8 @@ class Settings:
     npm_url: str = ""
     npm_identity: str = ""
     npm_secret: str = ""
+    #: Seconds the stream sources keep running after the last page disconnected.
+    stream_grace_s: float = 10.0
 
     @property
     def npm_enabled(self) -> bool:
@@ -44,4 +46,5 @@ class Settings:
             npm_url=env.get("NPM_URL", "").rstrip("/"),
             npm_identity=env.get("NPM_IDENTITY", ""),
             npm_secret=env.get("NPM_SECRET", ""),
+            stream_grace_s=float(env.get("STREAM_GRACE_S") or 10.0),
         )

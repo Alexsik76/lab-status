@@ -52,12 +52,12 @@ server {
         proxy_pass http://api:8000/api/service-status;
     }
 
-    # ARP mirror (Server-Sent Events), answered by the backend: GET only, never buffered.
-    location = /api/arp/stream {
+    # The page's event stream (Server-Sent Events), answered by the backend: GET only, never buffered.
+    location = /api/stream {
         limit_except GET {
             deny all;
         }
-        proxy_pass http://api:8000/api/arp/stream;
+        proxy_pass http://api:8000/api/stream;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_buffering off;

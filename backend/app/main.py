@@ -10,9 +10,10 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
-from .arp import ArpHub
+from .arp import ArpSource
 from .checks import ServiceChecker
 from .config import Settings
+from .hub import Message, StreamHub
 from .netbox import NetBoxClient, fetch_mac_directory, fetch_targets
 from .npm import NpmClient, PublicUrls, fetch_public_url_map
 from .routeros import RouterOsConnection
@@ -43,13 +44,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     app.state.settings = settings
-    app.state.arp = ArpHub(connect, lambda: fetch_mac_directory(netbox, settings.netbox_public_url))
+    arp = ArpSource(connect, lambda: fetch_mac_directory(netbox, settings.netbox_public_url))
+    app.state.hub = StreamHub([arp], grace_s=settings.stream_grace_s)
     app.state.checks = ServiceChecker(
         lambda: fetch_targets(netbox), checks_http, settings.service_check_exclude, public_urls
     )
     try:
         yield
     finally:
+        await app.state.hub.aclose()
         await netbox_http.aclose()
         await checks_http.aclose()
         await npm_http.aclose()
@@ -60,8 +63,8 @@ app = FastAPI(title="lab-status-api", lifespan=lifespan, docs_url=None, redoc_ur
 
 @app.get("/api/health")
 async def health() -> dict[str, object]:
-    hub: ArpHub = app.state.arp
-    return {"ok": True, "arp": {"state": hub.state, "subscribers": hub.subscriber_count}}
+    hub: StreamHub = app.state.hub
+    return {"ok": True, "stream": hub.health()}
 
 
 @app.get("/api/service-status")
@@ -72,25 +75,31 @@ async def service_status() -> list[dict[str, object]]:
         raise HTTPException(status_code=502, detail=f"NetBox is unreachable: {exc}") from exc
 
 
-async def _arp_events(hub: ArpHub) -> AsyncIterator[str]:
+def format_sse(message: Message) -> str:
+    name, event = message
+    return f"event: {name}\ndata: {json.dumps(event, separators=(',', ':'))}\n\n"
+
+
+async def _stream_events(hub: StreamHub) -> AsyncIterator[str]:
     queue = hub.subscribe()
     try:
         yield "retry: 5000\n\n"
         while True:
             try:
-                event = await asyncio.wait_for(queue.get(), KEEPALIVE_S)
+                message = await asyncio.wait_for(queue.get(), KEEPALIVE_S)
             except TimeoutError:
                 yield ": keepalive\n\n"
                 continue
-            yield f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
+            yield format_sse(message)
     finally:
         hub.unsubscribe(queue)
 
 
-@app.get("/api/arp/stream")
-async def arp_stream() -> StreamingResponse:
+@app.get("/api/stream")
+async def stream() -> StreamingResponse:
+    """The page's single Server-Sent Events channel; the `event:` field names the source."""
     return StreamingResponse(
-        _arp_events(app.state.arp),
+        _stream_events(app.state.hub),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

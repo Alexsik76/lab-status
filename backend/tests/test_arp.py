@@ -1,7 +1,8 @@
 import asyncio
 from collections.abc import AsyncIterator
 
-from app.arp import ArpHub, presence
+from app.arp import ArpSource, presence
+from app.hub import StreamHub
 from app.netbox import MacMatch
 from app.routeros import Reply
 
@@ -38,10 +39,24 @@ def test_presence_classes() -> None:
     assert presence("") == "unknown"
 
 
+GRACE_S = 0.01
+
+
+def _hub(connect, load_macs) -> tuple[StreamHub, ArpSource]:
+    source = ArpSource(connect, load_macs)
+    return StreamHub([source], grace_s=GRACE_S), source
+
+
+async def _next(queue: asyncio.Queue) -> dict:
+    name, event = await asyncio.wait_for(queue.get(), 2)
+    assert name == "arp"
+    return event
+
+
 async def _drain(queue: asyncio.Queue, until: str) -> list[dict]:
     events = []
     while True:
-        event = await asyncio.wait_for(queue.get(), 2)
+        event = await _next(queue)
         events.append(event)
         if event["type"] == until:
             return events
@@ -63,7 +78,7 @@ async def test_session_snapshot_then_live_events() -> None:
     async def load_macs():
         return {"02:00:00:00:00:AA": MATCH}
 
-    hub = ArpHub(connect, load_macs)
+    hub, source = _hub(connect, load_macs)
     queue = hub.subscribe()
     events = await _drain(queue, "snapshot")
     snapshot = events[-1]["rows"]
@@ -71,9 +86,9 @@ async def test_session_snapshot_then_live_events() -> None:
     assert next(r for r in snapshot if r["id"] == "*1")["netbox"]["name"] == "srv-a"
     assert next(r for r in snapshot if r["id"] == "*2")["netbox"] is None
 
-    upsert = await asyncio.wait_for(queue.get(), 2)
+    upsert = await _next(queue)
     assert upsert["type"] == "upsert" and upsert["row"]["status"] == "stale"
-    remove = await asyncio.wait_for(queue.get(), 2)
+    remove = await _next(queue)
     assert remove == {"type": "remove", "id": "*2"}
     assert conn.sent == [
         ["/ip/arp/listen", ".tag=listen"],
@@ -85,7 +100,7 @@ async def test_session_snapshot_then_live_events() -> None:
     hub.unsubscribe(queue)
     await asyncio.sleep(0.05)
     assert conn.closed
-    assert hub.state == "idle"
+    assert source.state == "idle"
 
 
 async def test_second_subscriber_gets_snapshot_immediately() -> None:
@@ -101,7 +116,7 @@ async def test_second_subscriber_gets_snapshot_immediately() -> None:
     async def load_macs():
         return {}
 
-    hub = ArpHub(connect, load_macs)
+    hub, _ = _hub(connect, load_macs)
     first = hub.subscribe()
     await _drain(first, "snapshot")
     second = hub.subscribe()
@@ -141,7 +156,7 @@ async def test_entry_without_mac_borrows_the_static_lease_mac() -> None:
     async def load_macs():
         return {"02:00:00:00:00:99": printer}
 
-    hub = ArpHub(connect, load_macs)
+    hub, _ = _hub(connect, load_macs)
     queue = hub.subscribe()
     rows = {r["id"]: r for r in (await _drain(queue, "snapshot"))[-1]["rows"]}
 
@@ -155,8 +170,46 @@ async def test_entry_without_mac_borrows_the_static_lease_mac() -> None:
 
 
 def test_lease_changes_that_matter() -> None:
-    hub = ArpHub(None, None)  # type: ignore[arg-type]
-    assert hub.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is True
-    assert hub.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is False
-    assert hub.apply_lease(_lease("*D1", "192.0.2.70", "02:00:00:00:00:66", dynamic=True)) is False
-    assert hub.apply_lease({".id": "*L1", ".dead": "true"}) is True
+    source = ArpSource(None, None)  # type: ignore[arg-type]
+    assert source.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is True
+    assert source.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is False
+    assert source.apply_lease(_lease("*D1", "192.0.2.70", "02:00:00:00:00:66", dynamic=True)) is False
+    assert source.apply_lease({".id": "*L1", ".dead": "true"}) is True
+
+
+async def test_two_subscribers_share_one_router_session_until_grace_expires() -> None:
+    connections: list[FakeConnection] = []
+
+    async def connect():
+        conn = FakeConnection([Reply("!done", "print"), Reply("!done", "lease-print")])
+        connections.append(conn)
+        return conn
+
+    async def load_macs():
+        return {}
+
+    source = ArpSource(connect, load_macs)
+    hub = StreamHub([source], grace_s=0.2)
+    first, second = hub.subscribe(), hub.subscribe()
+    await _drain(first, "snapshot")
+    await _drain(second, "snapshot")
+    assert len(connections) == 1
+
+    # A page reload: the only subscriber leaves and comes back within the grace period.
+    hub.unsubscribe(first)
+    hub.unsubscribe(second)
+    await asyncio.sleep(0.05)
+    reloaded = hub.subscribe()
+    events = await _drain(reloaded, "snapshot")
+    assert events[0] == {"type": "status", "state": "live", "error": None}
+    await asyncio.sleep(0.3)
+    assert len(connections) == 1 and not connections[0].closed
+
+    hub.unsubscribe(reloaded)
+    await asyncio.sleep(0.1)
+    assert not connections[0].closed  # still within the grace period
+    await asyncio.sleep(0.2)
+    assert connections[0].closed
+    assert source.state == "idle" and hub.health()["sources"]["arp"] == {
+        "running": False, "state": "idle", "error": None,
+    }

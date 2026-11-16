@@ -20,7 +20,7 @@ independent sources:
    known links and never fails the checks);
 3. **Docker container states**: forwarded to `CONTAINER_STATUS_URL` (`GET /api/container-status`);
 4. **Proxmox**: live guest states, node status, and CPU/memory load graphs (`GET /proxmox/api2/json/...`);
-5. **Router ARP table**: a live mirror streamed by the backend (`GET /api/arp/stream`, Server-Sent Events).
+5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`.
 
 A second page, `#/arp`, lists the router's ARP table live, each entry matched to the
 NetBox object owning its MAC, with three views: unknown (no NetBox match), active, and
@@ -31,12 +31,29 @@ browser's local storage (with schema versioning), so the page renders instantly 
 and survives NetBox being unreachable. Proxmox refreshes in the background every 30 s;
 all sources refresh on manual **Refresh**. Refreshing never blanks what is on screen.
 
+## Event stream
+
+The page holds one Server-Sent Events connection, `GET /api/stream`; the SSE `event:`
+field names the source of each message (today only `arp`). The backend runs its sources
+only while at least one page is connected: the first subscriber starts them, and when the
+last one leaves they keep running for `STREAM_GRACE_S` seconds (default 10) and stop only
+if nobody reconnected, so a page reload reuses the running sessions. A new subscriber, and
+a client that fell too far behind, first receives each source's current state.
+`GET /api/health` reports the subscriber count and each source's state.
+
+A tab hidden for longer than 10 s closes the stream and reopens it when shown again; the
+data on screen stays until fresh events replace it.
+If the server answers the stream request with an HTTP error (e.g. 502 while the backend
+restarts), the browser gives up on it; the page then reopens it itself after 2 s, doubling
+the delay up to 30 s. In the backend, a source that crashes is restarted after 2 s while
+pages are connected.
+
 ## ARP mirror
 
-The backend talks to the RouterOS API (port 8728) only while at least one page holds
-the stream open: the first subscriber opens a session (`/ip/arp/print` for the initial
-state, `/ip/arp/listen` for every later change, on one connection); when the last page
-closes, the session is closed. There is no polling.
+The `arp` source talks to the RouterOS API (port 8728) only while the stream is active:
+it opens one session (`/ip/arp/print` for the initial state, `/ip/arp/listen` for every
+later change, on one connection) and closes it when the hub stops it. There is no polling.
+Its events are `status`, `snapshot`, `upsert` and `remove`.
 
 - Presence: `reachable`, `stale`, `delay`, `probe`, `permanent` -> active;
   `failed`, `incomplete` -> disconnected.
@@ -78,12 +95,13 @@ closes, the session is closed. There is no polling.
 | `SERVICE_CHECK_EXCLUDE` | api | optional: comma-separated check names (`parent/service`) never checked |
 | `NPM_URL` | api | optional: direct Nginx Proxy Manager admin/API base URL, e.g. `http://192.0.2.15:81` |
 | `NPM_IDENTITY` / `NPM_SECRET` | api | optional: NPM user (e-mail) and password; the user needs view rights on proxy hosts. Public links are off unless all three NPM variables are set |
+| `STREAM_GRACE_S` | api | optional: seconds the stream sources keep running after the last page disconnected, default `10` |
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 
 The browser calls its own origin only:
 - `POST /netbox/graphql/` -> `${NETBOX_URL}/graphql/` (with `Authorization: Bearer ${NETBOX_TOKEN}`)
 - `GET /proxmox/api2/json/...` -> `${PROXMOX_URL}/...` (with `Authorization: PVEAPIToken=${PROXMOX_TOKEN}`)
-- `GET /api/service-status`, `GET /api/arp/stream` -> the backend (`http://api:8000`)
+- `GET /api/service-status`, `GET /api/stream` -> the backend (`http://api:8000`)
 - `GET /api/container-status` -> `${CONTAINER_STATUS_URL}`
 
 In nginx and the Vite dev server, requests are strictly limited to the required endpoints and methods.
@@ -133,7 +151,7 @@ Flow:
 
 The public address is served by a reverse proxy in front of host port `8081` (e.g.
 `https://status.example.com` -> `http://192.0.2.20:8081`). It must not buffer
-`/api/arp/stream` (Server-Sent Events); nginx sends `X-Accel-Buffering: no` for it.
+`/api/stream` (Server-Sent Events); nginx sends `X-Accel-Buffering: no` for it.
 
 The router must accept API connections from the stack's host: the API service's
 `available-from`, the user's `address`, and the router firewall.

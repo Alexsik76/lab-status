@@ -35,7 +35,7 @@ export interface ArpRow {
 
 export type ArpMirrorState = 'idle' | 'connecting' | 'live' | 'error'
 
-/** Events of the `/api/arp/stream` Server-Sent Events channel. */
+/** Payloads of the `arp` events of the `/api/stream` Server-Sent Events channel. */
 export type ArpEvent =
   | { type: 'status'; state: ArpMirrorState; error: string | null }
   | { type: 'snapshot'; rows: ArpRow[] }

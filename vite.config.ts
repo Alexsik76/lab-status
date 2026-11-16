@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
             }
           },
         },
-        '/api/arp/stream': {
+        '/api/stream': {
           target: backendUrl,
           bypass(req, res) {
             if (req.method !== 'GET') {

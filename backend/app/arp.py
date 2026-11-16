@@ -1,8 +1,8 @@
-"""Live mirror of the router's ARP table, held only while at least one page is subscribed.
+"""Live mirror of the router's ARP table: the `arp` source of the stream hub.
 
-The first subscriber starts a RouterOS session (`/ip/arp/listen` + `/ip/arp/print` on one
-connection); the last one to leave cancels it, which closes the connection. Rows are
-enriched with the NetBox object owning their MAC.
+While the hub runs it, it holds one RouterOS session (`/ip/arp/listen` + `/ip/arp/print`
+on one connection); the hub cancels it when no page is subscribed any more, which closes
+the connection. Rows are enriched with the NetBox object owning their MAC.
 """
 
 import asyncio
@@ -11,6 +11,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from .hub import Event, Source
 from .netbox import MacMatch
 from .routeros import RouterOsConnection, RouterOsError
 
@@ -19,9 +20,6 @@ log = logging.getLogger(__name__)
 ACTIVE = frozenset({"reachable", "stale", "delay", "probe", "permanent"})
 DISCONNECTED = frozenset({"failed", "incomplete"})
 MAC_TTL_S = 300
-QUEUE_SIZE = 500
-
-Event = dict[str, Any]
 
 
 def presence(status: str) -> str:
@@ -51,12 +49,15 @@ def row_from_attrs(attrs: dict[str, str]) -> dict[str, Any]:
     }
 
 
-class ArpHub:
+class ArpSource(Source):
+    name = "arp"
+
     def __init__(
         self,
         connect: Callable[[], Awaitable[RouterOsConnection]],
         load_macs: Callable[[], Awaitable[dict[str, MacMatch]]],
     ) -> None:
+        super().__init__()
         self._connect = connect
         self._load_macs = load_macs
         self._macs: dict[str, MacMatch] = {}
@@ -64,47 +65,24 @@ class ArpHub:
         self._rows: dict[str, dict[str, Any]] = {}
         self._raw: dict[str, dict[str, str]] = {}
         self._leases: dict[str, dict[str, str]] = {}
-        self._subscribers: set[asyncio.Queue[Event]] = set()
-        self._task: asyncio.Task[None] | None = None
         self.state = "idle"
         self.error: str | None = None
 
-    # ---- subscribers ----
+    # ---- source interface ----
 
-    def subscribe(self) -> asyncio.Queue[Event]:
-        queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=QUEUE_SIZE)
-        self._subscribers.add(queue)
-        if self._task is None or self._task.done():
-            self._rows.clear()
-            self._task = asyncio.create_task(self._run(), name="arp-mirror")
-        queue.put_nowait(self._status_event())
+    def initial_events(self) -> list[Event]:
+        events = [self._status_event()]
         if self.state == "live":
-            queue.put_nowait(self._snapshot_event())
-        return queue
+            events.append(self._snapshot_event())
+        return events
 
-    def unsubscribe(self, queue: asyncio.Queue[Event]) -> None:
-        """Synchronous on purpose: it runs in the `finally` of a cancelled response stream."""
-        self._subscribers.discard(queue)
-        if not self._subscribers and self._task is not None:
-            self._task.cancel()
-            self._task = None
-            self._rows.clear()
-            self.state = "idle"
-            self.error = None
+    def stopped(self) -> None:
+        self._rows.clear()
+        self.state = "idle"
+        self.error = None
 
-    @property
-    def subscriber_count(self) -> int:
-        return len(self._subscribers)
-
-    def _broadcast(self, event: Event) -> None:
-        for queue in list(self._subscribers):
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                # A stalled client: replace its backlog with a fresh snapshot.
-                while not queue.empty():
-                    queue.get_nowait()
-                queue.put_nowait(self._snapshot_event())
+    def health(self) -> dict[str, Any]:
+        return {"state": self.state, "error": self.error}
 
     # ---- events ----
 
@@ -160,7 +138,7 @@ class ArpHub:
 
     def _set_state(self, state: str, error: str | None = None) -> None:
         self.state, self.error = state, error
-        self._broadcast(self._status_event())
+        self.publish(self._status_event())
 
     def apply(self, attrs: dict[str, str], broadcast: bool) -> None:
         row_id = attrs.get(".id")
@@ -168,7 +146,7 @@ class ArpHub:
             return
         if _flag(attrs.get(".dead")):
             if self._rows.pop(row_id, None) is not None and broadcast:
-                self._broadcast({"type": "remove", "id": row_id})
+                self.publish({"type": "remove", "id": row_id})
             return
         # `listen` sends full records; merge anyway in case a reply is partial.
         merged = {**self._raw.get(row_id, {}), **attrs}
@@ -178,7 +156,7 @@ class ArpHub:
             return
         self._rows[row_id] = row
         if broadcast:
-            self._broadcast({"type": "upsert", "row": self.enrich(row)})
+            self.publish({"type": "upsert", "row": self.enrich(row)})
 
     async def _refresh_macs(self) -> None:
         try:
@@ -190,9 +168,10 @@ class ArpHub:
 
     # ---- session ----
 
-    async def _run(self) -> None:
+    async def run(self) -> None:
+        self._rows.clear()
         backoff = 2.0
-        while self._subscribers:
+        while True:
             try:
                 await self._session()
             except asyncio.CancelledError:
@@ -227,18 +206,18 @@ class ArpHub:
                     pending.discard(reply.tag)
                     if not pending:
                         self.state, self.error = "live", None
-                        self._broadcast(self._status_event())
-                        self._broadcast(self._snapshot_event())
+                        self.publish(self._status_event())
+                        self.publish(self._snapshot_event())
                     continue
                 if reply.word != "!re":
                     continue
                 if reply.tag in ("lease-listen", "lease-print"):
                     if self.apply_lease(reply.attrs) and not printing:
-                        self._broadcast(self._snapshot_event())
+                        self.publish(self._snapshot_event())
                     continue
                 self.apply(reply.attrs, broadcast=not printing)
                 if not printing and time.monotonic() - self._macs_at > MAC_TTL_S:
                     await self._refresh_macs()
-                    self._broadcast(self._snapshot_event())
+                    self.publish(self._snapshot_event())
         finally:
             await conn.close()

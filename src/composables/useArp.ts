@@ -1,21 +1,22 @@
 import { computed, onScopeDispose, readonly, ref, shallowRef } from 'vue'
-import { ARP_STREAM_URL } from '../config'
 import { applyArpEvent, indexArpPresence, samePresence, type ArpPresenceIndex, type ArpRows } from '../domain/arp'
 import type { ArpEvent, ArpMirrorState } from '../types/arp'
+import { useEventStream, type EventStream } from './useEventStream'
 
 export type ArpPhase = 'loading' | 'live' | 'failed'
 
 /**
- * Live ARP mirror over Server-Sent Events. The backend keeps its router session
- * only while at least one page holds this stream open; it is closed with the scope.
+ * Live ARP mirror: the `arp` events of the app's shared stream. The backend keeps its
+ * router session only while at least one page holds the stream open. Rows stay on screen
+ * while the stream is down or paused, until the next snapshot replaces them.
  */
-export function useArp(url = ARP_STREAM_URL) {
+export function useArp(stream: EventStream = useEventStream()) {
   const rows = shallowRef<ArpRows>(new Map())
   /** Replaced only when some object's presence changes, not on every NUD transition. */
   const presence = shallowRef<ArpPresenceIndex>(new Map())
   const mirrorState = ref<ArpMirrorState>('idle')
   const mirrorError = ref<string | null>(null)
-  const streamFailed = ref(false)
+  const streamFailed = computed(() => stream.state.value === 'error')
   const hasData = ref(false)
 
   const handle = (event: ArpEvent) => {
@@ -30,26 +31,7 @@ export function useArp(url = ARP_STREAM_URL) {
     if (!samePresence(next, presence.value)) presence.value = next
   }
 
-  let source: EventSource | null = null
-  if (typeof EventSource !== 'undefined') {
-    source = new EventSource(url)
-    source.onopen = () => {
-      streamFailed.value = false
-    }
-    source.onmessage = (message: MessageEvent<string>) => {
-      try {
-        handle(JSON.parse(message.data) as ArpEvent)
-      } catch {
-        // A malformed event is dropped; the next snapshot restores consistency.
-      }
-    }
-    // EventSource reconnects by itself; meanwhile the last rows stay on screen.
-    source.onerror = () => {
-      streamFailed.value = true
-    }
-  }
-
-  onScopeDispose(() => source?.close())
+  onScopeDispose(stream.on<ArpEvent>('arp', handle))
 
   const phase = computed<ArpPhase>(() => {
     if (streamFailed.value || mirrorState.value === 'error') return 'failed'

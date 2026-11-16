@@ -6,8 +6,18 @@ export const NETBOX_GRAPHQL_URL = '/netbox/graphql/'
 /** Same-origin service status endpoint, answered by the backend. */
 export const STATUS_URL = '/api/service-status'
 
-/** Same-origin Server-Sent Events stream of the router's ARP table, answered by the backend. */
-export const ARP_STREAM_URL = '/api/arp/stream'
+/**
+ * Same-origin Server-Sent Events stream of the backend; the SSE `event:` field names the
+ * source (`arp`, ...). The app holds one connection to it.
+ */
+export const STREAM_URL = '/api/stream'
+
+/** A tab hidden for longer than this closes the stream; it reopens when the tab is shown. */
+export const STREAM_HIDDEN_CLOSE_MS = 10_000
+
+/** Backoff for reopening the stream after the browser gave up on it (HTTP error answer). */
+export const STREAM_RETRY_INITIAL_MS = 2_000
+export const STREAM_RETRY_MAX_MS = 30_000
 
 /** Same-origin container status endpoint; forwarded by nginx / Vite dev proxy to CONTAINER_STATUS_URL. */
 export const CONTAINER_STATUS_URL = '/api/container-status'
