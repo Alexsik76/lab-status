@@ -1,5 +1,3 @@
-import type { IconName } from './presentation/platform'
-
 /** Same-origin endpoint that makes the backend's polling sources (inventory, Proxmox) run a cycle at once. */
 export const REFRESH_URL = '/api/refresh'
 export const REFRESH_TIMEOUT_MS = 5_000
@@ -31,14 +29,6 @@ export const CONTAINER_STATUS_TIMEOUT_MS = 10_000
  * with a per-node hash anchor so the right node is preselected in the resource tree.
  */
 export const PROXMOX_WEB_URL = 'https://prox.lab.vn.ua'
-
-/**
- * Icon per NetBox device name, when the platform does not say what the machine is
- * (e.g. a print server). Others take their platform's icon, else the generic server icon.
- */
-export const HOST_ICONS: Readonly<Record<string, IconName>> = {
-  prints: 'cups',
-}
 
 /**
  * Primary (domain) URL for non-Proxmox servers, keyed by NetBox device name.

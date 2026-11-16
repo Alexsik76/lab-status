@@ -13,7 +13,7 @@ export interface RawDevice {
   device_type: { model: string; manufacturer: { name: string } | null } | null
   primary_ip4: { address: string } | null
   cluster: { name: string } | null
-  platform: { name: string } | null
+  platform: { name: string; custom_fields?: Record<string, unknown> | null } | null
   tags?: RawTag[] | null
   custom_fields?: Record<string, unknown> | null
 }
@@ -29,7 +29,7 @@ export interface RawVirtualMachine {
   virtual_machine_type: { name: string } | null
   cluster: { name: string } | null
   device: { id: string; name: string | null } | null
-  platform: { name: string } | null
+  platform: { name: string; custom_fields?: Record<string, unknown> | null } | null
   primary_ip4: { address: string } | null
   tags: RawTag[] | null
   custom_fields: Record<string, unknown> | null

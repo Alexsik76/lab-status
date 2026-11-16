@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rawInventory } from '../__fixtures__'
 import {
+  parseIcon,
   normalizeInventory,
   normalizeTags,
   parseHardware,
@@ -104,6 +105,38 @@ describe('parsers', () => {
     expect(stripAddressMask(' 192.0.2.5/24 ')).toBe('192.0.2.5')
     expect(stripAddressMask(null)).toBeNull()
     expect(stripAddressMask('')).toBeNull()
+  })
+})
+
+describe('icon', () => {
+  it('reads a Dashboard Icons name from custom field icon', () => {
+    expect(parseIcon({ icon: 'debian-linux' })).toBe('debian-linux')
+    expect(parseIcon({ icon: ' cups ' })).toBe('cups')
+  })
+
+  it('ignores missing or malformed names', () => {
+    expect(parseIcon(null)).toBeNull()
+    expect(parseIcon({ icon: null })).toBeNull()
+    expect(parseIcon({ icon: 'Debian Linux' })).toBeNull()
+    expect(parseIcon({ icon: '../x' })).toBeNull()
+  })
+
+  it("prefers the object's own icon over its platform's", () => {
+    const device = rawInventory.device_list[0]
+    const withIcons = (own: string | null, platform: string | null) =>
+      normalizeInventory({
+        ...rawInventory,
+        device_list: [
+          {
+            ...device,
+            custom_fields: { ...device.custom_fields, icon: own },
+            platform: { name: 'Linux', custom_fields: { icon: platform } },
+          },
+        ],
+      }).devices[0].icon
+    expect(withIcons('cups', 'debian-linux')).toBe('cups')
+    expect(withIcons(null, 'debian-linux')).toBe('debian-linux')
+    expect(withIcons(null, null)).toBeNull()
   })
 })
 

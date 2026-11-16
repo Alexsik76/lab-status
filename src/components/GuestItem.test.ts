@@ -10,6 +10,7 @@ function makeContainer(id: string, name: string, stack: string | null = null): C
     state: 'up',
     services: [],
     image: null,
+    icon: null,
     stack,
     tags: [],
   }
@@ -45,6 +46,7 @@ function makeGuestWithItems(opts: {
     disk: null,
     ip: '198.51.100.20',
     platform: null,
+    icon: null,
     cluster: null,
     tags: [],
     services: [],
