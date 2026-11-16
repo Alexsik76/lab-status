@@ -71,6 +71,31 @@ const states = (wrapper: Awaited<ReturnType<typeof mountApp>>) =>
   wrapper.findAll('.state').map((s) => s.attributes('data-state'))
 
 describe('App', () => {
+  it('keeps the summary on both pages and switches them with Hosts | ARP', async () => {
+    stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries) })
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    const active = () => wrapper.find('.switch-item.is-active').text()
+    const summary = '5 machines · 8 guests (2 stopped) · 22 containers'
+
+    expect(active()).toBe('Hosts')
+    expect(document.title).toBe('Homelab · Hosts')
+    expect(wrapper.find('.refresh-btn').exists()).toBe(true)
+
+    window.location.hash = '#/arp'
+    await vi.waitFor(() => expect(wrapper.find('.arp-page').exists()).toBe(true))
+    expect(active()).toBe('ARP')
+    expect(document.title).toBe('Homelab · ARP')
+    expect(wrapper.find('.app-header').text()).toContain(summary)
+    expect(wrapper.find('.refresh-btn').exists()).toBe(false)
+    expect(wrapper.find('.arp-live').exists()).toBe(true)
+
+    window.location.hash = ''
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    expect(active()).toBe('Hosts')
+    wrapper.unmount()
+  })
+
   it('renders the tree and fills in statuses', async () => {
     stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries) })
     const wrapper = await mountApp()
@@ -242,10 +267,10 @@ describe('App', () => {
     stubBackend({ netbox: () => netbox(), status: ok(statusEntries) })
     const wrapper = await mountApp()
     await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
-    await vi.waitFor(() => expect(wrapper.find('.toolbar button').attributes('disabled')).toBeUndefined())
+    await vi.waitFor(() => expect(wrapper.find('.refresh-btn').attributes('disabled')).toBeUndefined())
 
     netbox = down
-    await wrapper.find('.toolbar button').trigger('click')
+    await wrapper.find('.refresh-btn').trigger('click')
     await vi.waitFor(() => expect(wrapper.text()).toContain('could not be refreshed'))
     await flushPromises()
     expect(wrapper.findAll('.machine-node')).toHaveLength(5)
@@ -280,10 +305,10 @@ describe('App', () => {
       return ok({ data: proxmoxResources })()
     }
 
-    await wrapper.find('.toolbar button').trigger('click')
+    await wrapper.find('.refresh-btn').trigger('click')
     // During manual refresh, button shows progress
-    expect(wrapper.find('.toolbar button').attributes('disabled')).toBeDefined()
-    expect(wrapper.find('.toolbar button .spinner').exists()).toBe(true)
+    expect(wrapper.find('.refresh-btn').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.refresh-btn .spinner').exists()).toBe(true)
 
     // Data MUST NOT be cleared while refresh is in flight!
     expect(findGuest('lxc-bastion')?.classes()).toContain('state-up')
@@ -293,7 +318,7 @@ describe('App', () => {
 
     slow.release()
     await vi.waitFor(() =>
-      expect(wrapper.find('.toolbar button').attributes('disabled')).toBeUndefined(),
+      expect(wrapper.find('.refresh-btn').attributes('disabled')).toBeUndefined(),
     )
     expect(findGuest('lxc-bastion')?.classes()).toContain('state-up')
     expect(findGuest('vm-worker')?.classes()).toContain('state-up')
@@ -323,7 +348,7 @@ describe('App', () => {
 
     // Proxmox now fails on refresh
     proxmoxResourcesHandler = down
-    await wrapper.find('.toolbar button').trigger('click')
+    await wrapper.find('.refresh-btn').trigger('click')
 
     // Notice banner must say showing last known data
     await vi.waitFor(() =>
@@ -352,7 +377,7 @@ describe('App', () => {
     // Fail both on refresh
     statusHandler = down
     containerHandler = down
-    await wrapper.find('.toolbar button').trigger('click')
+    await wrapper.find('.refresh-btn').trigger('click')
 
     await vi.waitFor(() => {
       expect(wrapper.text()).toContain('Live statuses could not be refreshed; showing last known data')

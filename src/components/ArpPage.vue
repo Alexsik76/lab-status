@@ -29,13 +29,6 @@ const visible = computed(() =>
 <template>
   <section class="arp-page">
     <header class="arp-header">
-      <div class="arp-title-row">
-        <a class="back-link" href="#/">homelab</a>
-        <span class="arp-title">/ arp</span>
-        <span class="arp-live" :class="`phase-${phase}`">
-          <span class="live-dot"></span>{{ phase === 'live' ? 'live' : phase === 'loading' ? 'connecting…' : 'offline' }}
-        </span>
-      </div>
       <nav class="arp-views" aria-label="ARP views">
         <button
           v-for="v in VIEWS"
@@ -120,39 +113,6 @@ const visible = computed(() =>
   gap: 12px;
 }
 
-.arp-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.back-link,
-.arp-title {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--color-text-title);
-}
-
-.back-link:hover {
-  color: var(--color-text-host);
-  text-decoration: underline;
-}
-
-.arp-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 8px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
-}
-
-.live-dot,
 .presence-dot {
   display: inline-block;
   width: 7px;
@@ -161,11 +121,6 @@ const visible = computed(() =>
   box-sizing: border-box;
   border: 1.5px dashed var(--color-state-unknown-dot);
 }
-
-.phase-live { color: var(--color-state-up); }
-.phase-live .live-dot { background: var(--color-state-up); border: none; }
-.phase-failed { color: var(--color-state-down); }
-.phase-failed .live-dot { background: var(--color-state-down); border: none; }
 
 .arp-views {
   display: flex;
@@ -182,6 +137,7 @@ const visible = computed(() =>
   font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .view-btn:hover { background: var(--color-bg-hover-dim); }
