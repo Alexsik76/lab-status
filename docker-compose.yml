@@ -30,3 +30,4 @@ services:
       - NPM_URL
       - NPM_IDENTITY
       - NPM_SECRET
+      - STREAM_GRACE_S
