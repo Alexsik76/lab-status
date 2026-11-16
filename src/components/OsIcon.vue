@@ -35,6 +35,7 @@ const BRAND_THEMES: Record<string, { bg: string; fg: string }> = {
   debian: { bg: 'oklch(0.26 0.03 5)', fg: 'oklch(0.72 0.15 8)' },
   haos: { bg: 'oklch(0.30 0.06 225)', fg: 'oklch(0.80 0.11 225)' },
   cups: { bg: 'oklch(0.26 0.04 250)', fg: 'oklch(0.72 0.14 250)' },
+  windows: { bg: 'oklch(0.26 0.04 235)', fg: 'oklch(0.72 0.13 235)' },
   server: { bg: 'oklch(0.27 0.01 250)', fg: 'oklch(0.70 0.012 250)' },
   docker: { bg: 'oklch(0.29 0.06 245)', fg: 'oklch(0.74 0.12 245)' },
 }

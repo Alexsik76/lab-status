@@ -12,6 +12,7 @@ export const ICONS = {
   debian: { kind: 'image', src: '/assets/debian-dark.svg', name: 'debian', alt: 'Debian' },
   haos: { kind: 'svg', name: 'haos', alt: 'Home Assistant OS' },
   cups: { kind: 'image', src: '/assets/cups.svg', name: 'cups', alt: 'CUPS' },
+  windows: { kind: 'image', src: '/assets/windows.svg', name: 'windows', alt: 'Windows' },
   server: { kind: 'svg', name: 'server', alt: 'Server' },
 } as const satisfies Record<string, PlatformIcon>
 
@@ -22,6 +23,7 @@ const PLATFORM_ICONS: Readonly<Record<string, IconName>> = {
   TrueNAS: 'truenas',
   Debian: 'debian',
   'Home Assistant OS': 'haos',
+  Windows: 'windows',
 }
 
 /**

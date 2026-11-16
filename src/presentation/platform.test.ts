@@ -41,6 +41,15 @@ describe('platformToIcon', () => {
     })
   })
 
+  it('maps "Windows" to the Windows icon', () => {
+    expect(platformToIcon('Windows')).toEqual({
+      kind: 'image',
+      src: '/assets/windows.svg',
+      name: 'windows',
+      alt: 'Windows',
+    })
+  })
+
   it('returns null for null, undefined, or empty string', () => {
     expect(platformToIcon(null)).toBeNull()
     expect(platformToIcon(undefined)).toBeNull()
@@ -65,7 +74,7 @@ describe('resolveIcon', () => {
   })
 
   it('falls back to the generic server icon for unknown or missing platforms', () => {
-    expect(resolveIcon(null, 'Windows')).toEqual({ kind: 'svg', name: 'server', alt: 'Server' })
+    expect(resolveIcon(null, 'Ubuntu')).toEqual({ kind: 'svg', name: 'server', alt: 'Server' })
     expect(resolveIcon(undefined, null).name).toBe('server')
   })
 })
