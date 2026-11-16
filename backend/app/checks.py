@@ -1,6 +1,7 @@
-"""HTTP checks of NetBox services, run on request (replaces the n8n `service-status` webhook).
+"""HTTP checks of NetBox services (replaces the n8n `service-status` webhook).
 
-Targets and public URLs come from the `inventory` source's cycle."""
+Targets and public URLs come from the `inventory` source's cycle; the `services` source decides
+when to check what."""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -14,6 +15,8 @@ from .npm import PublicUrlMap
 
 CHECK_TIMEOUT_S = 3.0
 RETRY_DELAY_S = 2.0
+#: Checks running at the same time.
+CONCURRENCY = 16
 
 
 async def check_target(client: httpx.AsyncClient, target: Target) -> dict[str, Any]:
@@ -52,6 +55,11 @@ def _ip_port(url: str) -> tuple[str, int] | None:
     return parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
 
 
+def public_url_for(target: Target, public: PublicUrlMap) -> str | None:
+    key = _ip_port(target.url)
+    return public.get(key) if key else None
+
+
 class ServiceChecker:
     def __init__(
         self,
@@ -59,24 +67,39 @@ class ServiceChecker:
         client: httpx.AsyncClient,
         exclude: frozenset[str] = frozenset(),
         public_urls: Callable[[], Awaitable[PublicUrlMap]] | None = None,
+        concurrency: int = CONCURRENCY,
     ) -> None:
         self._load_targets = load_targets
         self._client = client
         self._exclude = exclude
         self._public_urls = public_urls
+        self._semaphore = asyncio.Semaphore(concurrency)
+        #: Checks started so far (each is one target, with its own retry).
+        self.checks = 0
+
+    def allowed(self, targets: list[Target]) -> list[Target]:
+        """SERVICE_CHECK_EXCLUDE applied."""
+        return [t for t in targets if t.name not in self._exclude]
 
     async def targets(self) -> list[Target]:
-        return [t for t in await self._load_targets() if t.name not in self._exclude]
+        return self.allowed(await self._load_targets())
 
-    async def _public_url_map(self) -> PublicUrlMap:
+    async def public_url_map(self) -> PublicUrlMap:
         return await self._public_urls() if self._public_urls else {}
 
+    async def check(self, targets: list[Target], public: PublicUrlMap) -> list[dict[str, Any]]:
+        """Checks the targets, at most `concurrency` at a time; results in target order."""
+
+        async def one(target: Target) -> dict[str, Any]:
+            async with self._semaphore:
+                self.checks += 1
+                result = await check_target(self._client, target)
+            result["public_url"] = public_url_for(target, public)
+            return result
+
+        return list(await asyncio.gather(*(one(t) for t in targets)))
+
     async def run(self) -> list[dict[str, Any]]:
+        """One round of every target (targets and public URLs loaded first)."""
         targets = await self.targets()
-        public, *results = await asyncio.gather(
-            self._public_url_map(), *(check_target(self._client, t) for t in targets)
-        )
-        for target, result in zip(targets, results):
-            key = _ip_port(target.url)
-            result["public_url"] = public.get(key) if key else None
-        return results
+        return await self.check(targets, await self.public_url_map())

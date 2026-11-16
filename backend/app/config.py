@@ -36,6 +36,8 @@ class Settings:
     portainer_token: str = ""
     #: Reconcile period of the `containers` source (full re-list of every environment).
     containers_period_s: float = 300.0
+    #: Period of the full round of the `services` source (all checks).
+    services_period_s: float = 180.0
     #: Period of the `inventory` source (NetBox inventory, check targets, MAC directory, NPM).
     inventory_period_s: float = 300.0
     #: Seconds the stream sources keep running after the last page disconnected.
@@ -75,6 +77,7 @@ class Settings:
             portainer_url=env.get("PORTAINER_URL", "").rstrip("/"),
             portainer_token=env.get("PORTAINER_TOKEN", ""),
             containers_period_s=float(env.get("CONTAINERS_PERIOD_S") or 300.0),
+            services_period_s=float(env.get("SERVICES_PERIOD_S") or 180.0),
             inventory_period_s=float(env.get("INVENTORY_PERIOD_S") or 300.0),
             stream_grace_s=float(env.get("STREAM_GRACE_S") or 10.0),
         )

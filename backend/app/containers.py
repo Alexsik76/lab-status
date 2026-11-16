@@ -177,6 +177,10 @@ class ContainersSource(Source):
         self._list_error: str | None = None
         self.updated_at: datetime | None = None
         self.reconciles = 0
+        #: Called as `callback(env, name, old_state, new_state)` when a known container's state
+        #: changes (an event, its delayed re-reads, or a re-list), or a container appears or
+        #: disappears through an event. Not called for an environment's initial list.
+        self.on_change: list[Callable[[str, str, str | None, str | None], None]] = []
 
     # ---- source interface ----
 
@@ -264,8 +268,15 @@ class ContainersSource(Source):
         except Exception as exc:
             self._env_failed(env, exc)
             return False
-        env.entries = {c["Id"]: entry(env.name, c) for c in containers if "Id" in c}
+        fresh = {c["Id"]: entry(env.name, c) for c in containers if "Id" in c}
+        changed = [
+            (old, fresh[cid]) for cid, old in env.entries.items()
+            if cid in fresh and fresh[cid]["state"] != old["state"]
+        ]
+        env.entries = fresh
         self._env_read(env)
+        for old, new in changed:
+            self._changed(env, new["name"], old["state"], new["state"])
         return True
 
     # ---- per-environment session ----
@@ -300,11 +311,23 @@ class ContainersSource(Source):
 
     async def _read_container(self, env: Environment, container_id: str) -> None:
         found = await self._client.containers(env.id, container_id)
+        old = env.entries.get(container_id)
+        new: Json | None = None
         if found:
-            env.entries[container_id] = entry(env.name, found[0])
+            new = env.entries[container_id] = entry(env.name, found[0])
         else:
             env.entries.pop(container_id, None)
         self._env_read(env)
+        old_state, new_state = (old or {}).get("state"), (new or {}).get("state")
+        if old_state != new_state:
+            self._changed(env, (new or old or {}).get("name", ""), old_state, new_state)
+
+    def _changed(self, env: Environment, name: str, old_state: str | None, new_state: str | None) -> None:
+        for callback in self.on_change:
+            try:
+                callback(env.name, name, old_state, new_state)
+            except Exception:
+                log.exception("Container change listener failed")
 
     def _schedule_follow_ups(self, env: Environment, container_id: str) -> None:
         """Re-read the container again later, in the background; a newer event of the same

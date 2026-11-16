@@ -84,10 +84,8 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
     if (isManualRefreshing.value) return
     isManualRefreshing.value = true
     try {
-      await Promise.allSettled([
-        inventory.refresh(),
-        statuses.refresh(),
-      ])
+      // The backend re-reads NetBox, NPM, Proxmox, the containers and re-runs every check.
+      await inventory.refresh()
     } finally {
       isManualRefreshing.value = false
     }

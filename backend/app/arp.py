@@ -60,6 +60,11 @@ class ArpSource(Source):
         self._leases: dict[str, dict[str, str]] = {}
         self.state = "idle"
         self.error: str | None = None
+        #: Called as `callback(address, transition)` on presence transitions of an address while
+        #: the mirror is live (never for the initial table): "failed" (now failed / incomplete),
+        #: "removed" (dropped from the table while active), "appeared" (active after being absent
+        #: or failed). reachable <-> stale and the like are not transitions.
+        self.on_transition: list[Callable[[str, str], None]] = []
 
     # ---- source interface ----
 
@@ -141,10 +146,53 @@ class ArpSource(Source):
         self.state, self.error = state, error
         self.publish(self._status_event())
 
+    def address_presence(self, address: str) -> str | None:
+        """`active`, `disconnected`, or None when the address is not in the table (or only
+        with an unknown status)."""
+        found = {row["presence"] for row in self._rows.values() if row["address"] == address}
+        if "active" in found:
+            return "active"
+        if "disconnected" in found:
+            return "disconnected"
+        return None
+
+    def _notify(self, address: str, before: str | None) -> None:
+        after = self.address_presence(address)
+        if not address or after == before:
+            return
+        if after == "disconnected":
+            transition = "failed"
+        elif after is None and before == "active":
+            transition = "removed"
+        elif after == "active":
+            transition = "appeared"
+        else:
+            return
+        for callback in self.on_transition:
+            callback(address, transition)
+
     def apply(self, attrs: dict[str, str], broadcast: bool) -> None:
         row_id = attrs.get(".id")
         if not row_id:
             return
+        old = self._rows.get(row_id)
+        addresses = {old["address"]} if old else set()
+        before = {a: self.address_presence(a) for a in addresses}
+        self._apply(row_id, attrs, broadcast)
+        if not broadcast:
+            return  # the initial table: no transitions
+        new = self._rows.get(row_id)
+        if new and new["address"] not in before:
+            # A new row: its address was absent unless another row already carries it.
+            others = [r for i, r in self._rows.items() if i != row_id and r["address"] == new["address"]]
+            before[new["address"]] = (
+                "active" if any(r["presence"] == "active" for r in others)
+                else "disconnected" if any(r["presence"] == "disconnected" for r in others) else None
+            )
+        for address, presence in before.items():
+            self._notify(address, presence)
+
+    def _apply(self, row_id: str, attrs: dict[str, str], broadcast: bool) -> None:
         if _flag(attrs.get(".dead")):
             if self._rows.pop(row_id, None) is not None and broadcast:
                 self.publish({"type": "remove", "id": row_id})

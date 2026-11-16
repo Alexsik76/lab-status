@@ -11,7 +11,7 @@ independent sources:
    as `inventory` events of `GET /api/stream`;
 2. **HTTP service checks**: run by the backend against the NetBox services that have the
    custom field `check` set and an `http`/`https` `scheme` (one per parent: the service that
-   represents the application's health; `GET /api/service-status`). Only `http`/`https`
+   represents the application's health), sent as `services` events of `GET /api/stream`. Only `http`/`https`
    services are ever links; `rtsp`/`webrtc` services are not clickable (their port may still
    be shown). The service flagged `check` is the one shown on the node's tile. When an
    enabled Nginx Proxy Manager proxy host forwards to the checked `ip:port`, the entry also
@@ -32,20 +32,21 @@ disconnected (`failed` / `incomplete`).
 The tree appears immediately: the last successfully loaded inventory is cached in the
 browser's local storage (with schema versioning), so the page renders instantly on open
 and survives NetBox being unreachable. Manual **Refresh** asks the backend to re-read NetBox,
-NPM, Proxmox and the container lists at once (`POST /api/refresh`, answered 202; the results
-arrive over the stream) and re-polls the service statuses. Refreshing never blanks what is on screen.
+NPM, Proxmox and the container lists and to re-run every service check at once
+(`POST /api/refresh`, answered 202; the results arrive over the stream). Refreshing never
+blanks what is on screen.
 
 ## Event stream
 
 The page holds one Server-Sent Events connection, `GET /api/stream`; the SSE `event:`
-field names the source of each message (`arp`, `inventory`, `proxmox`, `metrics`). The backend runs its sources
+field names the source of each message (`arp`, `inventory`, `services`, `proxmox`, `metrics`, `containers`). The backend runs its sources
 only while at least one page is connected: the first subscriber starts them, and when the
 last one leaves they keep running for `STREAM_GRACE_S` seconds (default 10) and stop only
 if nobody reconnected, so a page reload reuses the running sessions. A new subscriber, and
 a client that fell too far behind, first receives each source's current state.
 `GET /api/health` reports the subscriber count and each source's state.
 
-Polling sources (`inventory`, `proxmox`, `metrics`) publish two kinds of events: `{"type": "data", "data": ...}`
+Polling sources (`inventory`, `proxmox`, `metrics`; `containers` and `services` alike) publish two kinds of events: `{"type": "data", "data": ...}`
 only when the data changed, and `{"type": "status", "state", "error", "updatedAt", "periodS"}`
 whenever the state, the error or the time of the last successful fetch (`updatedAt`, ISO 8601
 UTC) changes. A failed poll keeps the last data and reports the error; polling goes on.
@@ -62,9 +63,29 @@ The `inventory` cycle is the backend's only NetBox (and NPM) read: the service c
 their targets and public URLs from it, and the ARP mirror its MAC directory (a changed
 directory re-sends the ARP snapshot). A part that fails keeps its previous value; if only the
 page's inventory failed the status is `error`, otherwise `live` with the failure in `error`.
-`GET /api/service-status` works without a subscriber: it runs a cycle first when none ran
-within the period. `POST /api/refresh` runs every polling source at once and reconciles the
-container lists.
+`POST /api/refresh` runs every polling source at once, reconciles the container lists and
+starts a full round of service checks.
+
+The `services` source checks every target (SERVICE_CHECK_EXCLUDE applied; at most 16 at a
+time, each with a 3 s timeout and one retry; any answer below HTTP 500 is up) in a full round
+every 180 s (`SERVICES_PERIOD_S`), when the inventory cycle brings a different target list,
+and on refresh. Between rounds, events re-check only the affected targets and the merged list
+is published (only when something changed):
+
+| Event | Targets | Action |
+|---|---|---|
+| ARP: the target's address becomes `failed` / `incomplete` | the host's (by the address in the URL) | down at once, error `Host does not answer ARP`, no check |
+| ARP: the address is removed while active | the host's | one check now (the router also drops idle hosts) |
+| ARP: the address becomes active after being absent or failed | the host's | checks after 5, 15, 30 and 60 s |
+| Container: a known container stops (any state but `running`) | the services of its NetBox container | down at once, error `Container is not running` |
+| Container: it runs again | the same | checks after 5, 15 and 30 s |
+
+ARP noise (`reachable` <-> `stale` and the like) and `permanent` entries cause nothing; the
+full round covers them. A container entry maps to its NetBox container as on the page: the
+Docker VM whose `alias` is the entry name; with several, the one whose host VM is named like
+the environment. A newer event of the same host or container replaces its pending checks.
+`GET /api/service-status` still returns the source's latest list (after a round when there is
+none younger than the period, so it works without a subscriber); the page no longer calls it.
 
 The `containers` source follows every Portainer Docker environment that is up: it lists the
 containers, then holds the environment's Docker event stream open (`type=container` only,
@@ -136,6 +157,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `PROXMOX_PERIOD_S` / `PROXMOX_METRICS_PERIOD_S` | api | optional: polling periods, default `15` / `60` |
 | `NETBOX_PUBLIC_URL` | api | optional: NetBox UI base URL, for links on the ARP page |
 | `SERVICE_CHECK_EXCLUDE` | api | optional: comma-separated check names (`parent/service`) never checked |
+| `SERVICES_PERIOD_S` | api | optional: period of the full round of service checks, default `180` |
 | `NPM_URL` | api | optional: direct Nginx Proxy Manager admin/API base URL, e.g. `http://192.0.2.15:81` |
 | `NPM_IDENTITY` / `NPM_SECRET` | api | optional: NPM user (e-mail) and password; the user needs view rights on proxy hosts. Public links are off unless all three NPM variables are set |
 | `PORTAINER_URL` | api | Portainer base URL, direct, e.g. `https://192.0.2.20:9443` (TLS is not verified: self-signed certificates work) |
