@@ -3,6 +3,7 @@ import { useDateFormat } from '@vueuse/core'
 import { computed } from 'vue'
 import type { ArpPhase } from '../composables/useArp'
 import type { TreeCounts } from '../domain/model'
+import HoverTip from './HoverTip.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 
 export type Page = 'hosts' | 'arp'
@@ -53,10 +54,7 @@ const liveText = computed(() =>
       <a href="#/arp" class="switch-item" :class="{ 'is-active': page === 'arp' }" :aria-current="page === 'arp' ? 'page' : undefined">
         ARP
         <Transition name="badge">
-          <span v-if="arpDisconnected > 0" class="switch-badge" tabindex="0" aria-describedby="arp-badge-tip">
-            {{ arpDisconnected }}
-            <span id="arp-badge-tip" class="badge-tip" role="tooltip">{{ badgeTip }}</span>
-          </span>
+          <HoverTip v-if="arpDisconnected > 0" :text="badgeTip" class="switch-badge">{{ arpDisconnected }}</HoverTip>
         </Transition>
       </a>
     </nav>
@@ -188,45 +186,7 @@ const liveText = computed(() =>
   text-align: center;
   background: oklch(0.62 0.22 27 / 0.2);
   color: oklch(0.78 0.14 27);
-  position: relative;
-  cursor: help;
 }
-.switch-badge:focus-visible {
-  outline: 1px solid oklch(0.78 0.14 27 / 0.6);
-  outline-offset: 1px;
-}
-
-/* Tooltip under the badge: fades in after a short pause, like the rest of the motion here. */
-.badge-tip {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  z-index: 10;
-  width: max-content;
-  max-width: 260px;
-  padding: 6px 9px;
-  border: 1px solid var(--color-border-btn-hover);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-spine);
-  box-shadow: 0 4px 14px oklch(0 0 0 / 0.35);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-  letter-spacing: 0;
-  text-align: left;
-  white-space: normal;
-  pointer-events: none;
-  opacity: 0;
-  transform: translate(-50%, -3px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-.switch-badge:hover .badge-tip,
-.switch-badge:focus-visible .badge-tip {
-  opacity: 1;
-  transform: translate(-50%, 0);
-  transition-delay: 0.25s;
-}
-
 .badge-enter-active,
 .badge-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -320,8 +280,7 @@ const liveText = computed(() =>
   .switch-item,
   .refresh-btn,
   .badge-enter-active,
-  .badge-leave-active,
-  .badge-tip {
+  .badge-leave-active {
     transition: none;
   }
 }

@@ -8,6 +8,7 @@ import { orderMachineUnits } from '../presentation/layout'
 import { getNodePrimaryUrlAndPort } from '../presentation/url'
 import ContainerItem from './ContainerItem.vue'
 import GuestItem from './GuestItem.vue'
+import HoverTip from './HoverTip.vue'
 import LinkOrPlain from './LinkOrPlain.vue'
 import OsIcon from './OsIcon.vue'
 import StateBadge from './StateBadge.vue'
@@ -104,7 +105,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
             <span v-if="hostUrl" class="host-arrow">↗</span>
           </LinkOrPlain>
         </div>
-        <span v-if="hwText" class="host-hw" :title="hwTooltip">{{ hwText }}</span>
+        <HoverTip v-if="hwText" :text="hwTooltip ?? hwText" align="start" side="above" class="host-hw">{{ hwText }}</HoverTip>
       </div>
 
       <div v-if="machine.tags?.length" class="host-tags">
@@ -338,7 +339,6 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 .host-hw {
   align-self: flex-start;
   color: var(--color-text-muted);
-  cursor: help;
 }
 
 .host-tags {
