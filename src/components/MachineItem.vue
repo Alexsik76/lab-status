@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { HOST_ICONS } from '../config'
 import type { Machine } from '../domain/model'
-import { formatHardware } from '../presentation/hardware'
+import { describeHardware, formatHardware } from '../presentation/hardware'
 import { resolveHostDomainUrl, urlHostLabel } from '../presentation/hostLinks'
 import { orderMachineUnits } from '../presentation/layout'
 import { getNodePrimaryUrlAndPort } from '../presentation/url'
@@ -18,6 +18,7 @@ const props = defineProps<{
 }>()
 
 const hwText = computed(() => formatHardware(props.machine.hardware))
+const hwTooltip = computed(() => describeHardware(props.machine.hardware) ?? undefined)
 const modelText = computed(() => props.machine.model || props.machine.manufacturer || '')
 
 const serviceInfo = computed(() =>
@@ -91,7 +92,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 
       <div class="host-meta">
         <span v-if="modelText" class="host-model">{{ modelText }}</span>
-        <div class="host-network-hw">
+        <div class="host-network">
           <LinkOrPlain
             :href="hostUrl"
             as="span"
@@ -102,8 +103,8 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
             {{ machine.ip }}<span v-if="hostPort" class="host-port">{{ hostPort }}</span>
             <span v-if="hostUrl" class="host-arrow">↗</span>
           </LinkOrPlain>
-          <span v-if="hwText" class="host-hw">{{ hwText }}</span>
         </div>
+        <span v-if="hwText" class="host-hw" :title="hwTooltip">{{ hwText }}</span>
       </div>
 
       <div v-if="machine.tags?.length" class="host-tags">
@@ -297,7 +298,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
   color: var(--color-text-model);
 }
 
-.host-network-hw {
+.host-network {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -335,7 +336,9 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
   color: var(--color-text-white);
 }
 .host-hw {
+  align-self: flex-start;
   color: var(--color-text-muted);
+  cursor: help;
 }
 
 .host-tags {
