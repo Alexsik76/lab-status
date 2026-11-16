@@ -1,6 +1,6 @@
 import type { IconName } from './presentation/platform'
 
-/** Same-origin endpoint that makes the backend's polling sources (inventory, Proxmox) run a cycle at once. */
+/** Same-origin endpoint that makes the backend's polling sources (inventory, Proxmox, containers) run a cycle at once. */
 export const REFRESH_URL = '/api/refresh'
 export const REFRESH_TIMEOUT_MS = 5_000
 
@@ -20,11 +20,7 @@ export const STREAM_HIDDEN_CLOSE_MS = 10_000
 export const STREAM_RETRY_INITIAL_MS = 2_000
 export const STREAM_RETRY_MAX_MS = 30_000
 
-/** Same-origin container status endpoint; forwarded by nginx / Vite dev proxy to CONTAINER_STATUS_URL. */
-export const CONTAINER_STATUS_URL = '/api/container-status'
-
 export const STATUS_TIMEOUT_MS = 10_000
-export const CONTAINER_STATUS_TIMEOUT_MS = 10_000
 
 /**
  * Shared reverse-proxied Proxmox Web UI. Server headers of Proxmox VE nodes link here,

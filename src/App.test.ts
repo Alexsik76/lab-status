@@ -9,7 +9,7 @@ import {
 } from './__fixtures__'
 import { FakeEventSource } from './__fixtures__/fakeEventSource'
 import App from './App.vue'
-import { CONTAINER_STATUS_URL, REFRESH_URL, STATUS_URL } from './config'
+import { REFRESH_URL, STATUS_URL } from './config'
 import { INVENTORY_SCHEMA_VERSION, INVENTORY_STORAGE_KEY } from './composables/useInventory'
 import { normalizeInventory } from './domain/normalize'
 
@@ -50,27 +50,30 @@ function stubBackend(handlers: {
 
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === STATUS_URL) return handlers.status()
-    if (url === CONTAINER_STATUS_URL) return containerStatusHandler()
     if (url === REFRESH_URL && init?.method === 'POST') {
       // The backend runs its polling sources at once; their results arrive over the stream.
       const es = FakeEventSource.latest()
       void feedInventory(es, handlers.netbox)
       void feedProxmox(es, proxmoxResourcesHandler, proxmoxRrdHandler)
-      return new Response(JSON.stringify({ refreshing: ['inventory', 'proxmox', 'metrics'] }), { status: 202 })
+      void feedContainers(es, containerStatusHandler)
+      return new Response(JSON.stringify({ refreshing: ['inventory', 'proxmox', 'metrics', 'containers'] }), {
+        status: 202,
+      })
     }
     throw new Error(`unexpected request ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
 
-  // NetBox and Proxmox reach the page over the backend stream: the handlers stand for the
-  // backend's upstream answers, and their outcome is sent as `inventory` / `proxmox` /
-  // `metrics` events.
+  // NetBox, Proxmox and container states reach the page over the backend stream: the
+  // handlers stand for the backend's upstream answers, and their outcome is sent as
+  // `inventory` / `proxmox` / `metrics` / `containers` events.
   class BackendStream extends FakeEventSource {
     constructor(url: string) {
       super(url)
       this.open()
       void feedInventory(this, handlers.netbox)
       void feedProxmox(this, proxmoxResourcesHandler, proxmoxRrdHandler)
+      void feedContainers(this, containerStatusHandler)
     }
   }
   vi.stubGlobal('EventSource', BackendStream)
@@ -101,6 +104,19 @@ async function feedInventory(es: FakeEventSource, netbox: Handler) {
   }
   es.emit('inventory', { type: 'data', data: body.data })
   es.emit('inventory', { ...sourceStatus('live'), periodS: 300 })
+}
+
+/** What the backend's containers source publishes for this list of container states. */
+async function feedContainers(es: FakeEventSource, containers: Handler) {
+  let entries: unknown
+  try {
+    entries = await (await containers()).json()
+  } catch {
+    es.emit('containers', { ...sourceStatus('error', 'docker-1: Portainer is unreachable.'), periodS: 300 })
+    return
+  }
+  es.emit('containers', { type: 'data', data: entries })
+  es.emit('containers', { ...sourceStatus('live'), periodS: 300 })
 }
 
 /** What the backend's Proxmox sources publish for these upstream answers. */

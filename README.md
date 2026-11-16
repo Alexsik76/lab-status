@@ -19,7 +19,8 @@ independent sources:
    the tile then links to the domain and shows the direct address as a secondary link
    (proxy hosts are read on the inventory cycle; an NPM failure keeps the last known links and
    never fails the checks);
-3. **Docker container states**: forwarded to `CONTAINER_STATUS_URL` (`GET /api/container-status`);
+3. **Docker container states**: followed by the backend through Portainer's Docker events and sent
+   as `containers` events of `GET /api/stream`;
 4. **Proxmox**: live guest states, node status, and CPU/memory load graphs, polled by the backend
    and sent as `proxmox` / `metrics` events of `GET /api/stream`;
 5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`.
@@ -31,8 +32,8 @@ disconnected (`failed` / `incomplete`).
 The tree appears immediately: the last successfully loaded inventory is cached in the
 browser's local storage (with schema versioning), so the page renders instantly on open
 and survives NetBox being unreachable. Manual **Refresh** asks the backend to re-read NetBox,
-NPM and Proxmox at once (`POST /api/refresh`, answered 202; the results arrive over the
-stream) and re-polls statuses and container states. Refreshing never blanks what is on screen.
+NPM, Proxmox and the container lists at once (`POST /api/refresh`, answered 202; the results
+arrive over the stream) and re-polls the service statuses. Refreshing never blanks what is on screen.
 
 ## Event stream
 
@@ -62,7 +63,22 @@ their targets and public URLs from it, and the ARP mirror its MAC directory (a c
 directory re-sends the ARP snapshot). A part that fails keeps its previous value; if only the
 page's inventory failed the status is `error`, otherwise `live` with the failure in `error`.
 `GET /api/service-status` works without a subscriber: it runs a cycle first when none ran
-within the period. `POST /api/refresh` runs every polling source at once.
+within the period. `POST /api/refresh` runs every polling source at once and reconciles the
+container lists.
+
+The `containers` source follows every Portainer Docker environment that is up: it lists the
+containers, then holds the environment's Docker event stream open (container events that can
+change the state or the status text; health-check `exec_*` events are not requested). Each
+event re-reads that one container through the list endpoint filtered by id (only the list
+endpoint gives the status text, e.g. `Up 4 days (healthy)`); an empty answer removes it
+(`destroy`). Every 300 s (`CONTAINERS_PERIOD_S`), and on refresh, all environments are
+re-listed, which corrects missed events. Its events have the same shape as the polling
+sources'; `data` is `[{"env", "name", "state", "status"}]` sorted by environment and name
+(`env` is the Portainer environment name), `periodS` the re-list period. An environment that
+fails keeps its entries and reconnects after 2 s, doubling to 60 s; it is reported as
+`"<env>: <error>"` in `error` (several joined by `; `), with `state` staying `live` while
+another environment is live. `GET /api/health` lists each environment's state, error,
+`updatedAt` and container count.
 
 A tab hidden for longer than 10 s closes the stream and reopens it when shown again; the
 data on screen stays until fresh events replace it.
@@ -90,14 +106,14 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 
 | Path | Purpose |
 |---|---|
-| `src/api/` | status-service and container status API calls, inventory validation, refresh request, typed errors |
+| `src/api/` | status-service calls, inventory and container list validation, refresh request, typed errors |
 | `src/domain/` | pure logic: normalizing NetBox data, building the tree, state rules, ARP presence |
 | `src/composables/` | async state (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`) combined in `useLab` |
 | `src/components/` | render-only components: the tree, the ARP page, error page, skeleton |
 | `src/__fixtures__/` | synthetic responses covering all topology cases, used by the tests |
-| `backend/app/` | FastAPI: stream hub and polling base, ARP mirror, inventory cycle (NetBox, NPM), Proxmox, service checks |
+| `backend/app/` | FastAPI: stream hub and polling base, ARP mirror, inventory cycle (NetBox, NPM), Proxmox, Portainer container states, service checks |
 | `backend/tests/` | pytest suite |
-| `nginx/default.conf.template` | nginx config template; env variables are substituted at container start |
+| `nginx/default.conf.template` | nginx config: the page and the backend's endpoints; it needs no variables |
 | `Dockerfile` | stage 1: Node builds the app; stage 2: `nginx:alpine` serves `dist/` |
 | `backend/Dockerfile` | Python 3.13 + uv, `uvicorn` on port 8000 |
 | `docker-compose.yml` | services `web` (`lab-status`, port `8081:80`) and `api` (`lab-status-api`, internal) |
@@ -109,7 +125,6 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `NETBOX_URL` | api | NetBox base URL, e.g. `http://192.0.2.10:8000` (no trailing slash) |
 | `NETBOX_TOKEN` | api | API token of a read-only NetBox user (GraphQL and REST); it needs view rights on devices, virtual machines, services, IP addresses, and MAC addresses |
 | `INVENTORY_PERIOD_S` | api | optional: period of the NetBox / NPM cycle, default `300` |
-| `CONTAINER_STATUS_URL` | web | HTTP endpoint returning live Docker container states (GET-only upstream) |
 | `ROUTEROS_HOST` | api | Router address for the API service |
 | `ROUTEROS_PORT` | api | API port, default `8728` |
 | `ROUTEROS_USER` / `ROUTEROS_PASSWORD` | api | RouterOS user in a group with `read,api` policies |
@@ -120,12 +135,14 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `SERVICE_CHECK_EXCLUDE` | api | optional: comma-separated check names (`parent/service`) never checked |
 | `NPM_URL` | api | optional: direct Nginx Proxy Manager admin/API base URL, e.g. `http://192.0.2.15:81` |
 | `NPM_IDENTITY` / `NPM_SECRET` | api | optional: NPM user (e-mail) and password; the user needs view rights on proxy hosts. Public links are off unless all three NPM variables are set |
+| `PORTAINER_URL` | api | Portainer base URL, direct, e.g. `https://192.0.2.20:9443` (TLS is not verified: self-signed certificates work) |
+| `PORTAINER_TOKEN` | api | API key (`X-API-Key`) of a Portainer user with read-only access to the Docker environments; container states are off unless both are set |
+| `CONTAINERS_PERIOD_S` | api | optional: period of the full container re-list, default `300` |
 | `STREAM_GRACE_S` | api | optional: seconds the stream sources keep running after the last page disconnected, default `10` |
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 
 The browser calls its own origin only:
 - `GET /api/stream`, `GET /api/service-status`, `POST /api/refresh` -> the backend (`http://api:8000`)
-- `GET /api/container-status` -> `${CONTAINER_STATUS_URL}`
 
 In nginx and the Vite dev server, requests are strictly limited to the required endpoints and methods.
 The environment variables have no `VITE_` prefix: they are never bundled into client assets.
@@ -167,9 +184,6 @@ Flow:
 3. Verify: containers `lab-status` and `lab-status-api` are running without restarts, the
    stack's deployed commit (`GitConfig.ConfigHash`) equals the merge commit, and the page loads
    with data.
-
-> **Warning:** nginx will not start if `CONTAINER_STATUS_URL` is missing, because template
-> substitution (`envsubst`) requires it.
 
 The public address is served by a reverse proxy in front of host port `8081` (e.g.
 `https://status.example.com` -> `http://192.0.2.20:8081`). It must not buffer

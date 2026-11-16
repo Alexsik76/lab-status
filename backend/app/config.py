@@ -30,6 +30,12 @@ class Settings:
     proxmox_token: str = ""
     proxmox_period_s: float = 15.0
     proxmox_metrics_period_s: float = 60.0
+    #: Portainer base URL (direct, self-signed TLS: not verified) and API key (`X-API-Key`, a
+    #: read-only user); the `containers` source is off unless both are set.
+    portainer_url: str = ""
+    portainer_token: str = ""
+    #: Reconcile period of the `containers` source (full re-list of every environment).
+    containers_period_s: float = 300.0
     #: Period of the `inventory` source (NetBox inventory, check targets, MAC directory, NPM).
     inventory_period_s: float = 300.0
     #: Seconds the stream sources keep running after the last page disconnected.
@@ -38,6 +44,10 @@ class Settings:
     @property
     def proxmox_enabled(self) -> bool:
         return bool(self.proxmox_url and self.proxmox_token)
+
+    @property
+    def portainer_enabled(self) -> bool:
+        return bool(self.portainer_url and self.portainer_token)
 
     @property
     def npm_enabled(self) -> bool:
@@ -62,6 +72,9 @@ class Settings:
             proxmox_token=env.get("PROXMOX_TOKEN", ""),
             proxmox_period_s=float(env.get("PROXMOX_PERIOD_S") or 15.0),
             proxmox_metrics_period_s=float(env.get("PROXMOX_METRICS_PERIOD_S") or 60.0),
+            portainer_url=env.get("PORTAINER_URL", "").rstrip("/"),
+            portainer_token=env.get("PORTAINER_TOKEN", ""),
+            containers_period_s=float(env.get("CONTAINERS_PERIOD_S") or 300.0),
             inventory_period_s=float(env.get("INVENTORY_PERIOD_S") or 300.0),
             stream_grace_s=float(env.get("STREAM_GRACE_S") or 10.0),
         )

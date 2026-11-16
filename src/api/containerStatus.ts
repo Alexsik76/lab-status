@@ -1,6 +1,5 @@
-import { CONTAINER_STATUS_TIMEOUT_MS, CONTAINER_STATUS_URL } from '../config'
 import type { DockerContainerEntry } from '../types/containerStatus'
-import { fetchLiveList, parseListResponse } from './status'
+import { parseListResponse } from './status'
 
 export const isDockerContainerEntry = (value: unknown): value is DockerContainerEntry => {
   if (typeof value !== 'object' || value === null) return false
@@ -13,15 +12,7 @@ export const isDockerContainerEntry = (value: unknown): value is DockerContainer
   )
 }
 
+/** Validates the payload of a `containers` event of the backend stream. */
 export function parseContainerStatusResponse(body: unknown): DockerContainerEntry[] {
-  return parseListResponse(body, isDockerContainerEntry, 'The container status service')
-}
-
-export async function fetchContainerStatuses(): Promise<DockerContainerEntry[]> {
-  return fetchLiveList(
-    CONTAINER_STATUS_URL,
-    'The container status service',
-    parseContainerStatusResponse,
-    CONTAINER_STATUS_TIMEOUT_MS,
-  )
+  return parseListResponse(body, isDockerContainerEntry, 'The container state source')
 }
