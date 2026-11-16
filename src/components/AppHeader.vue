@@ -3,21 +3,28 @@ import { useDateFormat } from '@vueuse/core'
 import { computed } from 'vue'
 import type { ArpPhase } from '../composables/useArp'
 import type { TreeCounts } from '../domain/model'
+import type { StreamState } from '../composables/useEventStream'
+import type { SourceStatuses } from '../composables/useSourceStatuses'
 import HoverTip from './HoverTip.vue'
-import LoadingSpinner from './LoadingSpinner.vue'
+import RefreshClock from './RefreshClock.vue'
 
 export type Page = 'hosts' | 'arp'
 
-const props = defineProps<{
-  page: Page
-  counts: TreeCounts | null
-  /** Hosts page: refresh button and time of the last render. */
-  refreshing: boolean
-  updatedAt: Date | null
-  /** ARP page: state of the live stream; badge: entries that stopped answering. */
-  arpPhase: ArpPhase
-  arpDisconnected: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    page: Page
+    counts: TreeCounts | null
+    /** Hosts page: the refresh clock (fed by the sources' status events) and the render time. */
+    refreshing: boolean
+    updatedAt: Date | null
+    statuses?: SourceStatuses
+    streamState?: StreamState
+    /** ARP page: state of the live stream; badge: entries that stopped answering. */
+    arpPhase: ArpPhase
+    arpDisconnected: number
+  }>(),
+  { statuses: () => ({}), streamState: 'idle' },
+)
 defineEmits<{ refresh: [] }>()
 
 const formattedTime = useDateFormat(() => props.updatedAt ?? undefined, 'ddd D MMM YYYY · HH:mm:ss')
@@ -61,24 +68,12 @@ const liveText = computed(() =>
 
     <div class="header-right">
       <template v-if="page === 'hosts'">
-        <button type="button" class="refresh-btn" :disabled="refreshing" @click="$emit('refresh')">
-          <LoadingSpinner v-if="refreshing" />
-          <svg
-            v-else
-            class="refresh-icon"
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-          </svg>
-          <span>Refresh</span>
-        </button>
+        <RefreshClock
+          :statuses="statuses"
+          :stream-state="streamState"
+          :refreshing="refreshing"
+          @refresh="$emit('refresh')"
+        />
         <span v-if="updatedAt" class="timestamp">rendered {{ formattedTime }}</span>
       </template>
       <span v-else class="arp-live" :class="`phase-${arpPhase}`">
@@ -208,33 +203,6 @@ const liveText = computed(() =>
   min-width: 0;
 }
 
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--color-bg-spine);
-  border: 1px solid var(--color-border-guest);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  color: var(--color-text-title);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-.refresh-btn:hover:not(:disabled) {
-  background: var(--color-bg-hover-dim);
-  border-color: var(--color-border-btn-hover);
-}
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.refresh-icon {
-  display: block;
-}
-
 .timestamp {
   white-space: nowrap;
 }
@@ -278,7 +246,6 @@ const liveText = computed(() =>
 @media (prefers-reduced-motion: reduce) {
   .switch-thumb,
   .switch-item,
-  .refresh-btn,
   .badge-enter-active,
   .badge-leave-active {
     transition: none;

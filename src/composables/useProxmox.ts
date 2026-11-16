@@ -1,8 +1,7 @@
 import { computed, onScopeDispose, readonly, shallowRef } from 'vue'
 import type { ProxmoxData, ProxmoxResourceItem, ProxmoxRrdPoint } from '../types/proxmox'
-import type { PolledEvent, SourceStatus } from '../types/stream'
+import type { LivePhase, PolledEvent, SourceStatus } from '../types/stream'
 import { useEventStream, type EventStream } from './useEventStream'
-import type { LivePhase } from './useLiveSource'
 
 /**
  * Live Proxmox cluster resources (`proxmox` events) and node load graphs (`metrics` events)

@@ -23,16 +23,6 @@ export default defineConfig(({ mode }) => {
             }
           },
         },
-        '/api/service-status': {
-          target: backendUrl,
-          bypass(req, res) {
-            if (req.method !== 'GET') {
-              res.statusCode = 405
-              res.end('Method Not Allowed')
-              return false
-            }
-          },
-        },
         '/api/stream': {
           target: backendUrl,
           bypass(req, res) {

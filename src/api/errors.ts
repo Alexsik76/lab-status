@@ -1,6 +1,6 @@
-export type ApiErrorKind = 'network' | 'timeout' | 'http' | 'invalid'
+export type ApiErrorKind = 'invalid'
 
-/** Failure of a remote call, with a message that is safe to show to the user. */
+/** A backend payload the page cannot use, with a message that is safe to show to the user. */
 export class ApiError extends Error {
   readonly kind: ApiErrorKind
 

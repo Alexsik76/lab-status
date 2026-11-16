@@ -3,9 +3,8 @@ import { errorMessage } from '../api/errors'
 import { parseStatusResponse } from '../api/status'
 import { indexStatuses } from '../domain/statuses'
 import type { StatusEntry } from '../types/status'
-import type { PolledEvent, SourceStatus } from '../types/stream'
+import type { LivePhase, PolledEvent, SourceStatus } from '../types/stream'
 import { useEventStream, type EventStream } from './useEventStream'
-import type { LivePhase } from './useLiveSource'
 
 export type StatusPhase = LivePhase
 

@@ -13,14 +13,6 @@ server {
         proxy_pass http://api:8000/api/refresh;
     }
 
-    # Service status, answered by the backend: GET only
-    location = /api/service-status {
-        limit_except GET {
-            deny all;
-        }
-        proxy_pass http://api:8000/api/service-status;
-    }
-
     # The page's event stream (Server-Sent Events), answered by the backend: GET only, never buffered.
     location = /api/stream {
         limit_except GET {

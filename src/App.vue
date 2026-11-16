@@ -9,10 +9,12 @@ import LabTree from './components/LabTree.vue'
 import NoticeBanner from './components/NoticeBanner.vue'
 import { useArp } from './composables/useArp'
 import { useLab } from './composables/useLab'
+import { useSourceStatuses } from './composables/useSourceStatuses'
 import { countViews } from './domain/arp'
 import { statusPhaseKey } from './injection'
 
 const arp = useArp()
+const sources = useSourceStatuses()
 const labState = useLab(arp.presence)
 const lab = reactive(labState)
 provide(statusPhaseKey, labState.livePhase)
@@ -46,6 +48,8 @@ function restoreScroll() {
       :counts="lab.counts"
       :refreshing="lab.isRefreshing"
       :updated-at="lab.updatedAt"
+      :statuses="sources.statuses.value"
+      :stream-state="sources.streamState.value"
       :arp-phase="arp.phase.value"
       :arp-disconnected="arpDisconnected"
       @refresh="labState.refresh"

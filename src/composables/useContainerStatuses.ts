@@ -2,9 +2,8 @@ import { computed, onScopeDispose, readonly, shallowRef } from 'vue'
 import { errorMessage } from '../api/errors'
 import { parseContainerStatusResponse } from '../api/containerStatus'
 import type { DockerContainerEntry } from '../types/containerStatus'
-import type { PolledEvent, SourceStatus } from '../types/stream'
+import type { LivePhase, PolledEvent, SourceStatus } from '../types/stream'
 import { useEventStream, type EventStream } from './useEventStream'
-import type { LivePhase } from './useLiveSource'
 
 export type ContainerStatusPhase = LivePhase
 

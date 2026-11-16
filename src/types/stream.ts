@@ -14,3 +14,6 @@ export interface SourceStatus {
 
 /** Events of a periodic backend source: its status, and its data whenever it changed. */
 export type PolledEvent<T> = SourceStatus | { type: 'data'; data: T }
+
+/** Phase of a live data source on the page: waiting for its first data, showing it, or failing. */
+export type LivePhase = 'loading' | 'ready' | 'failed'

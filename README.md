@@ -31,10 +31,24 @@ disconnected (`failed` / `incomplete`).
 
 The tree appears immediately: the last successfully loaded inventory is cached in the
 browser's local storage (with schema versioning), so the page renders instantly on open
-and survives NetBox being unreachable. Manual **Refresh** asks the backend to re-read NetBox,
-NPM, Proxmox and the container lists and to re-run every service check at once
-(`POST /api/refresh`, answered 202; the results arrive over the stream). Refreshing never
-blanks what is on screen.
+and survives NetBox being unreachable. Refreshing never blanks what is on screen.
+
+The page makes exactly two kinds of requests besides its static files: the stream
+(`GET /api/stream`) and, on the Refresh button, `POST /api/refresh`.
+
+**Refresh clock.** The Refresh button in the header is a binary clock: the age in whole
+seconds of the NetBox inventory (`updatedAt` of the `inventory` source, the data Refresh
+re-reads), counting up, one 12 x 12 px square per bit, most significant left. The bit count is
+the smallest that holds the inventory period (`periodS`: 9 bits for 300 s); past 511 s every bit
+stays lit. Lit bits change colour with the fraction of the period elapsed, linearly in RGB:
+green `rgb(52,211,84)` at 0, yellow `rgb(245,204,30)` at half, orange-red `rgb(240,78,38)` at
+the end and after; any source in state `error` makes them orange-red. It ticks once per
+second from real time and stops while the stream is paused for a hidden tab. A click sends
+`POST /api/refresh` (the backend re-reads NetBox, NPM, Proxmox and the container lists and
+re-runs every service check; answered 202); the clock returns to zero when the new
+`updatedAt` arrives. The tooltip lists every source: its age for polling sources, `live` or
+the connection state for `arp` and `containers`, and the error, if any. Its label for
+assistive technology is "Refresh, data N s old".
 
 ## Event stream
 
@@ -84,8 +98,9 @@ ARP noise (`reachable` <-> `stale` and the like) and `permanent` entries cause n
 full round covers them. A container entry maps to its NetBox container as on the page: the
 Docker VM whose `alias` is the entry name; with several, the one whose host VM is named like
 the environment. A newer event of the same host or container replaces its pending checks.
-`GET /api/service-status` still returns the source's latest list (after a round when there is
-none younger than the period, so it works without a subscriber); the page no longer calls it.
+The backend still answers `GET /api/service-status` with the source's latest list (after a
+round when there is none younger than the period); nginx no longer exposes it, so it is
+reachable only inside the stack network.
 
 The `containers` source follows every Portainer Docker environment that is up: it lists the
 containers, then holds the environment's Docker event stream open (`type=container` only,
@@ -130,10 +145,11 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 
 | Path | Purpose |
 |---|---|
-| `src/api/` | status-service calls, inventory and container list validation, refresh request, typed errors |
+| `src/api/` | validation of the stream payloads (inventory, service checks, container list), the refresh request, typed errors |
 | `src/domain/` | pure logic: normalizing NetBox data, building the tree, state rules, ARP presence |
-| `src/composables/` | async state (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`) combined in `useLab` |
-| `src/components/` | render-only components: the tree, the ARP page, error page, skeleton |
+| `src/composables/` | the shared stream (`useEventStream`) and one reader per source (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`, `useSourceStatuses`), combined in `useLab` |
+| `src/components/` | render-only components: the tree, the ARP page, the refresh clock, error page, skeleton |
+| `src/presentation/` | display helpers: layout, links, platform icons, hardware text, the clock's bits and colours |
 | `src/__fixtures__/` | synthetic responses covering all topology cases, used by the tests |
 | `backend/app/` | FastAPI: stream hub and polling base, ARP mirror, inventory cycle (NetBox, NPM), Proxmox, Portainer container states, service checks |
 | `backend/tests/` | pytest suite |
@@ -167,7 +183,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 
 The browser calls its own origin only:
-- `GET /api/stream`, `GET /api/service-status`, `POST /api/refresh` -> the backend (`http://api:8000`)
+- `GET /api/stream`, `POST /api/refresh` -> the backend (`http://api:8000`)
 
 In nginx and the Vite dev server, requests are strictly limited to the required endpoints and methods.
 The environment variables have no `VITE_` prefix: they are never bundled into client assets.
