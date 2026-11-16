@@ -64,6 +64,15 @@ describe('indexArpPresence', () => {
     expect(Object.fromEntries(index)).toEqual({ 'device:7': 'up', 'vm:4': 'down' })
   })
 
+  it('ignores static (permanent) entries: the router keeps them for hosts that are off', () => {
+    const index = indexArpPresence([
+      row('*1', { netbox: nb('vm', '1'), status: 'permanent' }),
+      row('*2', { netbox: nb('vm', '2'), status: 'permanent' }),
+      row('*3', { netbox: nb('vm', '2'), presence: 'disconnected', status: 'failed' }),
+    ])
+    expect(Object.fromEntries(index)).toEqual({ 'vm:2': 'down' })
+  })
+
   it('ignores rows whose presence is unknown', () => {
     expect(indexArpPresence([row('*1', { netbox: nb('vm', '1'), presence: 'unknown', status: '' })]).size).toBe(0)
   })
