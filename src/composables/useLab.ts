@@ -87,7 +87,6 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
       await Promise.allSettled([
         inventory.refresh(),
         statuses.refresh(),
-        containerStatuses.refresh(),
       ])
     } finally {
       isManualRefreshing.value = false

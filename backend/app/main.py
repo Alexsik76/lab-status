@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from .arp import ArpSource
 from .checks import ServiceChecker
 from .config import Settings
+from .containers import ContainersSource, containers_sources
 from .hub import Message, StreamHub
 from .inventory import InventorySource, InventoryUnavailable
 from .netbox import NetBoxClient
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     netbox = NetBoxClient(settings, netbox_http)
     npm_http = httpx.AsyncClient()
     proxmox_http = httpx.AsyncClient(verify=False)
+    portainer_http = httpx.AsyncClient(verify=False)
     npm = NpmClient(settings, npm_http) if settings.npm_enabled else None
 
     async def connect() -> RouterOsConnection:
@@ -49,7 +51,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     inventory = InventorySource(netbox, npm, settings.netbox_public_url, settings.inventory_period_s)
     inventory.on_macs_changed.append(arp.set_macs)
     app.state.hub = StreamHub(
-        [arp, inventory, *proxmox_sources(settings, proxmox_http)], grace_s=settings.stream_grace_s
+        [arp, inventory, *proxmox_sources(settings, proxmox_http), *containers_sources(settings, portainer_http)],
+        grace_s=settings.stream_grace_s,
     )
     app.state.checks = ServiceChecker(
         inventory.load_targets, checks_http, settings.service_check_exclude, inventory.load_public_urls
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await checks_http.aclose()
         await npm_http.aclose()
         await proxmox_http.aclose()
+        await portainer_http.aclose()
 
 
 app = FastAPI(title="lab-status-api", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -86,10 +90,10 @@ async def service_status() -> list[dict[str, object]]:
 async def refresh() -> dict[str, object]:
     """Starts a cycle of every polling source at once (the ones currently running)."""
     hub: StreamHub = app.state.hub
-    names = [source.name for source in hub.sources if isinstance(source, PollingSource)]
-    for source in hub.sources:
-        if isinstance(source, PollingSource):
-            source.refresh()
+    refreshable = [s for s in hub.sources if isinstance(s, PollingSource | ContainersSource)]
+    for source in refreshable:
+        source.refresh()
+    names = [source.name for source in refreshable]
     return {"refreshing": names}
 
 

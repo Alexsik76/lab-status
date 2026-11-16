@@ -7,8 +7,6 @@ services:
       - api
     ports:
       - 8081:80
-    environment:
-      - CONTAINER_STATUS_URL
 
   api:
     build: ./backend
@@ -30,5 +28,8 @@ services:
       - NPM_URL
       - NPM_IDENTITY
       - NPM_SECRET
+      - PORTAINER_URL
+      - PORTAINER_TOKEN
+      - CONTAINERS_PERIOD_S
       - INVENTORY_PERIOD_S
       - STREAM_GRACE_S
