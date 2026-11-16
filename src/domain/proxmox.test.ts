@@ -39,6 +39,7 @@ function makeVm(partial: Partial<VmRecord>): VmRecord {
     stack: null,
     cluster: null,
     platform: null,
+    icon: null,
     ip: null,
     tags: [],
     deviceId: null,

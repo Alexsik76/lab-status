@@ -1,73 +1,57 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { resolveIcon, type IconName, type PlatformIcon } from '../presentation/platform'
+import { computed, ref, watch } from 'vue'
+import { iconUrl } from '../presentation/icons'
 
 const props = withDefaults(
   defineProps<{
-    platform?: string | null
-    /** Icon set explicitly; wins over the platform's. */
-    icon?: IconName | null
-    name?: string | null
+    /** Dashboard Icons name from NetBox (custom field `icon`). */
+    icon?: string | null
+    /** Tooltip text, e.g. the platform name; the icon name when empty. */
+    label?: string | null
+    /** Built-in icon shown when there is no NetBox icon: server (machines, guests) or docker. */
+    fallback?: 'server' | 'docker'
     size?: number
     dim?: boolean
   }>(),
   {
-    platform: null,
     icon: null,
-    name: null,
+    label: null,
+    fallback: 'server',
     size: 20,
     dim: false,
   },
 )
 
-interface IconConfig {
-  kind: 'image' | 'svg'
-  name: string
-  alt: string
-  src?: string
-  bg: string
-  fg: string
-}
+/** A NetBox icon that failed to load falls back to the built-in one. */
+const failed = ref(false)
+watch(
+  () => props.icon,
+  () => {
+    failed.value = false
+  },
+)
 
-const BRAND_THEMES: Record<string, { bg: string; fg: string }> = {
-  proxmox: { bg: 'oklch(0.26 0.03 50)', fg: 'oklch(0.80 0.13 55)' },
-  truenas: { bg: 'oklch(0.26 0.03 235)', fg: 'oklch(0.78 0.11 230)' },
-  debian: { bg: 'oklch(0.26 0.03 5)', fg: 'oklch(0.72 0.15 8)' },
-  haos: { bg: 'oklch(0.30 0.06 225)', fg: 'oklch(0.80 0.11 225)' },
-  cups: { bg: 'oklch(0.26 0.04 250)', fg: 'oklch(0.72 0.14 250)' },
-  windows: { bg: 'oklch(0.26 0.04 235)', fg: 'oklch(0.72 0.13 235)' },
-  server: { bg: 'oklch(0.27 0.01 250)', fg: 'oklch(0.70 0.012 250)' },
-  docker: { bg: 'oklch(0.29 0.06 245)', fg: 'oklch(0.74 0.12 245)' },
-}
-
-const icon = computed<IconConfig | null>(() => {
-  if (props.name === 'docker') {
-    const theme = BRAND_THEMES.docker
-    return { kind: 'svg', name: 'docker', alt: 'Docker', bg: theme.bg, fg: theme.fg }
-  }
-
-  const resolved: PlatformIcon = resolveIcon(props.icon, props.platform)
-  const theme = BRAND_THEMES[resolved.name]
-  if (!theme) return null
-
-  return {
-    kind: resolved.kind,
-    name: resolved.name,
-    alt: resolved.alt,
-    src: resolved.src,
-    bg: theme.bg,
-    fg: theme.fg,
-  }
+const src = computed(() => (failed.value ? null : iconUrl(props.icon)))
+const kind = computed<'image' | 'docker' | 'server'>(() => (src.value ? 'image' : props.fallback))
+const title = computed(() => {
+  if (kind.value === 'docker') return 'Docker'
+  if (kind.value === 'image') return props.label || props.icon || ''
+  return props.label || 'Server'
 })
 
-const bg = computed(() => (props.dim ? 'var(--color-icon-dim-bg)' : icon.value?.bg))
-const fg = computed(() => (props.dim ? 'var(--color-icon-dim-fg)' : icon.value?.fg))
+const THEMES = {
+  image: { bg: 'oklch(0.25 0.01 250)', fg: '' },
+  docker: { bg: 'oklch(0.29 0.06 245)', fg: 'oklch(0.74 0.12 245)' },
+  server: { bg: 'oklch(0.27 0.01 250)', fg: 'oklch(0.70 0.012 250)' },
+}
+
+const bg = computed(() => (props.dim ? 'var(--color-icon-dim-bg)' : THEMES[kind.value].bg))
+const fg = computed(() => (props.dim ? 'var(--color-icon-dim-fg)' : THEMES[kind.value].fg))
 const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}px`)
 </script>
 
 <template>
   <span
-    v-if="icon"
     class="os-icon-box"
     :style="{
       width: `${size}px`,
@@ -75,61 +59,30 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
       borderRadius,
       background: bg,
     }"
-    :title="icon.alt"
+    :title="title"
   >
     <img
-      v-if="icon.kind === 'image' && icon.src"
-      :src="icon.src"
-      :alt="icon.alt"
+      v-if="kind === 'image' && src"
+      :src="src"
+      :alt="title"
       class="os-logo-img"
+      loading="lazy"
+      referrerpolicy="no-referrer"
       :style="{
-        width: `${Math.round(size * 0.8)}px`,
-        height: `${Math.round(size * 0.8)}px`,
+        width: `${Math.round(size * 0.74)}px`,
+        height: `${Math.round(size * 0.74)}px`,
         filter: dim ? 'grayscale(1) brightness(0.9)' : 'none',
         opacity: dim ? 0.65 : 1,
       }"
+      @error="failed = true"
     />
 
     <svg
-      v-else-if="icon.name === 'haos'"
+      v-else-if="kind === 'docker'"
       :width="size"
       :height="size"
       viewBox="0 0 16 16"
       class="os-svg"
-      :style="{ borderRadius, background: bg }"
-    >
-      <path
-        d="M3.5 8 L8 3.8 L12.5 8 V12.2 H3.5 Z"
-        fill="none"
-        :stroke="fg"
-        stroke-width="1.6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <circle cx="8" cy="9" r="1.2" :fill="fg" />
-    </svg>
-
-    <svg
-      v-else-if="icon.name === 'server'"
-      :width="size"
-      :height="size"
-      viewBox="0 0 16 16"
-      class="os-svg"
-      :style="{ borderRadius, background: bg }"
-    >
-      <rect x="3.5" y="3.5" width="9" height="3.6" rx="0.8" fill="none" :stroke="fg" stroke-width="1.2" />
-      <rect x="3.5" y="8.9" width="9" height="3.6" rx="0.8" fill="none" :stroke="fg" stroke-width="1.2" />
-      <circle cx="5.6" cy="5.3" r="0.75" :fill="fg" />
-      <circle cx="5.6" cy="10.7" r="0.75" :fill="fg" />
-    </svg>
-
-    <svg
-      v-else-if="icon.name === 'docker'"
-      :width="size"
-      :height="size"
-      viewBox="0 0 16 16"
-      class="os-svg"
-      :style="{ borderRadius, background: bg }"
     >
       <path
         d="M2.5 8.6 H13.2 C13 11.4 10.8 13 7.6 13 C4.6 13 3 11.2 2.5 8.6 Z"
@@ -139,6 +92,13 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
       <rect x="5.9" y="6.2" width="2" height="2" rx="0.3" :fill="fg" />
       <rect x="8.2" y="6.2" width="2" height="2" rx="0.3" :fill="fg" />
       <rect x="5.9" y="3.9" width="2" height="2" rx="0.3" :fill="fg" />
+    </svg>
+
+    <svg v-else :width="size" :height="size" viewBox="0 0 16 16" class="os-svg">
+      <rect x="3.5" y="3.5" width="9" height="3.6" rx="0.8" fill="none" :stroke="fg" stroke-width="1.2" />
+      <rect x="3.5" y="8.9" width="9" height="3.6" rx="0.8" fill="none" :stroke="fg" stroke-width="1.2" />
+      <circle cx="5.6" cy="5.3" r="0.75" :fill="fg" />
+      <circle cx="5.6" cy="10.7" r="0.75" :fill="fg" />
     </svg>
   </span>
 </template>

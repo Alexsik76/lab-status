@@ -34,9 +34,9 @@ Json = dict[str, Any]
 #: The page's NetBox GraphQL query (moved here from the browser; same text).
 INVENTORY_QUERY = """{
   device_list { id name status role { slug } device_type { model manufacturer { name } }
-    primary_ip4 { address } cluster { name } platform { name } tags { name color } custom_fields }
+    primary_ip4 { address } cluster { name } platform { name custom_fields } tags { name color } custom_fields }
   virtual_machine_list { id name status vcpus memory disk description
-    virtual_machine_type { name } cluster { name } device { id name } platform { name }
+    virtual_machine_type { name } cluster { name } device { id name } platform { name custom_fields }
     primary_ip4 { address } tags { name color } custom_fields }
   service_list { id name ports custom_fields ipaddresses { address }
     parent { __typename ... on VirtualMachineType { id } ... on DeviceType { id } } }

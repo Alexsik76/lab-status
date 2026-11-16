@@ -30,6 +30,8 @@ export interface DeviceRecord {
   ip: string | null
   cluster: string | null
   platform: string | null
+  /** Dashboard Icons name (custom field `icon` of the device, else of its platform). */
+  icon: string | null
   tags: TagItem[]
   hardware: DeviceHardware
 }
@@ -50,6 +52,8 @@ export interface VmRecord {
   stack: string | null
   cluster: string | null
   platform: string | null
+  /** Dashboard Icons name (custom field `icon` of the VM, else of its platform). */
+  icon: string | null
   ip: string | null
   tags: TagItem[]
   /** Id of the device the VM runs on (NetBox `device`). */
@@ -102,6 +106,8 @@ interface NodeBase {
 
 export interface Container extends NodeBase {
   image: string | null
+  /** Dashboard Icons name (custom field `icon`); the Docker icon when null. */
+  icon: string | null
   stack: string | null
   tags: TagItem[]
   blinking?: boolean
@@ -138,6 +144,7 @@ export interface Guest extends NodeBase {
   disk: number | null
   ip: string | null
   platform: string | null
+  icon: string | null
   cluster: string | null
   tags: TagItem[]
   stacks: Stack[]
@@ -151,6 +158,7 @@ export interface Machine extends NodeBase {
   manufacturer: string | null
   ip: string | null
   platform: string | null
+  icon: string | null
   cluster: string | null
   tags: TagItem[]
   hardware: DeviceHardware

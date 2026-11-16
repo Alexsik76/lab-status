@@ -10,6 +10,7 @@ function mockMachine(id: string, name: string): Machine {
     manufacturer: null,
     ip: null,
     platform: null,
+    icon: null,
     cluster: null,
     tags: [],
     hardware: { cpuCores: null, memoryGb: null, storageGb: null },

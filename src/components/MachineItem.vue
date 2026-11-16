@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { HOST_ICONS } from '../config'
 import type { Machine } from '../domain/model'
 import { describeHardware, formatHardware } from '../presentation/hardware'
 import { resolveHostDomainUrl, urlHostLabel } from '../presentation/hostLinks'
@@ -84,7 +83,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
           :class="{ 'is-clickable': !!titleUrl }"
           :title="titleTooltip"
         >
-          <OsIcon :platform="machine.platform" :icon="HOST_ICONS[machine.name]" :size="22" />
+          <OsIcon :icon="machine.icon" :label="machine.platform" :size="22" />
           <span class="host-name">{{ machine.name }}</span>
         </LinkOrPlain>
         <span class="spacer"></span>
