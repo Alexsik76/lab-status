@@ -9,7 +9,7 @@ import {
 } from './__fixtures__'
 import { FakeEventSource } from './__fixtures__/fakeEventSource'
 import App from './App.vue'
-import { REFRESH_URL, STATUS_URL } from './config'
+import { REFRESH_URL } from './config'
 import { INVENTORY_SCHEMA_VERSION, INVENTORY_STORAGE_KEY } from './composables/useInventory'
 import { normalizeInventory } from './domain/normalize'
 
@@ -43,30 +43,34 @@ function stubBackend(handlers: {
   containerStatus?: Handler
   proxmoxResources?: Handler
   proxmoxRrd?: Handler
+  /** Held before the backend answers POST /api/refresh. */
+  refreshGate?: () => Promise<void>
 }) {
   const containerStatusHandler = handlers.containerStatus ?? ok(containerStatusEntries)
   const proxmoxResourcesHandler = handlers.proxmoxResources ?? ok({ data: proxmoxResources })
   const proxmoxRrdHandler = handlers.proxmoxRrd ?? ok({ data: proxmoxRrdPoints })
 
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === STATUS_URL) return handlers.status()
     if (url === REFRESH_URL && init?.method === 'POST') {
+      await handlers.refreshGate?.()
       // The backend runs its polling sources at once; their results arrive over the stream.
       const es = FakeEventSource.latest()
       void feedInventory(es, handlers.netbox)
       void feedProxmox(es, proxmoxResourcesHandler, proxmoxRrdHandler)
       void feedContainers(es, containerStatusHandler)
-      return new Response(JSON.stringify({ refreshing: ['inventory', 'proxmox', 'metrics', 'containers'] }), {
-        status: 202,
-      })
+      void feedServices(es, handlers.status)
+      return new Response(
+        JSON.stringify({ refreshing: ['inventory', 'services', 'proxmox', 'metrics', 'containers'] }),
+        { status: 202 },
+      )
     }
     throw new Error(`unexpected request ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
 
-  // NetBox, Proxmox and container states reach the page over the backend stream: the
-  // handlers stand for the backend's upstream answers, and their outcome is sent as
-  // `inventory` / `proxmox` / `metrics` / `containers` events.
+  // Everything reaches the page over the backend stream: the handlers stand for the backend's
+  // upstream answers (NetBox, the service checks, Proxmox, Portainer), and their outcome is
+  // sent as `inventory` / `services` / `proxmox` / `metrics` / `containers` events.
   class BackendStream extends FakeEventSource {
     constructor(url: string) {
       super(url)
@@ -74,6 +78,7 @@ function stubBackend(handlers: {
       void feedInventory(this, handlers.netbox)
       void feedProxmox(this, proxmoxResourcesHandler, proxmoxRrdHandler)
       void feedContainers(this, containerStatusHandler)
+      void feedServices(this, handlers.status)
     }
   }
   vi.stubGlobal('EventSource', BackendStream)
@@ -104,6 +109,19 @@ async function feedInventory(es: FakeEventSource, netbox: Handler) {
   }
   es.emit('inventory', { type: 'data', data: body.data })
   es.emit('inventory', { ...sourceStatus('live'), periodS: 300 })
+}
+
+/** What the backend's services source publishes for these check results. */
+async function feedServices(es: FakeEventSource, status: Handler) {
+  let entries: unknown
+  try {
+    entries = await (await status()).json()
+  } catch {
+    es.emit('services', { ...sourceStatus('error', 'NetBox is unreachable.'), periodS: 180 })
+    return
+  }
+  es.emit('services', { type: 'data', data: entries })
+  es.emit('services', { ...sourceStatus('live'), periodS: 180 })
 }
 
 /** What the backend's containers source publishes for this list of container states. */
@@ -357,10 +375,11 @@ describe('App', () => {
   })
 
   it('does not clear data or show pending while a refresh is in flight', async () => {
-    let statusHandler: Handler = ok(statusEntries)
+    let refreshGate = async () => {}
     stubBackend({
       netbox: ok(netboxResponse),
-      status: () => statusHandler(),
+      status: ok(statusEntries),
+      refreshGate: () => refreshGate(),
     })
 
     const wrapper = await mountApp()
@@ -376,12 +395,9 @@ describe('App', () => {
     expect(findGuest('vm-worker')?.classes()).toContain('state-up')
     expect(findMachine('node-alpha')?.findAll('.metric-spark')).toHaveLength(2)
 
-    // Trigger a refresh with a slow status service response
+    // Trigger a refresh that the backend answers slowly
     const slow = deferred()
-    statusHandler = async () => {
-      await slow.gate
-      return ok(statusEntries)()
-    }
+    refreshGate = () => slow.gate
 
     await wrapper.find('.refresh-btn').trigger('click')
     // During manual refresh, button shows progress

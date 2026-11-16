@@ -449,3 +449,34 @@ async def test_a_failing_delayed_re_read_does_not_break_the_session() -> None:
     await asyncio.sleep(0.01)
     assert any(e["name"] == "n8n" and e["state"] == "exited" for e in source.data)
     await stop(task)
+
+
+# ---- state changes for the service checks (stage 5) --------------------------------------
+
+
+async def test_state_changes_are_reported_but_not_the_initial_list() -> None:
+    fake = two_envs()
+    source, _ = make(fake, follow_up_s=())
+    changes: list[tuple] = []
+    source.on_change.append(lambda *args: changes.append(args))
+    task = await start(source)
+    assert changes == []
+    env = fake.envs[3]
+    env.containers["a2"] = container("a2", "n8n", "exited", "Exited (0) 1 second ago")
+    await env.events.put(event("die", "a2"))
+    await asyncio.sleep(0.02)
+    env.containers["a2"] = container("a2", "n8n", "running", "Up 1 second")
+    await env.events.put(event("health_status: healthy", "a2"))  # any re-read that sees a new state
+    await asyncio.sleep(0.02)
+    env.containers["a2"] = container("a2", "n8n", "running", "Up 2 seconds (healthy)")
+    await env.events.put(event("health_status: healthy", "a2"))  # status text only: no change
+    await asyncio.sleep(0.02)
+    fake.envs[6].containers["b1"] = container("b1", "frigate", "exited", "Exited (1) 1 second ago")
+    source.refresh()  # a missed event found by the reconcile
+    await asyncio.sleep(0.05)
+    assert changes == [
+        ("docker-1", "n8n", "running", "exited"),
+        ("docker-1", "n8n", "exited", "running"),
+        ("docker-2", "frigate", "running", "exited"),
+    ]
+    await stop(task)

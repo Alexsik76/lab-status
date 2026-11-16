@@ -109,6 +109,8 @@ class InventorySource(PollingSource):
         self.parts = InventoryParts()
         #: Called with the new directory whenever the MAC directory changed.
         self.on_macs_changed: list[Callable[[dict[str, MacMatch]], None]] = []
+        #: Called after every cycle (successful or not) with the shared parts.
+        self.on_cycle: list[Callable[[InventoryParts], None]] = []
 
     # ---- cycle ----
 
@@ -162,6 +164,8 @@ class InventorySource(PollingSource):
         else:
             errors["inventory"] = describe("NetBox", results["inventory"])
         self.parts.errors = errors
+        for callback in self.on_cycle:
+            callback(self.parts)
         if "inventory" in errors:
             raise UpstreamError(self._summary())
         return self.parts.inventory

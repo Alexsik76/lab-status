@@ -1,9 +1,6 @@
-/** Same-origin endpoint that makes the backend's polling sources (inventory, Proxmox, containers) run a cycle at once. */
+/** Same-origin endpoint that makes the backend's polling sources (inventory, Proxmox, containers, service checks) run at once. */
 export const REFRESH_URL = '/api/refresh'
 export const REFRESH_TIMEOUT_MS = 5_000
-
-/** Same-origin service status endpoint, answered by the backend. */
-export const STATUS_URL = '/api/service-status'
 
 /**
  * Same-origin Server-Sent Events stream of the backend; the SSE `event:` field names the
@@ -18,7 +15,6 @@ export const STREAM_HIDDEN_CLOSE_MS = 10_000
 export const STREAM_RETRY_INITIAL_MS = 2_000
 export const STREAM_RETRY_MAX_MS = 30_000
 
-export const STATUS_TIMEOUT_MS = 10_000
 
 /**
  * Shared reverse-proxied Proxmox Web UI. Server headers of Proxmox VE nodes link here,

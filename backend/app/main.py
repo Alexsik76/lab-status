@@ -21,6 +21,7 @@ from .npm import NpmClient
 from .polling import PollingSource
 from .proxmox import proxmox_sources
 from .routeros import RouterOsConnection
+from .services import ServicesSource
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -50,12 +51,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     arp = ArpSource(connect)
     inventory = InventorySource(netbox, npm, settings.netbox_public_url, settings.inventory_period_s)
     inventory.on_macs_changed.append(arp.set_macs)
-    app.state.hub = StreamHub(
-        [arp, inventory, *proxmox_sources(settings, proxmox_http), *containers_sources(settings, portainer_http)],
-        grace_s=settings.stream_grace_s,
-    )
-    app.state.checks = ServiceChecker(
+    checker = ServiceChecker(
         inventory.load_targets, checks_http, settings.service_check_exclude, inventory.load_public_urls
+    )
+    services = ServicesSource(inventory, checker, settings.services_period_s)
+    inventory.on_cycle.append(services.on_inventory)
+    arp.on_transition.append(services.on_arp)
+    containers = containers_sources(settings, portainer_http)
+    for source in containers:
+        source.on_change.append(services.on_container)
+    app.state.services = services
+    app.state.hub = StreamHub(
+        [arp, inventory, services, *proxmox_sources(settings, proxmox_http), *containers],
+        grace_s=settings.stream_grace_s,
     )
     try:
         yield
@@ -79,18 +87,20 @@ async def health() -> dict[str, object]:
 
 @app.get("/api/service-status")
 async def service_status() -> list[dict[str, object]]:
-    """Runs an inventory cycle first when none ran within its period (no page subscribed)."""
+    """The `services` source's latest list; a round runs first when it has none younger than
+    its period (no page subscribed). The page itself reads the stream."""
     try:
-        return await app.state.checks.run()
+        return await app.state.services.latest()
     except InventoryUnavailable as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/api/refresh", status_code=202)
 async def refresh() -> dict[str, object]:
-    """Starts a cycle of every polling source at once (the ones currently running)."""
+    """Starts a cycle of every polling source, a container reconcile and a full round of service
+    checks at once (the sources currently running)."""
     hub: StreamHub = app.state.hub
-    refreshable = [s for s in hub.sources if isinstance(s, PollingSource | ContainersSource)]
+    refreshable = [s for s in hub.sources if isinstance(s, PollingSource | ContainersSource | ServicesSource)]
     for source in refreshable:
         source.refresh()
     names = [source.name for source in refreshable]

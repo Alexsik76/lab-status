@@ -13,6 +13,7 @@ from app.hub import StreamHub
 from app.inventory import INVENTORY_QUERY, InventorySource, InventoryUnavailable
 from app.netbox import NetBoxClient, Target
 from app.npm import NpmClient
+from app.services import ServicesSource
 
 GRAPHQL = json.loads((Path(__file__).resolve().parents[2] / "src" / "__fixtures__" / "netbox.json").read_text())
 SETTINGS = Settings(
@@ -211,7 +212,9 @@ async def test_first_npm_failure_gives_an_empty_map_and_statuses_still_work(monk
 def _api(source: InventorySource) -> httpx.AsyncClient:
     ok = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200)))
     main_module.app.state.hub = StreamHub([source], grace_s=0.05)
-    main_module.app.state.checks = ServiceChecker(source.load_targets, ok, public_urls=source.load_public_urls)
+    # /api/service-status reads the services source, which checks with this checker.
+    checker = ServiceChecker(source.load_targets, ok, public_urls=source.load_public_urls)
+    main_module.app.state.services = ServicesSource(source, checker)
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://api")
 
 

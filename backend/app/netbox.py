@@ -1,7 +1,7 @@
 """NetBox reads: the page's GraphQL inventory, the MAC directory for ARP enrichment and the
 service check targets (REST). Only the `inventory` source calls these."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -126,6 +126,9 @@ class Target:
     name: str
     url: str
     service_id: int
+    #: NetBox id of the virtual machine (container, VM, LXC) the service belongs to; None for a
+    #: device. Used to find a container's targets; not part of the target's identity.
+    parent_vm_id: int | None = field(default=None, compare=False)
 
 
 def build_targets(services: list[Json], vms: list[Json], devices: list[Json]) -> list[Target]:
@@ -163,5 +166,8 @@ def build_targets(services: list[Json], vms: list[Json], devices: list[Json]) ->
 
         parent_name = parent_ref.get("name") or parent.get("name") or ""
         name = service["name"] if parent_name == service["name"] else f"{parent_name}/{service['name']}"
-        targets.append(Target(name=name, url=f"{scheme}://{ip}:{ports[0]}", service_id=service["id"]))
+        targets.append(Target(
+            name=name, url=f"{scheme}://{ip}:{ports[0]}", service_id=service["id"],
+            parent_vm_id=None if on_device else parent_ref.get("id"),
+        ))
     return targets

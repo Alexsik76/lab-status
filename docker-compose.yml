@@ -25,6 +25,7 @@ services:
       - PROXMOX_PERIOD_S
       - PROXMOX_METRICS_PERIOD_S
       - SERVICE_CHECK_EXCLUDE
+      - SERVICES_PERIOD_S
       - NPM_URL
       - NPM_IDENTITY
       - NPM_SECRET

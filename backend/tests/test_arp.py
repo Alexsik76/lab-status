@@ -243,3 +243,72 @@ def test_mac_directory_before_the_session_sends_nothing() -> None:
     source.attach(events.append)
     source.set_macs({"02:00:00:00:00:AA": MATCH})
     assert events == []
+
+
+# ---- presence transitions (stage 5: they drive the service checks) ---------------------
+
+
+async def _live_source(script_after_print: list[Reply]) -> tuple[StreamHub, ArpSource, list[tuple[str, str]], FakeConnection]:
+    conn = FakeConnection([
+        Reply("!re", "print", _attrs("*1", "reachable", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "print", _attrs("*2", "failed", mac="02:00:00:00:00:02", address="192.0.2.2")),
+        Reply("!re", "print", _attrs("*3", "permanent", mac="02:00:00:00:00:03", address="192.0.2.3")),
+        Reply("!done", "print"),
+        Reply("!done", "lease-print"),
+        *script_after_print,
+    ])
+
+    async def connect():
+        return conn
+
+    hub, source = _hub(connect, {})
+    seen: list[tuple[str, str]] = []
+    source.on_transition.append(lambda address, transition: seen.append((address, transition)))
+    hub.subscribe()
+    await asyncio.sleep(0.05)
+    return hub, source, seen, conn
+
+
+async def test_the_initial_table_produces_no_transitions() -> None:
+    hub, _, seen, _ = await _live_source([])
+    assert seen == []
+    await hub.aclose()
+
+
+async def test_reachable_stale_and_other_active_states_produce_nothing() -> None:
+    hub, _, seen, _ = await _live_source([
+        Reply("!re", "listen", _attrs("*1", "stale", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "listen", _attrs("*1", "delay", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "listen", _attrs("*1", "probe", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "listen", _attrs("*1", "reachable", mac="02:00:00:00:00:01", address="192.0.2.1")),
+    ])
+    assert seen == []
+    await hub.aclose()
+
+
+async def test_failed_removed_and_appeared() -> None:
+    hub, _, seen, _ = await _live_source([
+        Reply("!re", "listen", _attrs("*1", "failed", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "listen", _attrs("*1", "reachable", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "listen", {".id": "*1", ".dead": "true"}),  # removed while active
+        Reply("!re", "listen", _attrs("*9", "reachable", mac="02:00:00:00:00:01", address="192.0.2.1")),
+        Reply("!re", "listen", {".id": "*2", ".dead": "true"}),  # removed after failed: nothing
+        Reply("!re", "listen", _attrs("*4", "incomplete", mac="", address="192.0.2.4")),  # new and failed
+    ])
+    assert seen == [
+        ("192.0.2.1", "failed"),
+        ("192.0.2.1", "appeared"),
+        ("192.0.2.1", "removed"),
+        ("192.0.2.1", "appeared"),
+        ("192.0.2.4", "failed"),
+    ]
+    await hub.aclose()
+
+
+async def test_a_second_row_for_an_active_address_changes_nothing() -> None:
+    hub, _, seen, _ = await _live_source([
+        Reply("!re", "listen", _attrs("*7", "reachable", mac="02:00:00:00:00:77", address="192.0.2.1")),
+        Reply("!re", "listen", {".id": "*7", ".dead": "true"}),
+    ])
+    assert seen == []
+    await hub.aclose()
