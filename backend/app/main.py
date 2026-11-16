@@ -16,6 +16,7 @@ from .config import Settings
 from .hub import Message, StreamHub
 from .netbox import NetBoxClient, fetch_mac_directory, fetch_targets
 from .npm import NpmClient, PublicUrls, fetch_public_url_map
+from .proxmox import proxmox_sources
 from .routeros import RouterOsConnection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     checks_http = httpx.AsyncClient(verify=False)
     netbox = NetBoxClient(settings, netbox_http)
     npm_http = httpx.AsyncClient()
+    proxmox_http = httpx.AsyncClient(verify=False)
     public_urls = None
     if settings.npm_enabled:
         npm = NpmClient(settings, npm_http)
@@ -45,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.settings = settings
     arp = ArpSource(connect, lambda: fetch_mac_directory(netbox, settings.netbox_public_url))
-    app.state.hub = StreamHub([arp], grace_s=settings.stream_grace_s)
+    app.state.hub = StreamHub([arp, *proxmox_sources(settings, proxmox_http)], grace_s=settings.stream_grace_s)
     app.state.checks = ServiceChecker(
         lambda: fetch_targets(netbox), checks_http, settings.service_check_exclude, public_urls
     )
@@ -56,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await netbox_http.aclose()
         await checks_http.aclose()
         await npm_http.aclose()
+        await proxmox_http.aclose()
 
 
 app = FastAPI(title="lab-status-api", lifespan=lifespan, docs_url=None, redoc_url=None)

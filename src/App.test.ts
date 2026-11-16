@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   containerStatusEntries,
@@ -7,19 +7,18 @@ import {
   proxmoxRrdPoints,
   statusEntries,
 } from './__fixtures__'
+import { FakeEventSource } from './__fixtures__/fakeEventSource'
 import App from './App.vue'
-import {
-  CONTAINER_STATUS_URL,
-  NETBOX_GRAPHQL_URL,
-  PROXMOX_CLUSTER_RESOURCES_URL,
-  PROXMOX_NODES_URL,
-  STATUS_URL,
-} from './config'
+import { CONTAINER_STATUS_URL, NETBOX_GRAPHQL_URL, STATUS_URL } from './config'
 import { INVENTORY_SCHEMA_VERSION, INVENTORY_STORAGE_KEY } from './composables/useInventory'
 import { normalizeInventory } from './domain/normalize'
 
+// Unmounting closes the app's shared stream, so every test opens its own.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
   localStorage.clear()
+  FakeEventSource.instances = []
 })
 
 afterEach(() => {
@@ -53,12 +52,54 @@ function stubBackend(handlers: {
     if (url === NETBOX_GRAPHQL_URL) return handlers.netbox()
     if (url === STATUS_URL) return handlers.status()
     if (url === CONTAINER_STATUS_URL) return containerStatusHandler()
-    if (url === PROXMOX_CLUSTER_RESOURCES_URL) return proxmoxResourcesHandler()
-    if (url.startsWith(PROXMOX_NODES_URL) && url.includes('/rrddata')) return proxmoxRrdHandler()
     throw new Error(`unexpected request ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
+
+  // Proxmox reaches the page over the backend stream: the handlers stand for the backend's
+  // upstream answers, and their outcome is sent as `proxmox` / `metrics` events.
+  class BackendStream extends FakeEventSource {
+    constructor(url: string) {
+      super(url)
+      void feedProxmox(this, proxmoxResourcesHandler, proxmoxRrdHandler)
+    }
+  }
+  vi.stubGlobal('EventSource', BackendStream)
   return fetchMock
+}
+
+const sourceStatus = (state: 'live' | 'error', error: string | null = null) => ({
+  type: 'status',
+  state,
+  error,
+  updatedAt: state === 'live' ? new Date().toISOString() : null,
+  periodS: 15,
+})
+
+/** What the backend's Proxmox sources publish for these upstream answers. */
+async function feedProxmox(es: FakeEventSource, resources: Handler, rrd: Handler) {
+  es.open()
+  let items: Array<{ type: string; node?: string }>
+  try {
+    items = ((await (await resources()).json()) as { data: typeof items }).data
+  } catch {
+    es.emit('proxmox', sourceStatus('error', 'Proxmox is unreachable.'))
+    return
+  }
+  es.emit('proxmox', { type: 'data', data: items })
+  es.emit('proxmox', sourceStatus('live'))
+  const nodes = items.filter((i) => i.type === 'node' && typeof i.node === 'string').map((i) => i.node as string)
+  const points = await Promise.all(
+    nodes.map(async (node) => {
+      try {
+        return [node, ((await (await rrd()).json()) as { data: unknown[] }).data] as const
+      } catch {
+        return [node, []] as const
+      }
+    }),
+  )
+  es.emit('metrics', { type: 'data', data: Object.fromEntries(points) })
+  es.emit('metrics', sourceStatus('live'))
 }
 
 async function mountApp() {
@@ -274,11 +315,10 @@ describe('App', () => {
   })
 
   it('does not clear data or show pending while a refresh is in flight', async () => {
-    let proxmoxResourcesHandler: Handler = ok({ data: proxmoxResources })
+    let statusHandler: Handler = ok(statusEntries)
     stubBackend({
       netbox: ok(netboxResponse),
-      status: ok(statusEntries),
-      proxmoxResources: () => proxmoxResourcesHandler(),
+      status: () => statusHandler(),
     })
 
     const wrapper = await mountApp()
@@ -294,11 +334,11 @@ describe('App', () => {
     expect(findGuest('vm-worker')?.classes()).toContain('state-up')
     expect(findMachine('node-alpha')?.findAll('.metric-spark')).toHaveLength(2)
 
-    // Trigger a refresh with slow Proxmox response
+    // Trigger a refresh with a slow status service response
     const slow = deferred()
-    proxmoxResourcesHandler = async () => {
+    statusHandler = async () => {
       await slow.gate
-      return ok({ data: proxmoxResources })()
+      return ok(statusEntries)()
     }
 
     await wrapper.find('.refresh-btn').trigger('click')
@@ -322,11 +362,9 @@ describe('App', () => {
   })
 
   it('keeps last Proxmox data, states, and graphs when Proxmox refresh fails', async () => {
-    let proxmoxResourcesHandler: Handler = ok({ data: proxmoxResources })
     stubBackend({
       netbox: ok(netboxResponse),
       status: ok(statusEntries),
-      proxmoxResources: () => proxmoxResourcesHandler(),
     })
 
     const wrapper = await mountApp()
@@ -342,9 +380,8 @@ describe('App', () => {
     expect(findGuest('vm-worker')?.classes()).toContain('state-up')
     expect(findMachine('node-alpha')?.findAll('.metric-spark')).toHaveLength(2)
 
-    // Proxmox now fails on refresh
-    proxmoxResourcesHandler = down
-    await wrapper.find('.refresh-btn').trigger('click')
+    // The backend's next Proxmox poll fails
+    FakeEventSource.latest().emit('proxmox', sourceStatus('error', 'Proxmox is unreachable.'))
 
     // Notice banner must say showing last known data
     await vi.waitFor(() =>

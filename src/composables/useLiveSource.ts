@@ -11,7 +11,7 @@ export interface LiveSourceOptions<TData, TIndex> {
 }
 
 /**
- * Generalized composable for live independent data sources (statuses, Docker container states, Proxmox).
+ * Generalized composable for live independent data sources (statuses, Docker container states).
  * The previous data is kept while a refresh is in flight or after a refresh failed,
  * so data is never cleared on screen once loaded.
  */

@@ -10,8 +10,6 @@ services:
     environment:
       - NETBOX_URL
       - NETBOX_TOKEN
-      - PROXMOX_URL
-      - PROXMOX_TOKEN
       - CONTAINER_STATUS_URL
 
   api:
@@ -26,6 +24,10 @@ services:
       - ROUTEROS_PORT
       - ROUTEROS_USER
       - ROUTEROS_PASSWORD
+      - PROXMOX_URL
+      - PROXMOX_TOKEN
+      - PROXMOX_PERIOD_S
+      - PROXMOX_METRICS_PERIOD_S
       - SERVICE_CHECK_EXCLUDE
       - NPM_URL
       - NPM_IDENTITY
