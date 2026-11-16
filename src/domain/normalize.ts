@@ -121,6 +121,18 @@ export function stripAddressMask(address: string | null | undefined): string | n
   return plain || null
 }
 
+/** A Dashboard Icons name (lowercase letters, digits, dashes), or null. */
+export function parseIcon(customFields: Record<string, unknown> | null | undefined): string | null {
+  const icon = customFields?.icon
+  if (typeof icon !== 'string') return null
+  const name = icon.trim()
+  return /^[a-z0-9-]+$/.test(name) ? name : null
+}
+
+/** The object's own `icon` wins over its platform's. */
+const iconOf = (raw: RawDevice | RawVirtualMachine): string | null =>
+  parseIcon(raw.custom_fields) ?? parseIcon(raw.platform?.custom_fields)
+
 function normalizeDevice(raw: RawDevice): DeviceRecord {
   return {
     id: raw.id,
@@ -132,6 +144,7 @@ function normalizeDevice(raw: RawDevice): DeviceRecord {
     ip: stripAddressMask(raw.primary_ip4?.address),
     cluster: raw.cluster?.name ?? null,
     platform: raw.platform?.name ?? null,
+    icon: iconOf(raw),
     tags: normalizeTags(raw.tags),
     hardware: parseHardware(raw.custom_fields),
   }
@@ -153,6 +166,7 @@ function normalizeVm(raw: RawVirtualMachine): VmRecord {
     tags: normalizeTags(raw.tags),
     cluster: raw.cluster?.name ?? null,
     platform: raw.platform?.name ?? null,
+    icon: iconOf(raw),
     ip: stripAddressMask(raw.primary_ip4?.address),
     deviceId: raw.device?.id ?? null,
     hostId: parseHostId(raw.custom_fields),

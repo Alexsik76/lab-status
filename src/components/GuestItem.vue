@@ -91,7 +91,8 @@ const singleItems = computed<SingleItem[]>(() => {
           :class="{ 'is-inactive': guest.state === 'stopped' || guest.state === 'unknown' }"
         >
           <OsIcon
-            :platform="guest.platform"
+            :icon="guest.icon"
+            :label="guest.platform"
             :size="16"
             :dim="guest.state === 'stopped' || guest.state === 'unknown'"
           />

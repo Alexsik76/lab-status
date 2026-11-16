@@ -55,7 +55,8 @@ const titleText = computed(() => {
         :blinking="container.blinking"
       />
       <OsIcon
-        name="docker"
+        :icon="container.icon"
+        fallback="docker"
         :size="14"
         :dim="container.state === 'stopped' || container.state === 'unknown'"
       />

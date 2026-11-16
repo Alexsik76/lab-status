@@ -9,6 +9,7 @@ function makeContainer(id: string, name: string): Container {
     state: 'up',
     services: [],
     image: null,
+    icon: null,
     stack: null,
     tags: [],
   }
@@ -30,6 +31,7 @@ function makeGuest(
     disk: null,
     ip: null,
     platform: null,
+    icon: null,
     cluster: null,
     tags: [],
     services: [],
