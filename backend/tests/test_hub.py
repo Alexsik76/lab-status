@@ -170,3 +170,56 @@ def test_sse_frames_name_the_source() -> None:
     assert format_sse(("arp", {"type": "remove", "id": "*2"})) == (
         'event: arp\ndata: {"type":"remove","id":"*2"}\n\n'
     )
+
+
+class CrashingSource(PushSource):
+    """Crashes on its first run, then behaves."""
+
+    def __init__(self) -> None:
+        super().__init__("crashy")
+
+    async def run(self) -> None:
+        self.runs += 1
+        if self.runs == 1:
+            raise RuntimeError("boom")
+        await asyncio.Event().wait()
+
+
+async def test_crashed_source_is_restarted_while_subscribed() -> None:
+    source, other = CrashingSource(), PushSource()
+    hub = StreamHub([source, other], grace_s=0.05, restart_s=0.05)
+    hub.subscribe()
+    await asyncio.sleep(0.01)
+    assert source.runs == 1 and source.stops == 1
+    assert hub.health()["sources"]["crashy"]["running"] is False
+    assert hub.health()["sources"]["push"]["running"] is True  # the others keep running
+
+    await asyncio.sleep(0.06)
+    assert source.runs == 2
+    assert hub.health()["sources"]["crashy"]["running"] is True
+    assert other.runs == 1
+    await hub.aclose()
+
+
+async def test_crashed_source_is_not_restarted_without_subscribers() -> None:
+    source = CrashingSource()
+    hub = StreamHub([source], grace_s=1.0, restart_s=0.02)
+    queue = hub.subscribe()
+    hub.unsubscribe(queue)  # in the grace period when it crashes
+    await asyncio.sleep(0.05)
+    assert source.runs == 1
+
+    hub.subscribe()  # the next subscriber starts it again
+    await asyncio.sleep(0.01)
+    assert source.runs == 2
+    await hub.aclose()
+
+
+async def test_pending_restart_is_dropped_when_the_hub_stops() -> None:
+    source = CrashingSource()
+    hub = StreamHub([source], grace_s=0.01, restart_s=0.05)
+    queue = hub.subscribe()
+    await asyncio.sleep(0.005)
+    hub.unsubscribe(queue)
+    await asyncio.sleep(0.1)
+    assert source.runs == 1 and not hub.running

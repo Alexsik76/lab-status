@@ -22,6 +22,8 @@ Publish = Callable[[Event], None]
 
 QUEUE_SIZE = 500
 GRACE_S = 10.0
+#: Delay before a crashed source task is started again.
+RESTART_S = 2.0
 
 
 class Source(ABC):
@@ -62,7 +64,13 @@ class Source(ABC):
 
 
 class StreamHub:
-    def __init__(self, sources: Iterable[Source], grace_s: float = GRACE_S, queue_size: int = QUEUE_SIZE) -> None:
+    def __init__(
+        self,
+        sources: Iterable[Source],
+        grace_s: float = GRACE_S,
+        queue_size: int = QUEUE_SIZE,
+        restart_s: float = RESTART_S,
+    ) -> None:
         self._sources: dict[str, Source] = {}
         for source in sources:
             if source.name in self._sources:
@@ -70,6 +78,8 @@ class StreamHub:
             self._sources[source.name] = source
             source.attach(self._publisher(source.name))
         self._grace_s = grace_s
+        self._restart_s = restart_s
+        self._restart_timers: dict[str, asyncio.TimerHandle] = {}
         self._queue_size = queue_size
         self._subscribers: set[asyncio.Queue[Message]] = set()
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -105,7 +115,7 @@ class StreamHub:
             "running": self.running,
             "stopping": self._stop_timer is not None,
             "sources": {
-                name: {"running": name in self._tasks, **source.health()}
+                name: {"running": self._is_running(name), **source.health()}
                 for name, source in self._sources.items()
             },
         }
@@ -141,17 +151,39 @@ class StreamHub:
 
     # ---- lifecycle ----
 
+    def _is_running(self, name: str) -> bool:
+        task = self._tasks.get(name)
+        return task is not None and not task.done()
+
     def _start(self) -> None:
-        for name, source in self._sources.items():
+        for name in self._sources:
             task = self._tasks.get(name)
             if task is None or task.done():
-                task = asyncio.create_task(source.run(), name=f"source-{name}")
-                task.add_done_callback(self._on_task_done)
-                self._tasks[name] = task
+                self._spawn(name)
 
-    def _on_task_done(self, task: asyncio.Task[None]) -> None:
-        if not task.cancelled() and task.exception() is not None:
-            log.error("Stream source task %s crashed", task.get_name(), exc_info=task.exception())
+    def _spawn(self, name: str) -> None:
+        timer = self._restart_timers.pop(name, None)
+        if timer is not None:
+            timer.cancel()
+        task = asyncio.create_task(self._sources[name].run(), name=f"source-{name}")
+        task.add_done_callback(lambda done: self._on_task_done(name, done))
+        self._tasks[name] = task
+
+    def _on_task_done(self, name: str, task: asyncio.Task[None]) -> None:
+        if task.cancelled() or task.exception() is None:
+            return
+        log.error("Stream source %s crashed; restarting in %.0f s", name, self._restart_s, exc_info=task.exception())
+        if self._tasks.get(name) is not task:
+            return  # already stopped or replaced
+        self._sources[name].stopped()
+        loop = asyncio.get_running_loop()
+        self._restart_timers[name] = loop.call_later(self._restart_s, self._restart, name, task)
+
+    def _restart(self, name: str, crashed: asyncio.Task[None]) -> None:
+        self._restart_timers.pop(name, None)
+        # Without subscribers (grace period) the next subscriber starts it again anyway.
+        if self._tasks.get(name) is crashed and self._subscribers:
+            self._spawn(name)
 
     def _cancel_stop_timer(self) -> None:
         if self._stop_timer is not None:
@@ -164,6 +196,9 @@ class StreamHub:
             self._stop()
 
     def _stop(self) -> None:
+        for timer in self._restart_timers.values():
+            timer.cancel()
+        self._restart_timers.clear()
         tasks, self._tasks = self._tasks, {}
         for task in tasks.values():
             task.cancel()

@@ -43,6 +43,10 @@ a client that fell too far behind, first receives each source's current state.
 
 A tab hidden for longer than 10 s closes the stream and reopens it when shown again; the
 data on screen stays until fresh events replace it.
+If the server answers the stream request with an HTTP error (e.g. 502 while the backend
+restarts), the browser gives up on it; the page then reopens it itself after 2 s, doubling
+the delay up to 30 s. In the backend, a source that crashes is restarted after 2 s while
+pages are connected.
 
 ## ARP mirror
 

@@ -10,6 +10,8 @@ class FakeEventSource {
   onopen: (() => void) | null = null
   onerror: (() => void) | null = null
   closed = false
+  /** 0 CONNECTING, 1 OPEN, 2 CLOSED. */
+  readyState = 0
   private listeners = new Map<string, ((message: MessageEvent<string>) => void)[]>()
 
   constructor(readonly url: string) {
@@ -22,6 +24,18 @@ class FakeEventSource {
 
   close() {
     this.closed = true
+    this.readyState = 2
+  }
+
+  open() {
+    this.readyState = 1
+    this.onopen?.()
+  }
+
+  /** The browser's view of a failure: an HTTP error answer closes it for good, a network drop retries. */
+  fail(gaveUp: boolean) {
+    this.readyState = gaveUp ? 2 : 0
+    this.onerror?.()
   }
 
   emit(event: string, data: unknown) {
@@ -62,6 +76,95 @@ afterEach(() => {
 })
 
 describe('createEventStream', () => {
+  it('reopens a connection the browser gave up on, after 2 s', () => {
+    const s = stream()
+    const received: unknown[] = []
+    s.on('arp', (data) => received.push(data))
+    latest().open()
+    latest().fail(true)
+    expect(s.state.value).toBe('error')
+    vi.advanceTimersByTime(1_999)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    vi.advanceTimersByTime(1)
+    expect(FakeEventSource.instances).toHaveLength(2)
+    expect(s.state.value).toBe('connecting')
+    latest().emit('arp', { type: 'remove', id: '*1' })
+    expect(received).toEqual([{ type: 'remove', id: '*1' }])
+  })
+
+  it('leaves a network drop to the browser', () => {
+    const s = stream()
+    latest().open()
+    latest().fail(false)
+    expect(s.state.value).toBe('error')
+    vi.advanceTimersByTime(60_000)
+    expect(FakeEventSource.instances).toHaveLength(1)
+  })
+
+  it('backs off 2, 4, 8, 16, 30, 30 s and resets after a successful open', () => {
+    const s = stream()
+    const delays: number[] = []
+    const failUntilNext = () => {
+      const before = FakeEventSource.instances.length
+      latest().fail(true)
+      let waited = 0
+      while (FakeEventSource.instances.length === before) {
+        vi.advanceTimersByTime(1_000)
+        waited += 1_000
+      }
+      delays.push(waited)
+    }
+    for (let i = 0; i < 6; i++) failUntilNext()
+    expect(delays).toEqual([2_000, 4_000, 8_000, 16_000, 30_000, 30_000])
+    expect(s.state.value).toBe('connecting')
+
+    latest().open()
+    delays.length = 0
+    failUntilNext()
+    expect(delays).toEqual([2_000])
+  })
+
+  it('does not reconnect while paused for a hidden tab, and reopens when shown', () => {
+    const s = stream()
+    latest().fail(true) // t=0: retry due at 2 s
+    setVisibility('hidden') // pause due at 10 s
+    vi.advanceTimersByTime(2_000)
+    expect(FakeEventSource.instances).toHaveLength(2)
+    latest().fail(true) // retry due at 6 s
+    vi.advanceTimersByTime(4_000)
+    expect(FakeEventSource.instances).toHaveLength(3)
+    latest().fail(true) // retry due at 14 s, after the pause
+    vi.advanceTimersByTime(4_000)
+    expect(s.state.value).toBe('paused')
+    vi.advanceTimersByTime(120_000)
+    expect(FakeEventSource.instances).toHaveLength(3)
+
+    setVisibility('visible')
+    expect(FakeEventSource.instances).toHaveLength(4)
+    expect(s.state.value).toBe('connecting')
+  })
+
+  it('does not reconnect after close()', () => {
+    const s = stream()
+    latest().fail(true)
+    s.close()
+    vi.advanceTimersByTime(120_000)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    expect(s.state.value).toBe('idle')
+  })
+
+  it('ignores late callbacks of a connection it already dropped', () => {
+    const s = stream()
+    const old = latest()
+    old.fail(true)
+    vi.advanceTimersByTime(2_000)
+    old.onerror?.()
+    old.onopen?.()
+    expect(s.state.value).toBe('connecting')
+    vi.advanceTimersByTime(120_000)
+    expect(FakeEventSource.instances).toHaveLength(2)
+  })
+
   it('opens one connection and routes events by name', () => {
     const s = stream()
     const arp: unknown[] = []
