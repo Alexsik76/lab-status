@@ -38,6 +38,8 @@ export function indexArpPresence(rows: Iterable<ArpRow>): ArpPresenceIndex {
   const index = new Map<string, 'up' | 'down'>()
   for (const row of rows) {
     if (!row.netbox || row.presence === 'unknown') continue
+    // A static entry stays in the table whether the host answers or not: it proves nothing.
+    if (row.status === 'permanent') continue
     const key = arpObjectKey(row.netbox.kind, row.netbox.id)
     if (row.presence === 'active') index.set(key, 'up')
     else if (!index.has(key)) index.set(key, 'down')

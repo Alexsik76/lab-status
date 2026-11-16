@@ -401,6 +401,24 @@ describe('buildTree: machine state from the Proxmox node status', () => {
     expect(machine(tree, 'node-alpha').state).toBe('down')
   })
 
+  it('stops every guest of an offline node, even one ARP still shows (static entry)', () => {
+    const kvm = inventory.vms.find((vm) => vm.kind === 'KVM')!
+    const guest = { ...kvm, id: '991', name: 'win-on-delta', deviceId: delta.id, offline: false }
+    const inv = { ...withDelta(true), vms: [...inventory.vms, guest] }
+    const presence = new Map<string, 'up' | 'down'>([[`vm:${guest.id}`, 'up']])
+    const tree = buildTree(inv, statusMap, new Map(), new Map(), metrics, presence)
+    expect(machine(tree, 'node-delta').guests.find((g) => g.id === guest.id)).toMatchObject({
+      state: 'stopped',
+      blinking: false,
+    })
+    // Guests of an online node keep their own state.
+    const onAlpha = buildTree(inv, statusMap, new Map(), new Map(), metrics, new Map())
+    const reference = buildTree(inv, statusMap, new Map(), new Map(), new Map(), new Map())
+    expect(machine(onAlpha, 'node-alpha').guests.map((g) => g.state)).toEqual(
+      machine(reference, 'node-alpha').guests.map((g) => g.state),
+    )
+  })
+
   it('leaves machines that are not Proxmox nodes unaffected', () => {
     const presence = arp([storage.id, 'down'])
     const withProxmox = buildTree(inventory, statusMap, new Map(), new Map(), metrics, presence)

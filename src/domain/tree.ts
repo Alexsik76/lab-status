@@ -178,6 +178,17 @@ function quietGuest(guest: Guest): Guest {
   }
 }
 
+/** Everything on a Proxmox node that is reported offline is stopped, whatever else says. */
+const halt = <T extends { state: State; blinking?: boolean }>(node: T): T => ({ ...node, state: 'stopped', blinking: false })
+
+function haltGuest(guest: Guest): Guest {
+  return {
+    ...halt(guest),
+    stacks: guest.stacks.map((s) => ({ ...halt(s), containers: s.containers.map(halt) })),
+    standalone: guest.standalone.map(halt),
+  }
+}
+
 function buildMachine(
   ctx: BuildContext,
   device: DeviceRecord,
@@ -185,6 +196,11 @@ function buildMachine(
   apps: Container[],
 ): Machine {
   const machine = buildMachineNode(ctx, device, guests, apps)
+  // Proxmox lists the guests of an offline node without names, so they match no NetBox guest;
+  // the node's own status is the live evidence that none of them runs.
+  if (machine.metrics?.nodeStatus?.toLowerCase() === 'offline') {
+    return { ...machine, guests: guests.map(haltGuest), apps: apps.map(halt) }
+  }
   if (machine.state !== 'stopped') return machine
   return { ...machine, guests: guests.map(quietGuest), apps: apps.map(quiet) }
 }
