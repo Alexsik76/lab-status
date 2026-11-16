@@ -164,7 +164,30 @@ function buildGuest(ctx: BuildContext, vm: VmRecord & { kind: 'KVM' | 'LXC' }, c
   }
 }
 
+/** On a stopped machine nothing inside it can answer: `down` there means `stopped`. */
+const quiet = <T extends { state: State; blinking?: boolean }>(node: T): T =>
+  node.state === 'down' ? { ...node, state: 'stopped', blinking: false } : node
+
+function quietGuest(guest: Guest): Guest {
+  return {
+    ...quiet(guest),
+    stacks: guest.stacks.map((s) => ({ ...quiet(s), containers: s.containers.map(quiet) })),
+    standalone: guest.standalone.map(quiet),
+  }
+}
+
 function buildMachine(
+  ctx: BuildContext,
+  device: DeviceRecord,
+  guests: Guest[],
+  apps: Container[],
+): Machine {
+  const machine = buildMachineNode(ctx, device, guests, apps)
+  if (machine.state !== 'stopped') return machine
+  return { ...machine, guests: guests.map(quietGuest), apps: apps.map(quiet) }
+}
+
+function buildMachineNode(
   ctx: BuildContext,
   device: DeviceRecord,
   guests: Guest[],

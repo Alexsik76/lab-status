@@ -195,6 +195,25 @@ describe('buildTree with ARP presence', () => {
   it('leaves everything else to the other sources', () => {
     expect(build(new Map())).toEqual(tree)
   })
+
+  it('shows a guest that is down on a stopped machine as stopped', () => {
+    const host = tree.machines.find((m) => m.guests.some((g) => g.id === runningGuest.id))!
+    const offline: Inventory = {
+      ...inventory,
+      devices: inventory.devices.map((d) => (d.id === host.id ? { ...d, offline: true } : d)),
+    }
+    const arp = new Map<string, 'up' | 'down'>([
+      [`device:${host.id}`, 'down'],
+      [`vm:${runningGuest.id}`, 'down'],
+    ])
+    const stopped = buildTree(offline, statuses, new Map(), new Map(), new Map(), arp)
+      .machines.find((m) => m.id === host.id)!
+    expect(stopped.state).toBe('stopped')
+    const guests = stopped.guests
+    expect(guests.find((g) => g.id === runningGuest.id)).toMatchObject({ state: 'stopped', blinking: false })
+    const inner = guests.flatMap((g) => [...g.standalone, ...g.stacks.flatMap((s) => s.containers)])
+    expect([...guests, ...inner].map((n) => n.state)).not.toContain('down')
+  })
 })
 
 describe('applyArpPresence', () => {
