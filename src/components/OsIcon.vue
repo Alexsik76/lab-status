@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { platformToIcon, type PlatformIcon } from '../presentation/platform'
+import { resolveIcon, type IconName, type PlatformIcon } from '../presentation/platform'
 
 const props = withDefaults(
   defineProps<{
     platform?: string | null
+    /** Icon set explicitly; wins over the platform's. */
+    icon?: IconName | null
     name?: string | null
     size?: number
     dim?: boolean
   }>(),
   {
     platform: null,
+    icon: null,
     name: null,
     size: 20,
     dim: false,
@@ -31,6 +34,8 @@ const BRAND_THEMES: Record<string, { bg: string; fg: string }> = {
   truenas: { bg: 'oklch(0.26 0.03 235)', fg: 'oklch(0.78 0.11 230)' },
   debian: { bg: 'oklch(0.26 0.03 5)', fg: 'oklch(0.72 0.15 8)' },
   haos: { bg: 'oklch(0.30 0.06 225)', fg: 'oklch(0.80 0.11 225)' },
+  cups: { bg: 'oklch(0.26 0.04 250)', fg: 'oklch(0.72 0.14 250)' },
+  server: { bg: 'oklch(0.27 0.01 250)', fg: 'oklch(0.70 0.012 250)' },
   docker: { bg: 'oklch(0.29 0.06 245)', fg: 'oklch(0.74 0.12 245)' },
 }
 
@@ -40,9 +45,7 @@ const icon = computed<IconConfig | null>(() => {
     return { kind: 'svg', name: 'docker', alt: 'Docker', bg: theme.bg, fg: theme.fg }
   }
 
-  const resolved: PlatformIcon | null = platformToIcon(props.platform)
-  if (!resolved) return null
-
+  const resolved: PlatformIcon = resolveIcon(props.icon, props.platform)
   const theme = BRAND_THEMES[resolved.name]
   if (!theme) return null
 
@@ -103,6 +106,20 @@ const borderRadius = computed(() => `${Math.max(3, Math.round(props.size / 4))}p
         stroke-linejoin="round"
       />
       <circle cx="8" cy="9" r="1.2" :fill="fg" />
+    </svg>
+
+    <svg
+      v-else-if="icon.name === 'server'"
+      :width="size"
+      :height="size"
+      viewBox="0 0 16 16"
+      class="os-svg"
+      :style="{ borderRadius, background: bg }"
+    >
+      <rect x="3.5" y="3.5" width="9" height="3.6" rx="0.8" fill="none" :stroke="fg" stroke-width="1.2" />
+      <rect x="3.5" y="8.9" width="9" height="3.6" rx="0.8" fill="none" :stroke="fg" stroke-width="1.2" />
+      <circle cx="5.6" cy="5.3" r="0.75" :fill="fg" />
+      <circle cx="5.6" cy="10.7" r="0.75" :fill="fg" />
     </svg>
 
     <svg

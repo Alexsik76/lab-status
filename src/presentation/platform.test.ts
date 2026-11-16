@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { platformToIcon } from './platform'
+import { platformToIcon, resolveIcon } from './platform'
 
 describe('platformToIcon', () => {
   it('maps "Proxmox VE" to the Proxmox icon', () => {
@@ -52,5 +52,20 @@ describe('platformToIcon', () => {
     expect(platformToIcon('Ubuntu')).toBeNull()
     expect(platformToIcon('Windows Server')).toBeNull()
     expect(platformToIcon('CustomOS')).toBeNull()
+  })
+})
+
+describe('resolveIcon', () => {
+  it('prefers the icon set explicitly over the platform', () => {
+    expect(resolveIcon('cups', 'Debian')).toMatchObject({ name: 'cups', src: '/assets/cups.svg' })
+  })
+
+  it('takes the platform icon when nothing is set explicitly', () => {
+    expect(resolveIcon(null, 'TrueNAS').name).toBe('truenas')
+  })
+
+  it('falls back to the generic server icon for unknown or missing platforms', () => {
+    expect(resolveIcon(null, 'Windows')).toEqual({ kind: 'svg', name: 'server', alt: 'Server' })
+    expect(resolveIcon(undefined, null).name).toBe('server')
   })
 })
