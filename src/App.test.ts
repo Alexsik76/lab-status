@@ -149,14 +149,10 @@ describe('App', () => {
     expect(gamma?.findAll('.metric-spark')).toHaveLength(2)
 
     const storage = findMachine('storage-nas')
-    expect(storage?.findAll('.metric-spark')).toHaveLength(0)
-    expect(storage?.findAll('.slot-line')).toHaveLength(2)
-    expect(storage?.find('.metric-pct').text()).toBe('—')
+    expect(storage?.find('.host-metrics').exists()).toBe(false)
 
     const print = findMachine('host-print')
-    expect(print?.findAll('.metric-spark')).toHaveLength(0)
-    expect(print?.findAll('.slot-line')).toHaveLength(2)
-    expect(print?.find('.metric-pct').text()).toBe('—')
+    expect(print?.find('.host-metrics').exists()).toBe(false)
     expect(print?.find('.empty').text()).toBe('No VMs or containers registered in NetBox')
   })
 

@@ -110,7 +110,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
         <Tag v-for="tag in machine.tags" :key="tag.name" :tag="tag" size="sm" />
       </div>
 
-      <div class="host-metrics">
+      <div v-if="metrics" class="host-metrics">
         <div class="metric-row">
           <span class="metric-label">CPU</span>
           <div class="metric-slot" :class="{ 'has-graph': !!cpuSpark }">
