@@ -22,6 +22,7 @@ describe('AppHeader', () => {
   it('counts disconnected ARP entries on the ARP tab, hidden when there are none', () => {
     expect(mount(AppHeader, { props }).find('.switch-badge').exists()).toBe(false)
     const badge = mount(AppHeader, { props: { ...props, arpDisconnected: 3 } }).find('.switch-badge')
-    expect(badge.text()).toBe('3')
+    expect(badge.text()).toMatch(/^3/)
+    expect(badge.find('[role="tooltip"]').text()).toBe('3 addresses do not answer: ARP status failed or incomplete')
   })
 })
