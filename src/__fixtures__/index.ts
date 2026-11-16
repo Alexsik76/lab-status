@@ -8,7 +8,7 @@ import proxmoxResourcesBody from './proxmoxResources.json'
 import proxmoxRrdBody from './proxmoxRrd.json'
 import statusBody from './status.json'
 
-/** Synthetic responses representing NetBox GraphQL endpoint, status webhooks, and Proxmox. */
+/** Synthetic payloads of the stream sources: NetBox inventory, service checks, container states, Proxmox. */
 export const netboxResponse = netboxBody as unknown as GraphQLResponse<RawInventory>
 export const rawInventory = netboxResponse.data as RawInventory
 export const statusEntries = statusBody as StatusEntry[]

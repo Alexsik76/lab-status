@@ -267,6 +267,19 @@ describe('App', () => {
     expect(states(wrapper)).toContain('up')
   })
 
+  it('Refresh (the binary clock) sends only POST /api/refresh; the page makes no other request', async () => {
+    const fetchMock = stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries) })
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(wrapper.findAll('.refresh-btn .bit')).toHaveLength(9)
+    expect(wrapper.find('.refresh-btn').attributes('aria-label')).toMatch(/^Refresh, data \d+ s old$/)
+    await wrapper.find('.refresh-btn').trigger('click')
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(fetchMock.mock.calls[0][0]).toBe(REFRESH_URL)
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' })
+  })
+
   it('keeps the tree and says so when only Proxmox fails', async () => {
     stubBackend({
       netbox: ok(netboxResponse),
@@ -402,7 +415,7 @@ describe('App', () => {
     await wrapper.find('.refresh-btn').trigger('click')
     // During manual refresh, button shows progress
     expect(wrapper.find('.refresh-btn').attributes('disabled')).toBeDefined()
-    expect(wrapper.find('.refresh-btn .spinner').exists()).toBe(true)
+    expect(wrapper.find('.refresh-btn').attributes('aria-busy')).toBe('true')
 
     // Data MUST NOT be cleared while refresh is in flight!
     expect(findGuest('lxc-bastion')?.classes()).toContain('state-up')

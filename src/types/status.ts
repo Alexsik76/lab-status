@@ -1,4 +1,4 @@
-/** One entry of the live `service-status` response. */
+/** One service check result, as carried by the `services` events of the stream. */
 export interface StatusEntry {
   name: string
   url: string
