@@ -57,8 +57,9 @@ class FakePortainer:
                 items = [c for c in items if c["Id"] in ids]
             return httpx.Response(200, json=items)
         if parts[4:] == ["events"]:
-            filters = json.loads(request.url.params["filters"])
-            assert filters["type"] == ["container"] and set(filters["event"]) == set(ACTIONS)
+            # Type only (an action filter leaves Portainer's buffered stream stuck), uncompressed.
+            assert json.loads(request.url.params["filters"]) == {"type": ["container"]}
+            assert request.headers["Accept-Encoding"] == "identity"
             env.connects += 1
 
             async def stream():
@@ -324,3 +325,127 @@ async def test_post_refresh_reconciles_the_containers() -> None:
         health = (await api.get("/api/health")).json()["stream"]["sources"]["containers"]
         assert health["state"] == "live" and set(health["environments"]) == {"docker-1", "docker-2"}
     await hub.aclose()
+
+
+# ---- late events: client-side action filter and delayed re-reads ----------------------
+
+
+def container_reads(fake: FakePortainer, cid: str) -> int:
+    return sum(
+        1 for r in fake.requests
+        if r.url.path.endswith("/containers/json") and json.loads(r.url.params.get("filters", "{}")).get("id") == [cid]
+    )
+
+
+async def test_event_request_has_the_type_only_filter_and_no_compression() -> None:
+    fake = two_envs()
+    source, _ = make(fake)
+    task = await start(source)
+    streams = [r for r in fake.requests if r.url.path.endswith("/docker/events")]
+    assert len(streams) == 2
+    for request in streams:
+        assert json.loads(request.url.params["filters"]) == {"type": ["container"]}
+        assert request.headers["Accept-Encoding"] == "identity"
+    await stop(task)
+
+
+async def test_events_outside_the_actions_make_no_request() -> None:
+    fake = two_envs()
+    source, events = make(fake, follow_up_s=(0.01,))
+    task = await start(source)
+    before, published = len(fake.requests), len(events)
+    for action in ("exec_create: sh -c true", "exec_start: sh -c true", "exec_die", "attach", "top"):
+        await fake.envs[3].events.put(event(action, "a1"))
+    await asyncio.sleep(0.05)
+    assert len(fake.requests) == before and len(events) == published
+    assert not fake.envs[3].events.qsize() and source.environments[3].follow_ups == {}
+    assert "exec_start" not in ACTIONS
+    await stop(task)
+
+
+async def test_die_then_silence_still_yields_the_later_state() -> None:
+    fake = two_envs()
+    source, _ = make(fake, follow_up_s=(0.03, 0.08))
+    task = await start(source)
+    env = fake.envs[3]
+    env.containers["a2"] = container("a2", "n8n", "exited", "Exited (0) Less than a second ago")
+    await env.events.put(event("die", "a2"))
+    await asyncio.sleep(0.01)
+    assert {"env": "docker-1", "name": "n8n", "state": "exited", "status": "Exited (0) Less than a second ago"} in source.data
+    # The restart completes, but its start event never reaches us (stuck in Portainer's buffer).
+    env.containers["a2"] = container("a2", "n8n", "running", "Up 1 second")
+    await asyncio.sleep(0.04)
+    assert {"env": "docker-1", "name": "n8n", "state": "running", "status": "Up 1 second"} in source.data
+    env.containers["a2"] = container("a2", "n8n", "running", "Up 2 seconds (healthy)")
+    await asyncio.sleep(0.06)
+    assert {"env": "docker-1", "name": "n8n", "state": "running", "status": "Up 2 seconds (healthy)"} in source.data
+    assert container_reads(fake, "a2") == 3  # the event and the two delayed re-reads
+    assert source.environments[3].follow_ups == {}
+    await stop(task)
+
+
+async def test_a_newer_event_replaces_the_pending_re_reads_of_that_container() -> None:
+    fake = two_envs()
+    source, _ = make(fake, follow_up_s=(0.05, 0.1))
+    task = await start(source)
+    env = fake.envs[3]
+    for action in ("kill", "stop", "die", "start"):
+        await env.events.put(event(action, "a2"))
+    await env.events.put(event("start", "a1"))  # another container keeps its own re-reads
+    await asyncio.sleep(0.02)
+    assert set(source.environments[3].follow_ups) == {"a1", "a2"}
+    await asyncio.sleep(0.15)
+    assert container_reads(fake, "a2") == 4 + 2  # four events, then one chain of two re-reads
+    assert container_reads(fake, "a1") == 1 + 2
+    await stop(task)
+
+
+async def test_pending_re_reads_are_cancelled_when_the_session_ends() -> None:
+    fake = two_envs()
+
+    async def sleep(_: float) -> None:
+        await asyncio.sleep(1)
+
+    source, _ = make(fake, sleep=sleep, follow_up_s=(0.05,))
+    task = await start(source)
+    env = fake.envs[3]
+    await env.events.put(event("die", "a2"))
+    await asyncio.sleep(0.01)
+    pending = source.environments[3].follow_ups["a2"]
+    await env.events.put(CLOSE)  # the stream ends: the session fails and waits to reconnect
+    await asyncio.sleep(0.01)
+    assert pending.cancelled() and source.environments[3].follow_ups == {}
+    await asyncio.sleep(0.06)
+    assert container_reads(fake, "a2") == 1
+    await stop(task)
+
+
+async def test_pending_re_reads_are_cancelled_when_the_source_stops() -> None:
+    fake = two_envs()
+    source, _ = make(fake, follow_up_s=(0.05,))
+    task = await start(source)
+    await fake.envs[3].events.put(event("die", "a2"))
+    await asyncio.sleep(0.01)
+    pending = source.environments[3].follow_ups["a2"]
+    await stop(task)
+    source.stopped()
+    await asyncio.sleep(0)
+    assert pending.cancelled() and source.environments[3].follow_ups == {}
+
+
+async def test_a_failing_delayed_re_read_does_not_break_the_session() -> None:
+    fake = two_envs()
+    source, _ = make(fake, follow_up_s=(0.03,))
+    task = await start(source)
+    env = fake.envs[3]
+    await env.events.put(event("die", "a2"))
+    await asyncio.sleep(0.01)
+    env.down = True
+    await asyncio.sleep(0.04)  # the re-read fails and is only logged
+    env.down = False
+    assert source.health()["environments"]["docker-1"]["state"] == "live"
+    env.containers["a2"] = container("a2", "n8n", "exited", "Exited (1) 1 second ago")
+    await env.events.put(event("die", "a2"))
+    await asyncio.sleep(0.01)
+    assert any(e["name"] == "n8n" and e["state"] == "exited" for e in source.data)
+    await stop(task)

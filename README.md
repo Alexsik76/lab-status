@@ -67,11 +67,14 @@ within the period. `POST /api/refresh` runs every polling source at once and rec
 container lists.
 
 The `containers` source follows every Portainer Docker environment that is up: it lists the
-containers, then holds the environment's Docker event stream open (container events that can
-change the state or the status text; health-check `exec_*` events are not requested). Each
-event re-reads that one container through the list endpoint filtered by id (only the list
-endpoint gives the status text, e.g. `Up 4 days (healthy)`); an empty answer removes it
-(`destroy`). Every 300 s (`CONTAINERS_PERIOD_S`), and on refresh, all environments are
+containers, then holds the environment's Docker event stream open (`type=container` only,
+uncompressed). Events that cannot change the state or the status text, such as health checks'
+`exec_*`, are dropped by the backend rather than by a server-side filter: Portainer buffers the
+proxied stream until enough bytes accumulate, and a filtered, quiet stream leaves the last
+events of a burst stuck. Each kept event re-reads that one container through the list endpoint
+filtered by id (only the list endpoint gives the status text, e.g. `Up 4 days (healthy)`); an
+empty answer removes it (`destroy`). The same container is re-read again 3 s and 15 s after
+its last event, in case a later event is still delayed. Every 300 s (`CONTAINERS_PERIOD_S`), and on refresh, all environments are
 re-listed, which corrects missed events. Its events have the same shape as the polling
 sources'; `data` is `[{"env", "name", "state", "status"}]` sorted by environment and name
 (`env` is the Portainer environment name), `periodS` the re-list period. An environment that

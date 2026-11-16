@@ -2,12 +2,16 @@
 Docker events.
 
 For each Docker environment that is up, the source lists its containers and then holds the
-environment's Docker event stream open (`type=container`, only the actions that change a
-container's state or its status text). Every such event re-reads that one container through
+environment's Docker event stream open (`type=container`; events whose action cannot change a
+container's state or status text, such as health checks' `exec_*`, are dropped here, not by a
+server-side filter: Portainer buffers the proxied stream until enough bytes accumulate, and a
+filtered, quiet stream leaves the last events of a burst stuck, while the steady `exec_*`
+traffic keeps pushing it through). Every kept event re-reads that one container through
 the list endpoint filtered by id (`containers/json?all=1&filters={"id":[...]}`): unlike
 `/containers/{id}/json`, the list endpoint gives the human `Status` text ("Up 4 days
 (healthy)") the page shows, and it costs one small request; an empty answer means the
-container is gone (destroy). A full re-list of every environment runs every `period_s`
+container is gone (destroy). As a safety net for events that still arrive late, the same
+container is re-read again 3 s and 15 s after its last event. A full re-list of every environment runs every `period_s`
 (reconcile, also on `refresh()`), which corrects anything a missed event left behind.
 
 Environments are independent: one that fails keeps its last entries, reconnects with backoff
@@ -42,6 +46,8 @@ ACTIONS = (
     "create", "start", "restart", "stop", "die", "kill", "oom", "pause", "unpause",
     "destroy", "rename", "update", "health_status",
 )
+#: Extra re-reads of a container after its last event, in seconds from that event.
+FOLLOW_UP_S = (3.0, 15.0)
 BACKOFF_INITIAL_S = 2.0
 BACKOFF_MAX_S = 60.0
 
@@ -93,11 +99,14 @@ class PortainerClient:
 
     async def events(self, endpoint_id: int) -> AsyncIterator[Json]:
         """Docker container events, one JSON object per line, until the stream ends."""
-        params = {"filters": json.dumps({"type": ["container"], "event": list(ACTIONS)})}
+        # Type only: an action filter makes the stream too quiet for Portainer's buffering (see
+        # the module docstring). No compression either, so no layer adds a buffer of its own.
+        params = {"filters": json.dumps({"type": ["container"]})}
+        headers = {**self._headers, "Accept-Encoding": "identity"}
         timeout = httpx.Timeout(REQUEST_TIMEOUT_S, read=None)
         async with self._client.stream(
             "GET", f"{self._base}/api/endpoints/{endpoint_id}/docker/events",
-            params=params, headers=self._headers, timeout=timeout,
+            params=params, headers=headers, timeout=timeout,
         ) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
@@ -125,6 +134,13 @@ class Environment:
     error: str | None = None
     updated_at: datetime | None = None
     task: asyncio.Task[None] | None = None
+    #: Container id -> its pending delayed re-reads (one task per container).
+    follow_ups: dict[str, asyncio.Task[None]] = field(default_factory=dict)
+
+    def cancel_follow_ups(self) -> None:
+        for task in self.follow_ups.values():
+            task.cancel()
+        self.follow_ups.clear()
 
     def health(self) -> Json:
         return {"state": self.state, "error": self.error, "updatedAt": iso(self.updated_at),
@@ -141,6 +157,7 @@ class ContainersSource(Source):
         backoff: tuple[float, float] = (BACKOFF_INITIAL_S, BACKOFF_MAX_S),
         clock: Callable[[], datetime] = utc_now,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        follow_up_s: tuple[float, ...] = FOLLOW_UP_S,
     ) -> None:
         super().__init__()
         self._client = client
@@ -148,6 +165,7 @@ class ContainersSource(Source):
         self._backoff = backoff
         self._clock = clock
         self._sleep = sleep
+        self._follow_up_s = follow_up_s
         self._wake = asyncio.Event()
         self._running = False
         self.environments: dict[int, Environment] = {}
@@ -187,6 +205,7 @@ class ContainersSource(Source):
         # Entries stay for a later subscriber (with their age); the sessions are gone.
         self._running = False
         for env in self.environments.values():
+            env.cancel_follow_ups()
             env.task = None
             env.state, env.error = IDLE, None
         self._list_error = None
@@ -266,6 +285,8 @@ class ContainersSource(Source):
                 raise
             except Exception as exc:
                 self._env_failed(env, exc)
+            finally:
+                env.cancel_follow_ups()
             await self._sleep(delay)
             delay = min(delay * 2, maximum)
 
@@ -274,12 +295,42 @@ class ContainersSource(Source):
         container_id = event.get("id") or (event.get("Actor") or {}).get("ID")
         if action not in ACTIONS or not container_id:
             return
+        await self._read_container(env, container_id)
+        self._schedule_follow_ups(env, container_id)
+
+    async def _read_container(self, env: Environment, container_id: str) -> None:
         found = await self._client.containers(env.id, container_id)
         if found:
             env.entries[container_id] = entry(env.name, found[0])
         else:
             env.entries.pop(container_id, None)
         self._env_read(env)
+
+    def _schedule_follow_ups(self, env: Environment, container_id: str) -> None:
+        """Re-read the container again later, in the background; a newer event of the same
+        container replaces the pending re-reads."""
+        if not self._follow_up_s:
+            return
+        pending = env.follow_ups.pop(container_id, None)
+        if pending is not None:
+            pending.cancel()
+        task = asyncio.create_task(self._follow_up(env, container_id), name=f"follow-up-{container_id[:12]}")
+        env.follow_ups[container_id] = task
+
+    async def _follow_up(self, env: Environment, container_id: str) -> None:
+        elapsed = 0.0
+        try:
+            for at in self._follow_up_s:
+                await asyncio.sleep(at - elapsed)
+                elapsed = at
+                try:
+                    await self._read_container(env, container_id)
+                except Exception as exc:
+                    # The event session reports failures; a late re-read only logs.
+                    log.info("Delayed re-read of %s in %s failed: %s", container_id[:12], env.name, describe(exc))
+        finally:
+            if env.follow_ups.get(container_id) is asyncio.current_task():
+                del env.follow_ups[container_id]
 
     # ---- state ----
 
