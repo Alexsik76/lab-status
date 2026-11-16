@@ -30,6 +30,8 @@ class Settings:
     proxmox_token: str = ""
     proxmox_period_s: float = 15.0
     proxmox_metrics_period_s: float = 60.0
+    #: Period of the `inventory` source (NetBox inventory, check targets, MAC directory, NPM).
+    inventory_period_s: float = 300.0
     #: Seconds the stream sources keep running after the last page disconnected.
     stream_grace_s: float = 10.0
 
@@ -60,5 +62,6 @@ class Settings:
             proxmox_token=env.get("PROXMOX_TOKEN", ""),
             proxmox_period_s=float(env.get("PROXMOX_PERIOD_S") or 15.0),
             proxmox_metrics_period_s=float(env.get("PROXMOX_METRICS_PERIOD_S") or 60.0),
+            inventory_period_s=float(env.get("INVENTORY_PERIOD_S") or 300.0),
             stream_grace_s=float(env.get("STREAM_GRACE_S") or 10.0),
         )

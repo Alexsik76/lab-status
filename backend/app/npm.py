@@ -1,8 +1,8 @@
-"""Nginx Proxy Manager reads: public (reverse-proxy) URLs of services checked at `ip:port`."""
+"""Nginx Proxy Manager reads: public (reverse-proxy) URLs of services checked at `ip:port`.
+Read by the `inventory` source on its cycle."""
 
 import asyncio
 import ipaddress
-import logging
 import socket
 import time
 from collections.abc import Awaitable, Callable
@@ -19,9 +19,6 @@ Json = dict[str, Any]
 PublicUrlMap = dict[tuple[str, int], str]
 Resolver = Callable[[str], Awaitable[str | None]]
 
-log = logging.getLogger(__name__)
-
-PUBLIC_URLS_TTL_S = 300
 NPM_TIMEOUT_S = 10.0
 #: A token is renewed this long before NPM says it expires.
 TOKEN_MARGIN_S = 60.0
@@ -136,24 +133,3 @@ async def build_public_url_map(hosts: list[Json], npm_host: str, resolve: Resolv
 async def fetch_public_url_map(npm: NpmClient, resolve: Resolver = resolve_ipv4) -> PublicUrlMap:
     npm_host = urlsplit(npm.base).hostname or ""
     return await build_public_url_map(await npm.proxy_hosts(), npm_host, resolve)
-
-
-class PublicUrls:
-    """Lazily loaded, cached map; an NPM failure keeps the last good map (or an empty one)."""
-
-    def __init__(self, load: Callable[[], Awaitable[PublicUrlMap]]) -> None:
-        self._load = load
-        self._map: PublicUrlMap = {}
-        self._loaded_at: float | None = None
-        self._lock = asyncio.Lock()
-
-    async def get(self) -> PublicUrlMap:
-        async with self._lock:
-            if self._loaded_at is None or time.monotonic() - self._loaded_at > PUBLIC_URLS_TTL_S:
-                try:
-                    self._map = await self._load()
-                except Exception as exc:  # statuses must never fail because of NPM
-                    log.warning("Nginx Proxy Manager is unavailable, keeping %d public URLs: %s", len(self._map), exc)
-                # A failed attempt also waits for the next period, so a dead NPM adds no delay per request.
-                self._loaded_at = time.monotonic()
-            return self._map

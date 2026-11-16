@@ -8,8 +8,6 @@ services:
     ports:
       - 8081:80
     environment:
-      - NETBOX_URL
-      - NETBOX_TOKEN
       - CONTAINER_STATUS_URL
 
   api:
@@ -32,4 +30,5 @@ services:
       - NPM_URL
       - NPM_IDENTITY
       - NPM_SECRET
+      - INVENTORY_PERIOD_S
       - STREAM_GRACE_S

@@ -106,6 +106,10 @@ class StreamHub:
         return len(self._subscribers)
 
     @property
+    def sources(self) -> list[Source]:
+        return list(self._sources.values())
+
+    @property
     def running(self) -> bool:
         return bool(self._tasks)
 

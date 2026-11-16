@@ -1,7 +1,8 @@
-"""HTTP checks of NetBox services, run on request (replaces the n8n `service-status` webhook)."""
+"""HTTP checks of NetBox services, run on request (replaces the n8n `service-status` webhook).
+
+Targets and public URLs come from the `inventory` source's cycle."""
 
 import asyncio
-import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
@@ -9,9 +10,8 @@ from urllib.parse import urlsplit
 import httpx
 
 from .netbox import Target
-from .npm import PublicUrlMap, PublicUrls
+from .npm import PublicUrlMap
 
-TARGETS_TTL_S = 300
 CHECK_TIMEOUT_S = 3.0
 RETRY_DELAY_S = 2.0
 
@@ -58,31 +58,18 @@ class ServiceChecker:
         load_targets: Callable[[], Awaitable[list[Target]]],
         client: httpx.AsyncClient,
         exclude: frozenset[str] = frozenset(),
-        public_urls: PublicUrls | None = None,
+        public_urls: Callable[[], Awaitable[PublicUrlMap]] | None = None,
     ) -> None:
         self._load_targets = load_targets
         self._client = client
         self._exclude = exclude
         self._public_urls = public_urls
-        self._targets: list[Target] | None = None
-        self._loaded_at = 0.0
-        self._lock = asyncio.Lock()
 
     async def targets(self) -> list[Target]:
-        async with self._lock:
-            stale = time.monotonic() - self._loaded_at > TARGETS_TTL_S
-            if self._targets is None or stale:
-                try:
-                    self._targets = await self._load_targets()
-                    self._loaded_at = time.monotonic()
-                except Exception:
-                    if self._targets is None:
-                        raise
-                    # NetBox is unreachable: keep checking the last known list.
-            return [t for t in self._targets if t.name not in self._exclude]
+        return [t for t in await self._load_targets() if t.name not in self._exclude]
 
     async def _public_url_map(self) -> PublicUrlMap:
-        return await self._public_urls.get() if self._public_urls else {}
+        return await self._public_urls() if self._public_urls else {}
 
     async def run(self) -> list[dict[str, Any]]:
         targets = await self.targets()

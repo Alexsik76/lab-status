@@ -23,11 +23,15 @@ export default defineConfig(({ mode }) => {
     plugins: [vue()],
     server: {
       proxy: {
-        '/netbox/graphql/': {
-          target: env.NETBOX_URL,
-          changeOrigin: true,
-          rewrite: () => '/graphql/',
-          headers: { Authorization: `Bearer ${env.NETBOX_TOKEN}` },
+        '/api/refresh': {
+          target: backendUrl,
+          bypass(req, res) {
+            if (req.method !== 'POST') {
+              res.statusCode = 405
+              res.end('Method Not Allowed')
+              return false
+            }
+          },
         },
         '/api/service-status': {
           target: backendUrl,

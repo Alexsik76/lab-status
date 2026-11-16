@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { effectScope } from 'vue'
 import { netboxResponse } from '../__fixtures__'
-import { NETBOX_GRAPHQL_URL } from '../config'
+import { FakeEventSource } from '../__fixtures__/fakeEventSource'
+import { REFRESH_URL } from '../config'
+import { createEventStream, type EventStream } from './useEventStream'
 import {
   INVENTORY_SCHEMA_VERSION,
   INVENTORY_STORAGE_KEY,
@@ -10,17 +12,44 @@ import {
   useInventory,
 } from './useInventory'
 
-function okResponse(body: unknown) {
-  return new Response(JSON.stringify(body))
+/*
+ * NetBox is read by the backend; the composable gets `inventory` events from the stream.
+ * "The network" in these tests is that stream: `deliver` plays a successful backend cycle
+ * (data, then a live status), `failWith` a failed one, and no events a slow backend.
+ */
+let stream: EventStream
+
+const status = (state: string, error: string | null, updatedAt: string | null) => ({
+  type: 'status',
+  state,
+  error,
+  updatedAt,
+  periodS: 300,
+})
+
+function deliver(data: unknown = netboxResponse.data, updatedAt = '2026-11-16T12:00:00Z') {
+  FakeEventSource.latest().emit('inventory', { type: 'data', data })
+  FakeEventSource.latest().emit('inventory', status('live', null, updatedAt))
+}
+
+function failWith(error: string) {
+  FakeEventSource.latest().emit('inventory', status('error', error, null))
+}
+
+function useInventoryOnStream() {
+  return effectScope().run(() => useInventory(stream))!
 }
 
 describe('useInventory & storage persistence', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.unstubAllGlobals()
+    FakeEventSource.instances = []
+    stream = createEventStream({ url: '/api/stream', eventSource: FakeEventSource as unknown as typeof EventSource })
   })
 
   afterEach(() => {
+    stream.close()
     localStorage.clear()
     vi.unstubAllGlobals()
   })
@@ -58,12 +87,8 @@ describe('useInventory & storage persistence', () => {
   })
 
   it('stores successfully loaded inventory in localStorage on success', async () => {
-    vi.stubGlobal('fetch', async (url: string) => {
-      if (url === NETBOX_GRAPHQL_URL) return okResponse(netboxResponse)
-      throw new Error(`unexpected ${url}`)
-    })
-
-    const inv = useInventory()
+    const inv = useInventoryOnStream()
+    deliver()
     await vi.waitFor(() => expect(inv.data.value).not.toBeNull())
 
     const storedRaw = localStorage.getItem(INVENTORY_STORAGE_KEY)
@@ -91,10 +116,8 @@ describe('useInventory & storage persistence', () => {
       }),
     )
 
-    // Never-resolving fetch to verify immediate synchronous rendering
-    vi.stubGlobal('fetch', () => new Promise(() => {}))
-
-    const inv = useInventory()
+    // No event from the backend yet: the stored inventory must render synchronously
+    const inv = useInventoryOnStream()
     // Available immediately!
     expect(inv.data.value).not.toBeNull()
     expect(inv.data.value?.devices[0].name).toBe('stored-machine')
@@ -115,13 +138,9 @@ describe('useInventory & storage persistence', () => {
       }),
     )
 
-    vi.stubGlobal('fetch', async (url: string) => {
-      if (url === NETBOX_GRAPHQL_URL) return okResponse(netboxResponse)
-      throw new Error(`unexpected ${url}`)
-    })
-
-    const inv = useInventory()
+    const inv = useInventoryOnStream()
     expect(inv.data.value?.devices[0].name).toBe('old-machine')
+    deliver()
 
     await vi.waitFor(() => expect(inv.data.value?.devices.some((d) => d.name === 'node-alpha')).toBe(true))
 
@@ -146,9 +165,8 @@ describe('useInventory & storage persistence', () => {
       }),
     )
 
-    vi.stubGlobal('fetch', async () => Promise.reject(new TypeError('Failed to fetch')))
-
-    const inv = useInventory()
+    const inv = useInventoryOnStream()
+    failWith('NetBox is unreachable.')
     await vi.waitFor(() => expect(inv.errorMessage.value).toBe('NetBox is unreachable.'))
 
     // Previous stored inventory is STILL intact!
@@ -170,28 +188,90 @@ describe('useInventory & storage persistence', () => {
         timestamp: '2026-10-01T12:00:00.000Z',
       }),
     )
-    vi.stubGlobal('fetch', () => new Promise(() => {}))
-
-    const inv = useInventory()
+    const inv = useInventoryOnStream()
     expect(inv.data.value).toBeNull()
     expect(inv.updatedAt.value).toBeNull()
   })
 
   it('ignores corrupt JSON in storage and starts with null', async () => {
     localStorage.setItem(INVENTORY_STORAGE_KEY, 'corrupted{json:!')
-    vi.stubGlobal('fetch', () => new Promise(() => {}))
-
-    const inv = useInventory()
+    const inv = useInventoryOnStream()
     expect(inv.data.value).toBeNull()
     expect(inv.updatedAt.value).toBeNull()
   })
 
   it('ignores incompatible or invalid shape in storage and starts with null', async () => {
     localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify({ wrong: 'schema' }))
-    vi.stubGlobal('fetch', () => new Promise(() => {}))
-
-    const inv = useInventory()
+    const inv = useInventoryOnStream()
     expect(inv.data.value).toBeNull()
     expect(inv.updatedAt.value).toBeNull()
+  })
+
+  it('takes updatedAt from the backend status and stores it with the inventory', async () => {
+    const inv = useInventoryOnStream()
+    deliver(netboxResponse.data, '2026-11-16T12:00:00Z')
+    expect(inv.updatedAt.value?.toISOString()).toBe('2026-11-16T12:00:00.000Z')
+    // A later cycle with unchanged data sends only a status.
+    FakeEventSource.latest().emit('inventory', status('live', null, '2026-11-16T12:05:00Z'))
+    expect(inv.updatedAt.value?.toISOString()).toBe('2026-11-16T12:05:00.000Z')
+    await vi.waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(INVENTORY_STORAGE_KEY) ?? 'null')?.timestamp).toBe('2026-11-16T12:05:00.000Z'),
+    )
+    expect(inv.errorMessage.value).toBeNull()
+  })
+
+  it('takes updatedAt from a status that arrives before the data (a new subscriber)', () => {
+    const inv = useInventoryOnStream()
+    FakeEventSource.latest().emit('inventory', status('connecting', null, '2026-11-16T11:55:00Z'))
+    expect(inv.updatedAt.value).toBeNull()
+    FakeEventSource.latest().emit('inventory', { type: 'data', data: netboxResponse.data })
+    expect(inv.updatedAt.value?.toISOString()).toBe('2026-11-16T11:55:00.000Z')
+  })
+
+  it('keeps the data after a failed backend cycle and clears the error on recovery', () => {
+    const inv = useInventoryOnStream()
+    deliver()
+    failWith('NetBox responded with HTTP 502 Bad Gateway.')
+    expect(inv.errorMessage.value).toBe('NetBox responded with HTTP 502 Bad Gateway.')
+    expect(inv.data.value?.devices.some((d) => d.name === 'node-alpha')).toBe(true)
+    deliver()
+    expect(inv.errorMessage.value).toBeNull()
+  })
+
+  it('does not report a partial failure of the backend cycle as an inventory error', () => {
+    const inv = useInventoryOnStream()
+    deliver()
+    FakeEventSource.latest().emit(
+      'inventory',
+      status('live', 'Nginx Proxy Manager is unreachable.', '2026-11-16T12:05:00Z'),
+    )
+    expect(inv.errorMessage.value).toBeNull()
+  })
+
+  it('rejects a payload without inventory data and keeps the last inventory', () => {
+    const inv = useInventoryOnStream()
+    deliver()
+    FakeEventSource.latest().emit('inventory', { type: 'data', data: { device_list: [] } })
+    expect(inv.errorMessage.value).toBe('NetBox returned an unexpected response (inventory data is missing).')
+    expect(inv.data.value?.devices.length).toBeGreaterThan(0)
+  })
+
+  it('says the backend is unreachable only when there is nothing to show', () => {
+    const inv = useInventoryOnStream()
+    FakeEventSource.latest().fail(false)
+    expect(inv.errorMessage.value).toBe('The status backend stream is unreachable.')
+    FakeEventSource.latest().open()
+    deliver()
+    FakeEventSource.latest().fail(false)
+    expect(inv.errorMessage.value).toBeNull()
+  })
+
+  it('refresh asks the backend with POST /api/refresh and nothing else', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 202 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const inv = useInventoryOnStream()
+    await inv.refresh()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]).toEqual([REFRESH_URL, expect.objectContaining({ method: 'POST' })])
   })
 })

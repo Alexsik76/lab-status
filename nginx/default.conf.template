@@ -5,18 +5,12 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # The only NetBox endpoint exposed: GraphQL, POST only.
-    location = /netbox/graphql/ {
+    # Run the backend's polling sources at once (Refresh button): POST only.
+    location = /api/refresh {
         limit_except POST {
             deny all;
         }
-        proxy_pass ${NETBOX_URL}/graphql/;
-        proxy_set_header Authorization "Bearer ${NETBOX_TOKEN}";
-    }
-
-    # Anything else under /netbox/ is not proxied.
-    location /netbox/ {
-        return 404;
+        proxy_pass http://api:8000/api/refresh;
     }
 
     # Service status, answered by the backend: GET only
