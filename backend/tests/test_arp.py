@@ -42,8 +42,10 @@ def test_presence_classes() -> None:
 GRACE_S = 0.01
 
 
-def _hub(connect, load_macs) -> tuple[StreamHub, ArpSource]:
-    source = ArpSource(connect, load_macs)
+def _hub(connect, macs: dict) -> tuple[StreamHub, ArpSource]:
+    """`macs` stands for the directory the inventory source hands in before the session."""
+    source = ArpSource(connect)
+    source.set_macs(macs)
     return StreamHub([source], grace_s=GRACE_S), source
 
 
@@ -75,10 +77,9 @@ async def test_session_snapshot_then_live_events() -> None:
     async def connect():
         return conn
 
-    async def load_macs():
-        return {"02:00:00:00:00:AA": MATCH}
+    macs = {"02:00:00:00:00:AA": MATCH}
 
-    hub, source = _hub(connect, load_macs)
+    hub, source = _hub(connect, macs)
     queue = hub.subscribe()
     events = await _drain(queue, "snapshot")
     snapshot = events[-1]["rows"]
@@ -113,10 +114,9 @@ async def test_second_subscriber_gets_snapshot_immediately() -> None:
     async def connect():
         return conn
 
-    async def load_macs():
-        return {}
+    macs = {}
 
-    hub, _ = _hub(connect, load_macs)
+    hub, _ = _hub(connect, macs)
     first = hub.subscribe()
     await _drain(first, "snapshot")
     second = hub.subscribe()
@@ -153,10 +153,9 @@ async def test_entry_without_mac_borrows_the_static_lease_mac() -> None:
     async def connect():
         return conn
 
-    async def load_macs():
-        return {"02:00:00:00:00:99": printer}
+    macs = {"02:00:00:00:00:99": printer}
 
-    hub, _ = _hub(connect, load_macs)
+    hub, _ = _hub(connect, macs)
     queue = hub.subscribe()
     rows = {r["id"]: r for r in (await _drain(queue, "snapshot"))[-1]["rows"]}
 
@@ -170,7 +169,7 @@ async def test_entry_without_mac_borrows_the_static_lease_mac() -> None:
 
 
 def test_lease_changes_that_matter() -> None:
-    source = ArpSource(None, None)  # type: ignore[arg-type]
+    source = ArpSource(None)  # type: ignore[arg-type]
     assert source.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is True
     assert source.apply_lease(_lease("*L1", "192.0.2.50", "02:00:00:00:00:99")) is False
     assert source.apply_lease(_lease("*D1", "192.0.2.70", "02:00:00:00:00:66", dynamic=True)) is False
@@ -185,10 +184,10 @@ async def test_two_subscribers_share_one_router_session_until_grace_expires() ->
         connections.append(conn)
         return conn
 
-    async def load_macs():
-        return {}
+    macs = {}
 
-    source = ArpSource(connect, load_macs)
+    source = ArpSource(connect)
+    source.set_macs(macs)
     hub = StreamHub([source], grace_s=0.2)
     first, second = hub.subscribe(), hub.subscribe()
     await _drain(first, "snapshot")
@@ -213,3 +212,34 @@ async def test_two_subscribers_share_one_router_session_until_grace_expires() ->
     assert source.state == "idle" and hub.health()["sources"]["arp"] == {
         "running": False, "state": "idle", "error": None,
     }
+
+
+async def test_new_mac_directory_re_sends_the_snapshot() -> None:
+    conn = FakeConnection([
+        Reply("!re", "print", _attrs("*1", "reachable")),
+        Reply("!done", "print"),
+        Reply("!done", "lease-print"),
+    ])
+
+    async def connect():
+        return conn
+
+    hub, source = _hub(connect, {})
+    queue = hub.subscribe()
+    rows = (await _drain(queue, "snapshot"))[-1]["rows"]
+    assert rows[0]["netbox"] is None
+
+    source.set_macs({"02:00:00:00:00:AA": MATCH})
+    snapshot = await _next(queue)
+    assert snapshot["type"] == "snapshot" and snapshot["rows"][0]["netbox"]["name"] == "srv-a"
+    source.set_macs({"02:00:00:00:00:AA": MATCH})  # unchanged: nothing sent
+    assert queue.empty()
+    await hub.aclose()
+
+
+def test_mac_directory_before_the_session_sends_nothing() -> None:
+    source = ArpSource(None)  # type: ignore[arg-type]
+    events: list[dict] = []
+    source.attach(events.append)
+    source.set_macs({"02:00:00:00:00:AA": MATCH})
+    assert events == []

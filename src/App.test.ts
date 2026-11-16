@@ -9,7 +9,7 @@ import {
 } from './__fixtures__'
 import { FakeEventSource } from './__fixtures__/fakeEventSource'
 import App from './App.vue'
-import { CONTAINER_STATUS_URL, NETBOX_GRAPHQL_URL, STATUS_URL } from './config'
+import { CONTAINER_STATUS_URL, REFRESH_URL, STATUS_URL } from './config'
 import { INVENTORY_SCHEMA_VERSION, INVENTORY_STORAGE_KEY } from './composables/useInventory'
 import { normalizeInventory } from './domain/normalize'
 
@@ -48,19 +48,28 @@ function stubBackend(handlers: {
   const proxmoxResourcesHandler = handlers.proxmoxResources ?? ok({ data: proxmoxResources })
   const proxmoxRrdHandler = handlers.proxmoxRrd ?? ok({ data: proxmoxRrdPoints })
 
-  const fetchMock = vi.fn(async (url: string) => {
-    if (url === NETBOX_GRAPHQL_URL) return handlers.netbox()
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === STATUS_URL) return handlers.status()
     if (url === CONTAINER_STATUS_URL) return containerStatusHandler()
+    if (url === REFRESH_URL && init?.method === 'POST') {
+      // The backend runs its polling sources at once; their results arrive over the stream.
+      const es = FakeEventSource.latest()
+      void feedInventory(es, handlers.netbox)
+      void feedProxmox(es, proxmoxResourcesHandler, proxmoxRrdHandler)
+      return new Response(JSON.stringify({ refreshing: ['inventory', 'proxmox', 'metrics'] }), { status: 202 })
+    }
     throw new Error(`unexpected request ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
 
-  // Proxmox reaches the page over the backend stream: the handlers stand for the backend's
-  // upstream answers, and their outcome is sent as `proxmox` / `metrics` events.
+  // NetBox and Proxmox reach the page over the backend stream: the handlers stand for the
+  // backend's upstream answers, and their outcome is sent as `inventory` / `proxmox` /
+  // `metrics` events.
   class BackendStream extends FakeEventSource {
     constructor(url: string) {
       super(url)
+      this.open()
+      void feedInventory(this, handlers.netbox)
       void feedProxmox(this, proxmoxResourcesHandler, proxmoxRrdHandler)
     }
   }
@@ -76,9 +85,26 @@ const sourceStatus = (state: 'live' | 'error', error: string | null = null) => (
   periodS: 15,
 })
 
+/** What the backend's inventory source publishes for this NetBox GraphQL answer. */
+async function feedInventory(es: FakeEventSource, netbox: Handler) {
+  let body: { data?: unknown; errors?: Array<{ message: string }> }
+  try {
+    body = (await (await netbox()).json()) as typeof body
+  } catch {
+    es.emit('inventory', { ...sourceStatus('error', 'NetBox is unreachable.'), periodS: 300 })
+    return
+  }
+  if (body.errors?.length) {
+    const message = `NetBox rejected the query: ${body.errors.map((e) => e.message).join('; ')}`
+    es.emit('inventory', { ...sourceStatus('error', message), periodS: 300 })
+    return
+  }
+  es.emit('inventory', { type: 'data', data: body.data })
+  es.emit('inventory', { ...sourceStatus('live'), periodS: 300 })
+}
+
 /** What the backend's Proxmox sources publish for these upstream answers. */
 async function feedProxmox(es: FakeEventSource, resources: Handler, rrd: Handler) {
-  es.open()
   let items: Array<{ type: string; node?: string }>
   try {
     items = ((await (await resources()).json()) as { data: typeof items }).data

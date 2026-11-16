@@ -38,21 +38,3 @@ async def test_results_match_the_webhook_shape() -> None:
     assert (by_name["svc3"]["up"], by_name["svc3"]["code"]) == (True, 302)
     assert (by_name["svc4"]["up"], by_name["svc4"]["code"]) == (False, 503)
     assert by_name["svc2"]["service_id"] == 2
-
-
-async def test_last_known_targets_survive_netbox_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = 0
-
-    async def load() -> list[Target]:
-        nonlocal calls
-        calls += 1
-        if calls > 1:
-            raise httpx.ConnectError("netbox down")
-        return [Target("svc2", "http://192.0.2.1:2", 2)]
-
-    async with _client() as client:
-        checker = ServiceChecker(load, client)
-        await checker.run()
-        monkeypatch.setattr(checks, "TARGETS_TTL_S", -1)
-        results = await checker.run()
-    assert [r["name"] for r in results] == ["svc2"]

@@ -2,12 +2,12 @@
 
 While the hub runs it, it holds one RouterOS session (`/ip/arp/listen` + `/ip/arp/print`
 on one connection); the hub cancels it when no page is subscribed any more, which closes
-the connection. Rows are enriched with the NetBox object owning their MAC.
+the connection. Rows are enriched with the NetBox object owning their MAC; the MAC
+directory comes from the `inventory` source (`set_macs`).
 """
 
 import asyncio
 import logging
-import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -19,7 +19,6 @@ log = logging.getLogger(__name__)
 
 ACTIVE = frozenset({"reachable", "stale", "delay", "probe", "permanent"})
 DISCONNECTED = frozenset({"failed", "incomplete"})
-MAC_TTL_S = 300
 
 
 def presence(status: str) -> str:
@@ -52,16 +51,10 @@ def row_from_attrs(attrs: dict[str, str]) -> dict[str, Any]:
 class ArpSource(Source):
     name = "arp"
 
-    def __init__(
-        self,
-        connect: Callable[[], Awaitable[RouterOsConnection]],
-        load_macs: Callable[[], Awaitable[dict[str, MacMatch]]],
-    ) -> None:
+    def __init__(self, connect: Callable[[], Awaitable[RouterOsConnection]]) -> None:
         super().__init__()
         self._connect = connect
-        self._load_macs = load_macs
         self._macs: dict[str, MacMatch] = {}
-        self._macs_at = 0.0
         self._rows: dict[str, dict[str, Any]] = {}
         self._raw: dict[str, dict[str, str]] = {}
         self._leases: dict[str, dict[str, str]] = {}
@@ -83,6 +76,14 @@ class ArpSource(Source):
 
     def health(self) -> dict[str, Any]:
         return {"state": self.state, "error": self.error}
+
+    def set_macs(self, macs: dict[str, MacMatch]) -> None:
+        """A new MAC directory: re-enrich the rows on every page."""
+        if macs == self._macs:
+            return
+        self._macs = macs
+        if self.state == "live":
+            self.publish(self._snapshot_event())
 
     # ---- events ----
 
@@ -158,14 +159,6 @@ class ArpSource(Source):
         if broadcast:
             self.publish({"type": "upsert", "row": self.enrich(row)})
 
-    async def _refresh_macs(self) -> None:
-        try:
-            self._macs = await self._load_macs()
-            self._macs_at = time.monotonic()
-        except Exception as exc:  # NetBox down: keep the last directory, rows stay unenriched
-            log.warning("NetBox MAC directory refresh failed: %s", exc)
-            self._macs_at = time.monotonic()
-
     # ---- session ----
 
     async def run(self) -> None:
@@ -186,8 +179,6 @@ class ArpSource(Source):
 
     async def _session(self) -> None:
         self._set_state("connecting")
-        if time.monotonic() - self._macs_at > MAC_TTL_S or not self._macs:
-            await self._refresh_macs()
         conn = await self._connect()
         self._rows.clear()
         self._raw.clear()
@@ -216,8 +207,5 @@ class ArpSource(Source):
                         self.publish(self._snapshot_event())
                     continue
                 self.apply(reply.attrs, broadcast=not printing)
-                if not printing and time.monotonic() - self._macs_at > MAC_TTL_S:
-                    await self._refresh_macs()
-                    self.publish(self._snapshot_event())
         finally:
             await conn.close()

@@ -9,11 +9,14 @@ status event whenever its state, error or `updatedAt` changes:
     {"type": "data", "data": ...}
 
 `updatedAt` is the time of the last successful fetch (ISO 8601, UTC); with `periodS` the page
-can tell how fresh the data is.
+can tell how fresh the data is. `state` describes the published data: `error` means the last
+fetch produced none. A source whose fetch succeeded only in part reports `live` with a
+non-null `error` naming what failed (see `cycle_warning`).
 """
 
 import asyncio
 import logging
+import time
 from abc import abstractmethod
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -54,6 +57,9 @@ class PollingSource(Source):
         self.updated_at: datetime | None = None
         #: Completed cycles (successful or failed), for tests and health.
         self.cycles = 0
+        #: `time.monotonic()` of the last completed cycle, successful or not.
+        self.last_cycle_at: float | None = None
+        self._lock = asyncio.Lock()
 
     @abstractmethod
     async def fetch(self) -> Any:
@@ -62,6 +68,10 @@ class PollingSource(Source):
     def describe_error(self, exc: Exception) -> str:
         """The message shown on the page for a failed fetch."""
         return str(exc) or type(exc).__name__
+
+    def cycle_warning(self) -> str | None:
+        """After a successful fetch: what part of it failed, if any (reported as `error`)."""
+        return None
 
     # ---- source interface ----
 
@@ -100,7 +110,18 @@ class PollingSource(Source):
         if self._running:
             self._wake.set()
 
+    async def ensure_fresh(self) -> None:
+        """For readers without a subscription: run a cycle unless one completed within the
+        period (waiting for one in flight). Works whether or not the hub runs the source."""
+        async with self._lock:
+            if self.last_cycle_at is None or time.monotonic() - self.last_cycle_at > self.period_s:
+                await self._cycle()
+
     async def cycle(self) -> None:
+        async with self._lock:
+            await self._cycle()
+
+    async def _cycle(self) -> None:
         try:
             data = await self.fetch()
         except NotReady:
@@ -108,17 +129,24 @@ class PollingSource(Source):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            self.cycles += 1
+            self._completed()
             message = self.describe_error(exc)
             log.warning("Source %s: fetch failed: %s", self.name, message)
             self._set_status(ERROR, message)
             return
-        self.cycles += 1
+        self._completed()
         self.updated_at = self._clock()
         if not self.has_data or data != self.data:
             self.data, self.has_data = data, True
             self.publish(self._data_event())
-        self._set_status(LIVE, None, force=True)
+        warning = self.cycle_warning()
+        if warning:
+            log.warning("Source %s: partial failure: %s", self.name, warning)
+        self._set_status(LIVE, warning, force=True)
+
+    def _completed(self) -> None:
+        self.cycles += 1
+        self.last_cycle_at = time.monotonic()
 
     def _status_event(self) -> Event:
         return {

@@ -1,4 +1,5 @@
-"""NetBox REST reads: the MAC directory for ARP enrichment and the service check targets."""
+"""NetBox reads: the page's GraphQL inventory, the MAC directory for ARP enrichment and the
+service check targets (REST). Only the `inventory` source calls these."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -27,6 +28,13 @@ class NetBoxClient:
             items.extend(body["results"])
             url = body.get("next")
         return items
+
+    async def graphql(self, query: str) -> Any:
+        response = await self._client.post(
+            f"{self._base}/graphql/", json={"query": query}, headers=self._headers, timeout=20.0
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 def _choice(value: Any) -> str | None:
@@ -107,13 +115,6 @@ def build_mac_directory(
     return directory
 
 
-async def fetch_mac_directory(netbox: NetBoxClient, public_url: str) -> dict[str, MacMatch]:
-    macs = await netbox.list("dcim/mac-addresses/")
-    devices = await netbox.list("dcim/devices/")
-    vms = await netbox.list("virtualization/virtual-machines/")
-    return build_mac_directory(macs, devices, vms, public_url)
-
-
 # ---- Service check targets -------------------------------------------------------------
 
 
@@ -164,10 +165,3 @@ def build_targets(services: list[Json], vms: list[Json], devices: list[Json]) ->
         name = service["name"] if parent_name == service["name"] else f"{parent_name}/{service['name']}"
         targets.append(Target(name=name, url=f"{scheme}://{ip}:{ports[0]}", service_id=service["id"]))
     return targets
-
-
-async def fetch_targets(netbox: NetBoxClient) -> list[Target]:
-    services = await netbox.list("ipam/services/")
-    vms = await netbox.list("virtualization/virtual-machines/")
-    devices = await netbox.list("dcim/devices/")
-    return build_targets(services, vms, devices)

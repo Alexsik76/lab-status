@@ -1,7 +1,8 @@
 import type { IconName } from './presentation/platform'
 
-/** Same-origin NetBox GraphQL endpoint; the token is injected by nginx / the Vite dev proxy. */
-export const NETBOX_GRAPHQL_URL = '/netbox/graphql/'
+/** Same-origin endpoint that makes the backend's polling sources (inventory, Proxmox) run a cycle at once. */
+export const REFRESH_URL = '/api/refresh'
+export const REFRESH_TIMEOUT_MS = 5_000
 
 /** Same-origin service status endpoint, answered by the backend. */
 export const STATUS_URL = '/api/service-status'
@@ -22,7 +23,6 @@ export const STREAM_RETRY_MAX_MS = 30_000
 /** Same-origin container status endpoint; forwarded by nginx / Vite dev proxy to CONTAINER_STATUS_URL. */
 export const CONTAINER_STATUS_URL = '/api/container-status'
 
-export const INVENTORY_TIMEOUT_MS = 20_000
 export const STATUS_TIMEOUT_MS = 10_000
 export const CONTAINER_STATUS_TIMEOUT_MS = 10_000
 

@@ -14,8 +14,10 @@ from .arp import ArpSource
 from .checks import ServiceChecker
 from .config import Settings
 from .hub import Message, StreamHub
-from .netbox import NetBoxClient, fetch_mac_directory, fetch_targets
-from .npm import NpmClient, PublicUrls, fetch_public_url_map
+from .inventory import InventorySource, InventoryUnavailable
+from .netbox import NetBoxClient
+from .npm import NpmClient
+from .polling import PollingSource
 from .proxmox import proxmox_sources
 from .routeros import RouterOsConnection
 
@@ -32,10 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     netbox = NetBoxClient(settings, netbox_http)
     npm_http = httpx.AsyncClient()
     proxmox_http = httpx.AsyncClient(verify=False)
-    public_urls = None
-    if settings.npm_enabled:
-        npm = NpmClient(settings, npm_http)
-        public_urls = PublicUrls(lambda: fetch_public_url_map(npm))
+    npm = NpmClient(settings, npm_http) if settings.npm_enabled else None
 
     async def connect() -> RouterOsConnection:
         return await RouterOsConnection.open(
@@ -46,10 +45,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     app.state.settings = settings
-    arp = ArpSource(connect, lambda: fetch_mac_directory(netbox, settings.netbox_public_url))
-    app.state.hub = StreamHub([arp, *proxmox_sources(settings, proxmox_http)], grace_s=settings.stream_grace_s)
+    arp = ArpSource(connect)
+    inventory = InventorySource(netbox, npm, settings.netbox_public_url, settings.inventory_period_s)
+    inventory.on_macs_changed.append(arp.set_macs)
+    app.state.hub = StreamHub(
+        [arp, inventory, *proxmox_sources(settings, proxmox_http)], grace_s=settings.stream_grace_s
+    )
     app.state.checks = ServiceChecker(
-        lambda: fetch_targets(netbox), checks_http, settings.service_check_exclude, public_urls
+        inventory.load_targets, checks_http, settings.service_check_exclude, inventory.load_public_urls
     )
     try:
         yield
@@ -72,10 +75,22 @@ async def health() -> dict[str, object]:
 
 @app.get("/api/service-status")
 async def service_status() -> list[dict[str, object]]:
+    """Runs an inventory cycle first when none ran within its period (no page subscribed)."""
     try:
         return await app.state.checks.run()
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"NetBox is unreachable: {exc}") from exc
+    except InventoryUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/refresh", status_code=202)
+async def refresh() -> dict[str, object]:
+    """Starts a cycle of every polling source at once (the ones currently running)."""
+    hub: StreamHub = app.state.hub
+    names = [source.name for source in hub.sources if isinstance(source, PollingSource)]
+    for source in hub.sources:
+        if isinstance(source, PollingSource):
+            source.refresh()
+    return {"refreshing": names}
 
 
 def format_sse(message: Message) -> str:

@@ -1,13 +1,14 @@
 # lab-status
 
 Status page of the home lab. Vue 3 + Vite + TypeScript single-page app, served by
-nginx, plus a small FastAPI backend (`backend/`). nginx proxies NetBox GraphQL and the
-backend, injecting credentials server-side so they never reach the browser; the backend
-talks to Proxmox and the router itself.
+nginx, plus a small FastAPI backend (`backend/`). The backend alone talks to NetBox, Nginx
+Proxy Manager, Proxmox and the router, so no credential reaches the browser; nginx serves
+the page and proxies the backend.
 
 The page shows the lab as a tree, machine -> guest -> stack -> container, from these
 independent sources:
-1. **NetBox inventory**: machines, guests, containers, and services (`POST /netbox/graphql/`);
+1. **NetBox inventory**: machines, guests, containers, and services, read by the backend and sent
+   as `inventory` events of `GET /api/stream`;
 2. **HTTP service checks**: run by the backend against the NetBox services that have the
    custom field `check` set and an `http`/`https` `scheme` (one per parent: the service that
    represents the application's health; `GET /api/service-status`). Only `http`/`https`
@@ -16,8 +17,8 @@ independent sources:
    enabled Nginx Proxy Manager proxy host forwards to the checked `ip:port`, the entry also
    carries its `public_url` (`https://<first domain>` with a certificate, else `http://`):
    the tile then links to the domain and shows the direct address as a secondary link
-   (proxy hosts are read on demand and cached for 5 min; an NPM failure keeps the last
-   known links and never fails the checks);
+   (proxy hosts are read on the inventory cycle; an NPM failure keeps the last known links and
+   never fails the checks);
 3. **Docker container states**: forwarded to `CONTAINER_STATUS_URL` (`GET /api/container-status`);
 4. **Proxmox**: live guest states, node status, and CPU/memory load graphs, polled by the backend
    and sent as `proxmox` / `metrics` events of `GET /api/stream`;
@@ -29,29 +30,39 @@ disconnected (`failed` / `incomplete`).
 
 The tree appears immediately: the last successfully loaded inventory is cached in the
 browser's local storage (with schema versioning), so the page renders instantly on open
-and survives NetBox being unreachable. The inventory, statuses and container states refresh
-on manual **Refresh**; Proxmox data arrives over the stream. Refreshing never blanks what is
-on screen.
+and survives NetBox being unreachable. Manual **Refresh** asks the backend to re-read NetBox,
+NPM and Proxmox at once (`POST /api/refresh`, answered 202; the results arrive over the
+stream) and re-polls statuses and container states. Refreshing never blanks what is on screen.
 
 ## Event stream
 
 The page holds one Server-Sent Events connection, `GET /api/stream`; the SSE `event:`
-field names the source of each message (`arp`, `proxmox`, `metrics`). The backend runs its sources
+field names the source of each message (`arp`, `inventory`, `proxmox`, `metrics`). The backend runs its sources
 only while at least one page is connected: the first subscriber starts them, and when the
 last one leaves they keep running for `STREAM_GRACE_S` seconds (default 10) and stop only
 if nobody reconnected, so a page reload reuses the running sessions. A new subscriber, and
 a client that fell too far behind, first receives each source's current state.
 `GET /api/health` reports the subscriber count and each source's state.
 
-Polling sources (`proxmox`, `metrics`) publish two kinds of events: `{"type": "data", "data": ...}`
+Polling sources (`inventory`, `proxmox`, `metrics`) publish two kinds of events: `{"type": "data", "data": ...}`
 only when the data changed, and `{"type": "status", "state", "error", "updatedAt", "periodS"}`
 whenever the state, the error or the time of the last successful fetch (`updatedAt`, ISO 8601
 UTC) changes. A failed poll keeps the last data and reports the error; polling goes on.
+`state` describes the published data: `error` means the last poll produced none, while
+`live` with a non-null `error` means it succeeded only in part.
 
 | Source | Upstream | Period | `data` |
 |---|---|---|---|
+| `inventory` | NetBox: the page's GraphQL query and REST services, virtual machines, devices, MAC addresses; NPM proxy hosts; all concurrently, each data set once | 300 s (`INVENTORY_PERIOD_S`) | the GraphQL `data` object unchanged |
 | `proxmox` | `cluster/resources` | 15 s (`PROXMOX_PERIOD_S`) | the Proxmox `data` array unchanged |
 | `metrics` | `nodes/<node>/rrddata?timeframe=hour&cf=AVERAGE` for every node of the latest cluster resources, concurrently | 60 s (`PROXMOX_METRICS_PERIOD_S`), and at once when the node set changes | `{node: points}`; a node that fails gets `[]` |
+
+The `inventory` cycle is the backend's only NetBox (and NPM) read: the service checks take
+their targets and public URLs from it, and the ARP mirror its MAC directory (a changed
+directory re-sends the ARP snapshot). A part that fails keeps its previous value; if only the
+page's inventory failed the status is `error`, otherwise `live` with the failure in `error`.
+`GET /api/service-status` works without a subscriber: it runs a cycle first when none ran
+within the period. `POST /api/refresh` runs every polling source at once.
 
 A tab hidden for longer than 10 s closes the stream and reopens it when shown again; the
 data on screen stays until fresh events replace it.
@@ -69,7 +80,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 
 - Presence: `reachable`, `stale`, `delay`, `probe`, `permanent` -> active;
   `failed`, `incomplete` -> disconnected.
-- Matching to NetBox is by MAC only (`dcim/mac-addresses`, refreshed every 5 min).
+- Matching to NetBox is by MAC only (`dcim/mac-addresses`, read on the inventory cycle).
 - On the main page, machines and guests whose MAC is in the ARP table take their state
   from it (active -> up, disconnected -> down, or stopped when NetBox/Proxmox say so);
   everything else keeps its previous sources. Containers are not affected (they share
@@ -79,12 +90,12 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 
 | Path | Purpose |
 |---|---|
-| `src/api/` | NetBox, status-service, and container status API calls, validation, typed errors |
+| `src/api/` | status-service and container status API calls, inventory validation, refresh request, typed errors |
 | `src/domain/` | pure logic: normalizing NetBox data, building the tree, state rules, ARP presence |
 | `src/composables/` | async state (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`) combined in `useLab` |
 | `src/components/` | render-only components: the tree, the ARP page, error page, skeleton |
 | `src/__fixtures__/` | synthetic responses covering all topology cases, used by the tests |
-| `backend/app/` | FastAPI: RouterOS API client, ARP hub, NetBox reads, service checks, NPM public URLs |
+| `backend/app/` | FastAPI: stream hub and polling base, ARP mirror, inventory cycle (NetBox, NPM), Proxmox, service checks |
 | `backend/tests/` | pytest suite |
 | `nginx/default.conf.template` | nginx config template; env variables are substituted at container start |
 | `Dockerfile` | stage 1: Node builds the app; stage 2: `nginx:alpine` serves `dist/` |
@@ -95,8 +106,9 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `NETBOX_URL` | web, api | NetBox base URL, e.g. `http://192.0.2.10:8000` (no trailing slash) |
-| `NETBOX_TOKEN` | web, api | API token of a read-only NetBox user; the backend needs view rights on devices, virtual machines, services, and MAC addresses |
+| `NETBOX_URL` | api | NetBox base URL, e.g. `http://192.0.2.10:8000` (no trailing slash) |
+| `NETBOX_TOKEN` | api | API token of a read-only NetBox user (GraphQL and REST); it needs view rights on devices, virtual machines, services, IP addresses, and MAC addresses |
+| `INVENTORY_PERIOD_S` | api | optional: period of the NetBox / NPM cycle, default `300` |
 | `CONTAINER_STATUS_URL` | web | HTTP endpoint returning live Docker container states (GET-only upstream) |
 | `ROUTEROS_HOST` | api | Router address for the API service |
 | `ROUTEROS_PORT` | api | API port, default `8728` |
@@ -112,8 +124,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 
 The browser calls its own origin only:
-- `POST /netbox/graphql/` -> `${NETBOX_URL}/graphql/` (with `Authorization: Bearer ${NETBOX_TOKEN}`)
-- `GET /api/service-status`, `GET /api/stream` -> the backend (`http://api:8000`)
+- `GET /api/stream`, `GET /api/service-status`, `POST /api/refresh` -> the backend (`http://api:8000`)
 - `GET /api/container-status` -> `${CONTAINER_STATUS_URL}`
 
 In nginx and the Vite dev server, requests are strictly limited to the required endpoints and methods.
@@ -157,9 +168,8 @@ Flow:
    stack's deployed commit (`GitConfig.ConfigHash`) equals the merge commit, and the page loads
    with data.
 
-> **Warning:** nginx will not start if any of `NETBOX_URL`, `NETBOX_TOKEN`,
-> `CONTAINER_STATUS_URL` is missing, because template substitution
-> (`envsubst`) requires all of them.
+> **Warning:** nginx will not start if `CONTAINER_STATUS_URL` is missing, because template
+> substitution (`envsubst`) requires it.
 
 The public address is served by a reverse proxy in front of host port `8081` (e.g.
 `https://status.example.com` -> `http://192.0.2.20:8081`). It must not buffer

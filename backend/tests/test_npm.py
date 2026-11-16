@@ -3,11 +3,10 @@ import json
 import httpx
 import pytest
 
-from app import npm as npm_module
 from app.checks import ServiceChecker
 from app.config import Settings
 from app.netbox import Target
-from app.npm import NpmClient, PublicUrls, build_public_url_map, fetch_public_url_map
+from app.npm import NpmClient, build_public_url_map, fetch_public_url_map
 
 SETTINGS = Settings(npm_url="http://npm.example:81", npm_identity="admin@example.com", npm_secret="example")
 
@@ -126,35 +125,6 @@ async def test_fetch_uses_the_ipv4_of_the_npm_url_host() -> None:
     assert result == {("192.0.2.5", 81): "http://admin.example.com"}
 
 
-# ---- cache -----------------------------------------------------------------------------
-
-
-async def test_public_urls_are_cached_and_survive_npm_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = 0
-
-    async def load():
-        nonlocal calls
-        calls += 1
-        if calls > 1:
-            raise httpx.ConnectError("npm down")
-        return {("192.0.2.20", 80): "https://logs.example.com"}
-
-    urls = PublicUrls(load)
-    assert await urls.get() == {("192.0.2.20", 80): "https://logs.example.com"}
-    assert await urls.get() == {("192.0.2.20", 80): "https://logs.example.com"}
-    assert calls == 1
-    monkeypatch.setattr(npm_module, "PUBLIC_URLS_TTL_S", -1)
-    assert await urls.get() == {("192.0.2.20", 80): "https://logs.example.com"}
-    assert calls == 2
-
-
-async def test_first_npm_failure_gives_an_empty_map() -> None:
-    async def load():
-        raise RuntimeError("bad response")
-
-    assert await PublicUrls(load).get() == {}
-
-
 def test_feature_is_off_unless_all_settings_are_set() -> None:
     assert SETTINGS.npm_enabled
     assert not Settings(npm_url="http://npm.example:81", npm_identity="admin@example.com").npm_enabled
@@ -181,7 +151,7 @@ async def test_status_entries_carry_the_public_url() -> None:
         return {("192.0.2.20", 9428): "https://logs.example.com", ("192.0.2.50", 443): "https://nas.example.com"}
 
     async with _ok_client() as client:
-        results = await ServiceChecker(_targets, client, public_urls=PublicUrls(load)).run()
+        results = await ServiceChecker(_targets, client, public_urls=load).run()
     assert {r["name"]: r["public_url"] for r in results} == {
         "logs": "https://logs.example.com",
         "nas": "https://nas.example.com",
@@ -194,12 +164,3 @@ async def test_status_entries_without_npm_have_null_public_url() -> None:
     async with _ok_client() as client:
         results = await ServiceChecker(_targets, client).run()
     assert [r["public_url"] for r in results] == [None, None, None]
-
-
-async def test_npm_failure_does_not_fail_statuses() -> None:
-    async def load():
-        raise httpx.ConnectError("npm down")
-
-    async with _ok_client() as client:
-        results = await ServiceChecker(_targets, client, public_urls=PublicUrls(load)).run()
-    assert len(results) == 3 and all(r["public_url"] is None for r in results)
