@@ -36,19 +36,22 @@ and survives NetBox being unreachable. Refreshing never blanks what is on screen
 The page makes exactly two kinds of requests besides its static files: the stream
 (`GET /api/stream`) and, on the Refresh button, `POST /api/refresh`.
 
-**Refresh clock.** The Refresh button in the header is a binary clock: the age in whole
-seconds of the NetBox inventory (`updatedAt` of the `inventory` source, the data Refresh
-re-reads), counting up, one 12 x 12 px square per bit, most significant left. The bit count is
-the smallest that holds the inventory period (`periodS`: 9 bits for 300 s); past 511 s every bit
-stays lit. Lit bits change colour with the fraction of the period elapsed, linearly in RGB:
-green `rgb(52,211,84)` at 0, yellow `rgb(245,204,30)` at half, orange-red `rgb(240,78,38)` at
-the end and after; any source in state `error` makes them orange-red. It ticks once per
-second from real time and stops while the stream is paused for a hidden tab. A click sends
-`POST /api/refresh` (the backend re-reads NetBox, NPM, Proxmox and the container lists and
-re-runs every service check; answered 202); the clock returns to zero when the new
-`updatedAt` arrives. The tooltip lists every source: its age for polling sources, `live` or
-the connection state for `arp` and `containers`, and the error, if any. Its label for
-assistive technology is "Refresh, data N s old".
+**Refresh block.** The right end of the header is one button, as tall as the Hosts | ARP
+switch (`--header-control-height`) and styled like it: a binary clock on top and the local time
+of the last inventory update (HH:MM:SS) below. The clock is the age in whole seconds of the
+NetBox inventory (`updatedAt` of the `inventory` source, the data Refresh re-reads), counting
+up, one diamond per bit (one inline SVG; half-diagonal 3 px, centres 7 px apart), most
+significant left. The bit count is the smallest that holds the inventory period (`periodS`: 9
+bits for 300 s); past 511 s every bit stays lit. Lit bits change colour with the fraction of
+the period elapsed, linearly in RGB: green `rgb(52,211,84)` at 0, yellow `rgb(245,204,30)` at
+half, orange-red `rgb(240,78,38)` at the end and after; any source in state `error` makes them
+orange-red. It ticks once per second from real time and stops while the stream is paused for
+a hidden tab. A click anywhere on the block sends `POST /api/refresh` (the backend re-reads
+NetBox, NPM, Proxmox and the container lists and re-runs every service check; answered 202);
+the clock returns to zero when the new `updatedAt` arrives. The tooltip starts with the full
+date and time of the inventory, then lists every source: its age for polling sources, `live`
+or the connection state for `arp` and `containers`, and the error, if any. Its label for
+assistive technology is "Refresh, data N s old, updated HH:MM:SS".
 
 ## Event stream
 

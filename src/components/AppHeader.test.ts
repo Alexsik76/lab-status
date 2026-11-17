@@ -25,4 +25,10 @@ describe('AppHeader', () => {
     expect(badge.text()).toMatch(/^3/)
     expect(badge.find('[role="tooltip"]').text()).toBe('3 addresses do not answer: ARP status failed or incomplete')
   })
+
+  it('has no "rendered" text: the time sits in the refresh block', () => {
+    const wrapper = mount(AppHeader, { props: { ...props, updatedAt: new Date('2026-11-17T06:46:29Z') } })
+    expect(wrapper.text()).not.toMatch(/rendered/i)
+    expect(wrapper.find('.header-right .refresh-btn .updated-time').exists()).toBe(true)
+  })
 })
