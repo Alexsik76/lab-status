@@ -26,8 +26,9 @@ const statuses = (inventoryAge: number, extra: SourceStatuses = {}): SourceStatu
 const mountClock = (s: SourceStatuses, streamState = 'open') =>
   mount(RefreshClock, { props: { statuses: s, streamState: streamState as 'open' } })
 
+/** Lit or unlit by the diamond's fill: a colour or none. */
 const pattern = (wrapper: ReturnType<typeof mountClock>) =>
-  wrapper.findAll('.bit').map((b) => (b.classes('lit') ? '1' : '0')).join('')
+  wrapper.findAll('svg polygon.bit').map((b) => (b.attributes('fill') === 'none' ? '0' : '1')).join('')
 const bitColor = (wrapper: ReturnType<typeof mountClock>) =>
   (wrapper.find('.refresh-btn').element as HTMLElement).style.getPropertyValue('--bit-color')
 
@@ -46,12 +47,36 @@ describe('RefreshClock', () => {
     expect(pattern(mountClock(statuses(600)))).toBe('111111111') // above 511: all lit
   })
 
+  it('draws one inline SVG of nine diamonds, 6 px wide, 7 px apart, most significant left', () => {
+    const wrapper = mountClock(statuses(5))
+    const svgs = wrapper.findAll('.refresh-btn svg')
+    expect(svgs).toHaveLength(1)
+    const svg = svgs[0]
+    expect([svg.attributes('width'), svg.attributes('height'), svg.attributes('viewBox')]).toEqual([
+      '63',
+      '13',
+      '-0.5 -0.5 63 13',
+    ])
+    const diamonds = svg.findAll('polygon.bit')
+    expect(diamonds).toHaveLength(9)
+    expect(diamonds[0].attributes('points')).toBe('3,3 6,6 3,9 0,6')
+    expect(diamonds[8].attributes('points')).toBe('59,3 62,6 59,9 56,6')
+    expect(diamonds.map((d) => d.attributes('data-bit'))).toEqual(['8', '7', '6', '5', '4', '3', '2', '1', '0'])
+    // Lit: filled and outlined with the current colour; unlit: no fill, the CSS grey outline.
+    const colour = bitColor(wrapper)
+    expect(colour).toMatch(/^rgb\(/)
+    expect(diamonds[8].attributes()).toMatchObject({ fill: colour, stroke: colour })
+    expect(diamonds[0].attributes('fill')).toBe('none')
+    expect(diamonds[0].attributes('stroke')).toBeUndefined()
+    expect(wrapper.find('.refresh-btn span.bit').exists()).toBe(false)
+  })
+
   it('takes the bit count from the inventory period', () => {
-    expect(mountClock(statuses(0)).findAll('.bit')).toHaveLength(9)
+    expect(mountClock(statuses(0)).findAll('svg polygon.bit')).toHaveLength(9)
     const short = mountClock({ ...statuses(0), inventory: polled(3, 15) })
-    expect(short.findAll('.bit')).toHaveLength(4)
+    expect(short.findAll('svg polygon.bit')).toHaveLength(4)
     expect(pattern(short)).toBe('0011')
-    expect(mountClock({}).findAll('.bit')).toHaveLength(9) // no status yet: the default period
+    expect(mountClock({}).findAll('svg polygon.bit')).toHaveLength(9) // no status yet: the default period
   })
 
   it('colours the lit bits by the fraction of the period elapsed', () => {

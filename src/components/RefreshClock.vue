@@ -7,7 +7,7 @@ import { ageSeconds, bitCount, CLOCK_RED, clockColor, formatAge, rgb, toBits } f
 
 /**
  * Refresh button drawn as a binary clock: the age in whole seconds of the NetBox inventory
- * (what Refresh re-reads), counting up, one square per bit, most significant left. The colour
+ * (what Refresh re-reads), counting up, one diamond per bit, most significant left. The colour
  * of the lit bits goes green -> yellow -> orange-red over the inventory period; any source in
  * error turns them orange-red. It ticks once per second and stops while the stream is paused.
  */
@@ -71,6 +71,27 @@ const lines = computed(() =>
   }),
 )
 
+/*
+ * One inline SVG, drawn 1:1 so the outlines stay crisp: a diamond per bit (half-diagonal 3 px,
+ * centres 7 px apart, most significant left), vertically centred in a 12 px tall box, with a
+ * 0.5 px margin so no outline is clipped.
+ */
+const HALF = 3
+const STEP = 7
+const BOX_HEIGHT = 12
+const MARGIN = 0.5
+const geometry = computed(() => {
+  const inner = 2 * HALF + STEP * (bits.value.length - 1)
+  const width = inner + 2 * MARGIN
+  const height = BOX_HEIGHT + 2 * MARGIN
+  return { width, height, viewBox: `${-MARGIN} ${-MARGIN} ${width} ${height}` }
+})
+function diamond(i: number): string {
+  const cx = HALF + STEP * i
+  const cy = BOX_HEIGHT / 2
+  return `${cx},${cy - HALF} ${cx + HALF},${cy} ${cx},${cy + HALF} ${cx - HALF},${cy}`
+}
+
 const tipId = useId()
 </script>
 
@@ -87,13 +108,25 @@ const tipId = useId()
       :style="{ '--bit-color': color }"
       @click="$emit('refresh')"
     >
-      <span
-        v-for="(lit, i) in bits"
-        :key="i"
-        class="bit"
-        :class="{ lit }"
-        :data-bit="bits.length - 1 - i"
-      ></span>
+      <svg
+        class="bits"
+        :width="geometry.width"
+        :height="geometry.height"
+        :viewBox="geometry.viewBox"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <polygon
+          v-for="(lit, i) in bits"
+          :key="i"
+          class="bit"
+          :class="{ lit }"
+          :points="diamond(i)"
+          :fill="lit ? color : 'none'"
+          :stroke="lit ? color : undefined"
+          :data-bit="bits.length - 1 - i"
+        />
+      </svg>
     </button>
     <span :id="tipId" class="tip" role="tooltip">
       <span v-for="line in lines" :key="line.name" class="tip-line" :data-source="line.name">
@@ -112,8 +145,8 @@ const tipId = useId()
 .refresh-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 5px 7px;
+  /* 13 px of SVG + padding + border: a hit area of 25 px. */
+  padding: 5px 8px;
   background: var(--color-bg-spine);
   border: 1px solid var(--color-border-guest);
   border-radius: var(--radius-sm);
@@ -133,20 +166,17 @@ const tipId = useId()
   cursor: progress;
 }
 
-.bit {
+.bits {
   display: block;
   flex: none;
-  box-sizing: border-box;
-  width: 12px;
-  height: 12px;
-  border: 1px solid var(--color-state-unknown-dot);
-  border-radius: 1px;
-  background: transparent;
-  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
-.bit.lit {
-  background: var(--bit-color);
-  border-color: var(--bit-color);
+.bit {
+  stroke-width: 0.9;
+  stroke-linejoin: miter;
+  transition: fill 0.3s ease, stroke 0.3s ease;
+}
+.bit:not(.lit) {
+  stroke: var(--color-state-unknown-dot);
 }
 
 .tip {
