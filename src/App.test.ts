@@ -273,8 +273,10 @@ describe('App', () => {
     await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
     expect(fetchMock).not.toHaveBeenCalled()
     expect(wrapper.findAll('.refresh-btn .bit')).toHaveLength(9)
-    expect(wrapper.find('.refresh-btn').attributes('aria-label')).toMatch(/^Refresh, data \d+ s old$/)
-    await wrapper.find('.refresh-btn').trigger('click')
+    expect(wrapper.find('.refresh-btn').attributes('aria-label')).toMatch(/^Refresh, data \d+ s old, updated \d\d:\d\d:\d\d$/)
+    expect(wrapper.find('.refresh-btn .updated-time').text()).toMatch(/^\d\d:\d\d:\d\d$/)
+    expect(wrapper.find('.app-header').text()).not.toMatch(/rendered/i)
+    await wrapper.find('.refresh-btn .updated-time').trigger('click') // anywhere in the block
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(fetchMock.mock.calls[0][0]).toBe(REFRESH_URL)
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' })

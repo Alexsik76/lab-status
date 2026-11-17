@@ -7,6 +7,8 @@
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
+  /* Header controls (Hosts | ARP switch, refresh block): one height, one hover background. */
+  --header-control-height: 35px;
   --radius-lg: 8px;
   --radius-pill: 9999px;
 
@@ -20,6 +22,7 @@
   --color-bg-hover: oklch(0.29 0.012 250);
   --color-bg-hover-dim: oklch(0.26 0.01 250);
   --color-bg-slot: oklch(0.18 0.008 250);
+  --color-bg-control-hover: oklch(0.21 0.01 250);
   --color-bg-shimmer: oklch(0.25 0.01 250);
 
   /* Borders */

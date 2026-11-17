@@ -5,6 +5,11 @@ import RefreshClock from './RefreshClock.vue'
 
 const NOW = Date.parse('2026-11-17T01:00:00Z')
 const ago = (seconds: number) => new Date(NOW - seconds * 1000).toISOString()
+/** Local HH:MM:SS of the moment `seconds` before NOW (the tests run in any time zone). */
+const hhmmss = (seconds: number) => {
+  const d = new Date(NOW - seconds * 1000)
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')
+}
 
 const polled = (seconds: number, periodS = 300, state: 'live' | 'error' = 'live', error: string | null = null) => ({
   state,
@@ -98,10 +103,47 @@ describe('RefreshClock', () => {
   it('is a button that asks for a refresh, with an accessible label', async () => {
     const wrapper = mountClock(statuses(42))
     const button = wrapper.find('button.refresh-btn')
-    expect(button.attributes('aria-label')).toBe('Refresh, data 42 s old')
+    expect(button.attributes('aria-label')).toBe(`Refresh, data 42 s old, updated ${hhmmss(42)}`)
     await button.trigger('click')
     expect(wrapper.emitted('refresh')).toHaveLength(1)
     expect(mountClock({}).find('button').attributes('aria-label')).toBe('Refresh, data age unknown')
+  })
+
+  it('is one block: the clock on top, the HH:MM:SS of the inventory below', () => {
+    const wrapper = mountClock(statuses(42))
+    const button = wrapper.find('button.refresh-btn')
+    const children = button.element.children
+    expect([...children].map((c) => c.tagName.toLowerCase())).toEqual(['svg', 'span'])
+    expect(button.find('svg').findAll('polygon.bit')).toHaveLength(9)
+    expect(button.find('.updated-time').text()).toBe(hhmmss(42))
+    expect(button.text()).not.toMatch(/rendered/i)
+    expect(mountClock({}).find('.updated-time').text()).toBe('--:--:--')
+  })
+
+  it('falls back to the stored inventory time until the source reports', () => {
+    const stored = new Date(NOW - 3600_000)
+    const wrapper = mount(RefreshClock, { props: { statuses: {}, streamState: 'open', updatedAt: stored } })
+    expect(wrapper.find('.updated-time').text()).toBe(hhmmss(3600))
+  })
+
+  it('starts the tooltip with the full date and time of the inventory', () => {
+    const wrapper = mountClock(statuses(42))
+    const tip = wrapper.find('[role="tooltip"]')
+    const first = tip.element.firstElementChild as HTMLElement
+    expect(first.className).toBe('tip-when')
+    const d = new Date(NOW - 42_000)
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    expect(first.textContent).toBe(
+      `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} · ${hhmmss(42)}`,
+    )
+  })
+
+  it('sends the refresh from a click anywhere in the block', async () => {
+    const wrapper = mountClock(statuses(42))
+    await wrapper.find('.refresh-btn svg').trigger('click')
+    await wrapper.find('.refresh-btn .updated-time').trigger('click')
+    expect(wrapper.emitted('refresh')).toHaveLength(2)
   })
 
   it('lists every source in the tooltip', () => {
@@ -129,7 +171,7 @@ describe('RefreshClock', () => {
     const wrapper = mountClock(statuses(10))
     vi.advanceTimersByTime(3000)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('button').attributes('aria-label')).toBe('Refresh, data 13 s old')
+    expect(wrapper.find('button').attributes('aria-label')).toBe(`Refresh, data 13 s old, updated ${hhmmss(10)}`)
     expect(pattern(wrapper)).toBe('000001101')
   })
 
@@ -137,10 +179,10 @@ describe('RefreshClock', () => {
     const wrapper = mountClock(statuses(10), 'paused')
     vi.advanceTimersByTime(5000)
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('button').attributes('aria-label')).toBe('Refresh, data 10 s old')
+    expect(wrapper.find('button').attributes('aria-label')).toBe(`Refresh, data 10 s old, updated ${hhmmss(10)}`)
     expect(wrapper.findAll('.tip-line').at(-1)?.text()).toBe('ARP paused')
     await wrapper.setProps({ streamState: 'open' })
-    expect(wrapper.find('button').attributes('aria-label')).toBe('Refresh, data 15 s old')
+    expect(wrapper.find('button').attributes('aria-label')).toBe(`Refresh, data 15 s old, updated ${hhmmss(10)}`)
   })
 
   it('returns to zero when a new updatedAt arrives', async () => {

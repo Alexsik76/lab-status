@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useDateFormat } from '@vueuse/core'
 import { computed } from 'vue'
 import type { ArpPhase } from '../composables/useArp'
 import type { TreeCounts } from '../domain/model'
@@ -14,7 +13,7 @@ const props = withDefaults(
   defineProps<{
     page: Page
     counts: TreeCounts | null
-    /** Hosts page: the refresh clock (fed by the sources' status events) and the render time. */
+    /** Hosts page: the refresh block (clock fed by the sources' status events, time of the inventory). */
     refreshing: boolean
     updatedAt: Date | null
     statuses?: SourceStatuses
@@ -26,8 +25,6 @@ const props = withDefaults(
   { statuses: () => ({}), streamState: 'idle' },
 )
 defineEmits<{ refresh: [] }>()
-
-const formattedTime = useDateFormat(() => props.updatedAt ?? undefined, 'ddd D MMM YYYY · HH:mm:ss')
 
 const summary = computed(() => {
   const c = props.counts
@@ -72,9 +69,9 @@ const liveText = computed(() =>
           :statuses="statuses"
           :stream-state="streamState"
           :refreshing="refreshing"
+          :updated-at="updatedAt"
           @refresh="$emit('refresh')"
         />
-        <span v-if="updatedAt" class="timestamp">rendered {{ formattedTime }}</span>
       </template>
       <span v-else class="arp-live" :class="`phase-${arpPhase}`">
         <span class="live-dot"></span>{{ liveText }}
@@ -124,6 +121,8 @@ const liveText = computed(() =>
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px;
+  box-sizing: border-box;
+  height: var(--header-control-height);
   padding: 3px;
   border: 1px solid var(--color-border-guest);
   border-radius: var(--radius-md);
@@ -161,7 +160,7 @@ const liveText = computed(() =>
 }
 .switch-item:hover:not(.is-active) {
   color: var(--color-text-secondary);
-  background: oklch(0.21 0.01 250);
+  background: var(--color-bg-control-hover);
 }
 .switch-item.is-active,
 .switch-item.is-active:hover {
@@ -201,10 +200,6 @@ const liveText = computed(() =>
   align-items: center;
   gap: 6px 14px;
   min-width: 0;
-}
-
-.timestamp {
-  white-space: nowrap;
 }
 
 .arp-live {
