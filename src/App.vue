@@ -1,34 +1,54 @@
 <script setup lang="ts">
 import { useEventListener } from '@vueuse/core'
-import { computed, provide, reactive, ref, watch, watchEffect } from 'vue'
-import AppHeader, { type Page } from './components/AppHeader.vue'
+import { computed, defineAsyncComponent, onMounted, provide, reactive, ref, watch, watchEffect } from 'vue'
+import AppHeader from './components/AppHeader.vue'
 import ArpPage from './components/ArpPage.vue'
 import ErrorPage from './components/ErrorPage.vue'
 import InventorySkeleton from './components/InventorySkeleton.vue'
 import LabTree from './components/LabTree.vue'
+import LoadingSpinner from './components/LoadingSpinner.vue'
 import NoticeBanner from './components/NoticeBanner.vue'
 import { useArp } from './composables/useArp'
+import { useFocusTarget } from './composables/useFocusTarget'
 import { useLab } from './composables/useLab'
 import { useSourceStatuses } from './composables/useSourceStatuses'
 import { countViews } from './domain/arp'
-import { statusPhaseKey } from './injection'
+import type { Machine } from './domain/model'
+import { statusPhaseKey, topologyDevicesKey } from './injection'
+import { parseRoute, routeHash, type Page } from './presentation/route'
+
+/** The Topology page and elkjs come in their own chunk, loaded on the first visit. */
+const TopologyPage = defineAsyncComponent({
+  loader: () => import('./components/TopologyPage.vue'),
+  loadingComponent: LoadingSpinner,
+  delay: 150,
+})
 
 const arp = useArp()
 const sources = useSourceStatuses()
 const labState = useLab(arp.presence)
 const lab = reactive(labState)
 provide(statusPhaseKey, labState.livePhase)
+provide(topologyDevicesKey, labState.topologyDevices)
 
 const hash = ref(typeof window === 'undefined' ? '' : window.location.hash)
 useEventListener('hashchange', () => {
   hash.value = window.location.hash
 })
-const page = computed<Page>(() => (hash.value === '#/arp' ? 'arp' : 'hosts'))
+const route = computed(() => parseRoute(hash.value))
+const page = computed<Page>(() => route.value.page)
 const arpDisconnected = computed(() => countViews(arp.rows.value.values()).disconnected)
 
+const TITLES: Record<Page, string> = { hosts: 'Hosts', topology: 'Topology', arp: 'ARP' }
 watchEffect(() => {
-  if (typeof document !== 'undefined') document.title = `Homelab · ${page.value === 'arp' ? 'ARP' : 'Hosts'}`
+  if (typeof document !== 'undefined') document.title = `Homelab · ${TITLES[page.value]}`
 })
+
+const machinesById = computed(
+  () => new Map<string, Machine>((lab.tree?.machines ?? []).map((m) => [m.id, m])),
+)
+/** No topology and the inventory status explains why (none is on its way). */
+const topologyUnavailable = computed(() => (lab.topology ? null : lab.inventoryError ?? lab.topologyError))
 
 /* Each page keeps its own scroll position; restored when the page enters again. */
 if (typeof window !== 'undefined' && 'scrollRestoration' in history) history.scrollRestoration = 'manual'
@@ -36,13 +56,42 @@ const scrollPositions: Partial<Record<Page, number>> = {}
 watch(page, (_to, from) => {
   scrollPositions[from] = window.scrollY
 })
+
+/*
+ * `?focus=<deviceId>`: once the page has entered, its target is scrolled into view and
+ * highlighted, then the parameter is dropped (replaceState) so reload and Back do not replay
+ * it. The focus wins over the restored scroll position.
+ */
+const appRoot = ref<HTMLElement | null>(null)
+const focus = useFocusTarget({
+  root: () => appRoot.value ?? document,
+  clear: (id) => {
+    if (route.value.focus !== id) return
+    const next = routeHash(page.value)
+    history.replaceState(history.state, '', next)
+    hash.value = next
+  },
+})
 function restoreScroll() {
-  window.scrollTo(0, scrollPositions[page.value] ?? 0)
+  if (!route.value.focus) window.scrollTo(0, scrollPositions[page.value] ?? 0)
 }
+function onPageEntered() {
+  if (route.value.focus) focus.show(route.value.focus)
+}
+/* A new focus on the page already shown (no transition), and a focus in the opening URL. */
+watch(
+  () => route.value,
+  (to, from) => {
+    if (to.focus && from && to.page === from.page && to.focus !== from.focus) focus.show(to.focus)
+  },
+)
+onMounted(() => {
+  if (route.value.focus) focus.show(route.value.focus)
+})
 </script>
 
 <template>
-  <main class="homelab-app">
+  <main ref="appRoot" class="homelab-app">
     <AppHeader
       :page="page"
       :counts="lab.counts"
@@ -55,7 +104,7 @@ function restoreScroll() {
       @refresh="labState.refresh"
     />
 
-    <Transition name="page" mode="out-in" @enter="restoreScroll">
+    <Transition name="page" mode="out-in" @enter="restoreScroll" @after-enter="onPageEntered">
       <ArpPage
         v-if="page === 'arp'"
         key="arp"
@@ -63,6 +112,29 @@ function restoreScroll() {
         :phase="arp.phase.value"
         :error-message="arp.errorMessage.value"
       />
+
+      <div v-else-if="page === 'topology'" key="topology" class="hosts-page">
+        <ErrorPage
+          v-if="lab.view === 'fatal'"
+          :message="lab.fatalError ?? 'Unknown error.'"
+          :retrying="lab.isRefreshing"
+          @retry="labState.refresh"
+        />
+        <template v-else>
+          <NoticeBanner v-if="lab.refreshError && lab.topology">
+            The inventory could not be refreshed; the topology is from {{ lab.inventoryTimeText }}. {{ lab.refreshError }}
+          </NoticeBanner>
+          <NoticeBanner v-else-if="lab.topologyError && lab.topology">
+            The topology could not be refreshed; showing the cabling from an earlier read. {{ lab.topologyError }}
+          </NoticeBanner>
+          <TopologyPage
+            :topology="lab.topology"
+            :machines="machinesById"
+            :presence="arp.presence.value"
+            :unavailable="topologyUnavailable"
+          />
+        </template>
+      </div>
 
       <div v-else key="hosts" class="hosts-page">
         <ErrorPage
@@ -169,6 +241,26 @@ a:hover {
   .page-enter-active,
   .page-leave-active {
     transition: none;
+  }
+}
+
+/* The target of a `?focus=` jump: a short accent pulse (a static outline with reduced motion). */
+[data-focus-flash] {
+  outline: 2px solid var(--color-text-accent);
+  outline-offset: 3px;
+  animation: focus-pulse 0.8s ease-out 2;
+}
+@keyframes focus-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-text-accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-focus-flash] {
+    animation: none;
   }
 }
 

@@ -31,8 +31,27 @@ MACS = [{"mac_address": "02:00:00:00:00:aa", "assigned_object_type": "dcim.inter
          "assigned_object": {"name": "eth0", "device": {"id": 1, "name": "srv-a"}}}]
 PROXY_HOSTS = [{"id": 1, "domain_names": ["logs.example.com"], "forward_host": "192.0.2.20", "forward_port": 9428,
                 "certificate_id": 1, "enabled": True}]
+IFACES = [{"id": 501, "name": "ether1", "device": {"id": 1, "name": "srv-a"}, "type": {"value": "1000base-t"},
+           "speed": None, "mode": None, "untagged_vlan": None, "tagged_vlans": [], "mgmt_only": False},
+          {"id": 502, "name": "eth0", "device": {"id": 2, "name": "srv-b"}, "type": {"value": "1000base-t"},
+           "speed": None, "mode": None, "untagged_vlan": None, "tagged_vlans": [], "mgmt_only": False}]
+CABLES = [{"id": 900, "type": "cat6", "status": {"value": "connected"},
+           "a_terminations": [{"object_type": "dcim.interface", "object": IFACES[0]}],
+           "b_terminations": [{"object_type": "dcim.interface", "object": IFACES[1]}]}]
+VLANS = [{"vid": 10, "name": "trust"}]
+TOPOLOGY = {
+    "vlans": [{"vid": 10, "name": "trust"}],
+    "ports": [{"id": "501", "deviceId": "1", "name": "ether1", "order": 0, "type": "1000base-t", "speedKbps": None,
+               "mode": None, "untagged": None, "tagged": [], "mgmtOnly": False},
+              {"id": "502", "deviceId": "2", "name": "eth0", "order": 0, "type": "1000base-t", "speedKbps": None,
+               "mode": None, "untagged": None, "tagged": [], "mgmtOnly": False}],
+    "cables": [{"id": "900", "type": "cat6", "a": "501", "b": "502"}],
+}
 REST = {
     "/api/dcim/devices/": DEVICES,
+    "/api/dcim/cables/": CABLES,
+    "/api/dcim/interfaces/": IFACES,
+    "/api/ipam/vlans/": VLANS,
     "/api/virtualization/virtual-machines/": VMS,
     "/api/ipam/services/": SERVICES,
     "/api/dcim/mac-addresses/": MACS,
@@ -90,7 +109,8 @@ async def test_one_cycle_feeds_inventory_targets_mac_directory_and_public_urls()
 
     await source.cycle()
 
-    assert events[0] == {"type": "data", "data": GRAPHQL["data"]}  # the GraphQL data object, unchanged
+    # The GraphQL data object unchanged, with the topology beside its lists.
+    assert events[0] == {"type": "data", "data": {**GRAPHQL["data"], "topology": TOPOLOGY}}
     assert events[1]["state"] == "live" and events[1]["error"] is None and events[1]["periodS"] == 300.0
     assert source.parts.targets == [Target("vm-a/logs", "http://192.0.2.20:9428", 100)]
     assert source.parts.public_urls == {("192.0.2.20", 9428): "https://logs.example.com"}
@@ -135,7 +155,41 @@ async def test_failed_page_inventory_is_an_error_and_keeps_the_last_payload() ->
     await source.cycle()
     assert events == [{"type": "status", "state": "error", "error": "NetBox is unreachable.",
                        "updatedAt": good_at, "periodS": 300.0}]
-    assert source.data == GRAPHQL["data"] and source.parts.targets is not None
+    assert source.data == {**GRAPHQL["data"], "topology": TOPOLOGY} and source.parts.targets is not None
+
+
+async def test_failed_topology_read_keeps_the_previous_topology_and_still_publishes() -> None:
+    upstream = Upstream()
+    source = upstream.source()
+    await source.cycle()
+    events = collect(source)
+
+    upstream.down = {"/api/dcim/cables/"}
+    await source.cycle()
+    assert source.parts.topology == TOPOLOGY and source.data["topology"] == TOPOLOGY
+    status = events[-1]
+    assert status["type"] == "status" and status["state"] == "live"
+    assert status["error"] == "Topology: NetBox is unreachable."
+    assert source.parts.errors == {"topology": "NetBox is unreachable."}
+
+    upstream.down = {"/api/ipam/vlans/", "npm.example"}  # summary order: topology before public_urls
+    await source.cycle()
+    assert events[-1]["error"] == "Topology: NetBox is unreachable. Nginx Proxy Manager is unreachable."
+    assert list(source.parts.errors) == ["topology", "public_urls"]
+
+    upstream.down = {"/api/ipam/services/", "/api/dcim/interfaces/"}  # same message, still named
+    await source.cycle()
+    assert events[-1]["error"] == "NetBox is unreachable. Topology: NetBox is unreachable."
+
+
+async def test_topology_is_null_until_it_first_loads() -> None:
+    upstream = Upstream()
+    upstream.down = {"/api/dcim/interfaces/"}
+    source = upstream.source()
+    events = collect(source)
+    await source.cycle()
+    assert events[0] == {"type": "data", "data": {**GRAPHQL["data"], "topology": None}}
+    assert events[1]["state"] == "live" and events[1]["error"] == "Topology: NetBox is unreachable."
 
 
 async def test_graphql_errors_are_reported() -> None:

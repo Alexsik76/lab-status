@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { rawInventory } from '../__fixtures__'
 import {
   parseIcon,
+  parseTopology,
   normalizeInventory,
   normalizeTags,
   parseHardware,
@@ -210,5 +211,20 @@ describe('normalizeInventory (real data)', () => {
     const parents = inventory.services.map((s) => s.parent?.kind)
     expect(parents.filter((p) => p === 'vm')).toHaveLength(15)
     expect(parents.filter((p) => p === 'device')).toHaveLength(5)
+  })
+})
+
+describe('topology', () => {
+  it('passes the backend topology through when its shape holds', async () => {
+    const { topologyPayload } = await import('../__fixtures__/topology')
+    expect(normalizeInventory({ ...rawInventory, topology: topologyPayload }).topology).toBe(topologyPayload)
+  })
+
+  it('is null when missing or malformed', () => {
+    expect(normalizeInventory(rawInventory).topology).toBeNull()
+    expect(parseTopology(null)).toBeNull()
+    expect(parseTopology({ vlans: [], ports: [], cables: 'x' })).toBeNull()
+    expect(parseTopology({ vlans: [], ports: [{ id: 1, deviceId: '1', order: 0 }], cables: [] })).toBeNull()
+    expect(parseTopology({ vlans: [], ports: [], cables: [] })).toEqual({ vlans: [], ports: [], cables: [] })
   })
 })

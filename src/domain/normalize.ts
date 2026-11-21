@@ -14,6 +14,7 @@ import type {
   RawTag,
   RawVirtualMachine,
 } from '../types/netbox'
+import type { RawTopology } from '../types/topology'
 
 const STACK_TAG_PREFIX = 'stack:'
 const STANDALONE_STACK = 'standalone'
@@ -193,6 +194,27 @@ function normalizeService(raw: RawService): ServiceRecord {
   }
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+
+/**
+ * The backend's topology, when its shape holds (lists of vlans, ports and cables with string
+ * ids); anything else is treated as not loaded.
+ */
+export function parseTopology(raw: unknown): RawTopology | null {
+  if (!isObject(raw)) return null
+  const { vlans, ports, cables } = raw
+  if (!Array.isArray(vlans) || !Array.isArray(ports) || !Array.isArray(cables)) return null
+  const portsOk = ports.every(
+    (p) => isObject(p) && typeof p.id === 'string' && typeof p.deviceId === 'string' && typeof p.order === 'number',
+  )
+  const cablesOk = cables.every(
+    (c) => isObject(c) && typeof c.id === 'string' && typeof c.a === 'string' && typeof c.b === 'string',
+  )
+  const vlansOk = vlans.every((v) => isObject(v) && typeof v.vid === 'number')
+  if (!portsOk || !cablesOk || !vlansOk) return null
+  return raw as unknown as RawTopology
+}
+
 /** NetBox status of hardware kept in reserve; it is not part of the running lab. */
 const RESERVE_STATUS = 'inventory'
 
@@ -212,5 +234,6 @@ export function normalizeInventory(raw: RawInventory): Inventory {
     devices: devices.map(normalizeDevice),
     vms: vms.map(normalizeVm),
     services,
+    topology: parseTopology(raw.topology),
   }
 }

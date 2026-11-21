@@ -8,6 +8,7 @@ import {
   statusEntries,
 } from './__fixtures__'
 import { FakeEventSource } from './__fixtures__/fakeEventSource'
+import { topologyPayload } from './__fixtures__/topology'
 import App from './App.vue'
 import { REFRESH_URL } from './config'
 import { INVENTORY_SCHEMA_VERSION, INVENTORY_STORAGE_KEY } from './composables/useInventory'
@@ -196,6 +197,50 @@ describe('App', () => {
     expect(active()).toBe('Hosts')
     wrapper.unmount()
   })
+
+  it('draws the topology on its own page and links devices between Hosts and Topology', async () => {
+    window.location.hash = ''
+    const body = { data: { ...netboxResponse.data, topology: topologyPayload } }
+    stubBackend({ netbox: ok(body), status: ok(statusEntries) })
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    // Every fixture machine is cabled: each tile offers the jump to the diagram.
+    const links = wrapper.findAll('.topology-link')
+    expect(links).toHaveLength(5)
+    expect(links[0].attributes('href')).toMatch(/^#\/topology\?focus=\d+$/)
+    expect(links[0].attributes('title')).toBe('Show on topology')
+
+    window.location.hash = '#/topology'
+    await vi.waitFor(() => expect(wrapper.findAll('.topo-card')).toHaveLength(7), { timeout: 4000 })
+    expect(document.title).toBe('Homelab · Topology')
+    expect(wrapper.find('.switch-item.is-active').text()).toBe('Topology')
+    expect(wrapper.find('.refresh-btn').exists()).toBe(true)
+    // Machines link back to their tile; the router and the switch are not clickable.
+    const card = (id: string) => wrapper.find(`.topo-card[data-focus-device="${id}"]`)
+    expect(card('11').element.tagName).toBe('A')
+    expect(card('11').attributes('href')).toBe('#/?focus=11')
+    expect(card('2').element.tagName).toBe('DIV')
+    expect(card('2').findAll('.jack')).toHaveLength(6)
+    expect(wrapper.find('.topo-legend').text()).toContain('20 servers')
+    expect(wrapper.findAll('.speed-tag').map((t) => t.text()).sort()).toEqual(['100M', '10G', '2.5G'])
+    wrapper.unmount()
+    window.location.hash = ''
+  })
+
+  it('scrolls to and highlights the focused device, then drops the focus parameter', async () => {
+    window.location.hash = '#/?focus=12'
+    stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries) })
+    const wrapper = await mountApp()
+    const tile = () => wrapper.find('.machine-node[data-focus-device="12"]')
+    await vi.waitFor(() => expect(tile().attributes('data-focus-flash')).toBe(''))
+    await vi.waitFor(() => expect(window.location.hash).toBe('#/'), { timeout: 3000 })
+    expect(tile().attributes('data-focus-flash')).toBeUndefined()
+
+    window.location.hash = '#/?focus=nope' // unknown ids are ignored
+    await vi.waitFor(() => expect(wrapper.find('[data-focus-flash]').exists()).toBe(false))
+    wrapper.unmount()
+    window.location.hash = ''
+  }, 10000)
 
   it('renders the tree and fills in statuses', async () => {
     stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries) })

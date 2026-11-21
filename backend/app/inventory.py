@@ -8,6 +8,7 @@ One cycle reads everything the backend needs, concurrently:
 | `targets`     | REST services, virtual machines, devices         | `ServiceChecker`          |
 | `macs`        | REST MAC addresses, devices, virtual machines    | `ArpSource` enrichment    |
 | `public_urls` | NPM proxy hosts                                  | `ServiceChecker`          |
+| `topology`    | REST cables, interfaces, VLANs, devices          | the page (`topology` key) |
 
 Each REST list is read once per cycle even when two parts need it. A part whose reads fail
 keeps its previous value. When the page's inventory fails the cycle is an error (no new
@@ -26,6 +27,7 @@ import httpx
 from .netbox import MacMatch, NetBoxClient, Target, build_mac_directory, build_targets
 from .npm import NpmClient, PublicUrlMap, fetch_public_url_map
 from .polling import PollingSource
+from .topology import build_topology
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +45,9 @@ INVENTORY_QUERY = """{
 }"""
 
 INVENTORY_LISTS = ("device_list", "virtual_machine_list", "service_list")
+
+#: Start of the `topology` part's message in the status `error` (the page looks for it).
+TOPOLOGY_ERROR_PREFIX = "Topology: "
 
 
 class InventoryUnavailable(Exception):
@@ -88,6 +93,7 @@ class InventoryParts:
     targets: list[Target] | None = None
     macs: dict[str, MacMatch] | None = None
     public_urls: PublicUrlMap | None = None
+    topology: Json | None = None
     #: Messages of the parts that failed in the last cycle, by part name.
     errors: dict[str, str] = field(default_factory=dict)
 
@@ -121,6 +127,9 @@ class InventorySource(PollingSource):
             "vms": self._netbox.list("virtualization/virtual-machines/"),
             "devices": self._netbox.list("dcim/devices/"),
             "mac_addresses": self._netbox.list("dcim/mac-addresses/"),
+            "cables": self._netbox.list("dcim/cables/"),
+            "interfaces": self._netbox.list("dcim/interfaces/"),
+            "vlans": self._netbox.list("ipam/vlans/"),
         }
         if self._npm is not None:
             args = (self._npm,) if self._resolve is None else (self._npm, self._resolve)
@@ -153,6 +162,13 @@ class InventorySource(PollingSource):
         else:
             errors["macs"] = describe("NetBox", first_error("mac_addresses", "devices", "vms"))
 
+        if ok("cables", "interfaces", "vlans", "devices"):
+            self.parts.topology = build_topology(
+                results["cables"], results["interfaces"], results["vlans"], results["devices"]
+            )
+        else:
+            errors["topology"] = describe("NetBox", first_error("cables", "interfaces", "vlans", "devices"))
+
         if "public_urls" in results:
             if ok("public_urls"):
                 self.parts.public_urls = results["public_urls"]
@@ -168,15 +184,24 @@ class InventorySource(PollingSource):
             callback(self.parts)
         if "inventory" in errors:
             raise UpstreamError(self._summary())
-        return self.parts.inventory
+        return {**self.parts.inventory, "topology": self.parts.topology}
 
     def cycle_warning(self) -> str | None:
         return self._summary() or None
 
     def _summary(self) -> str:
-        """Each distinct message once, the page's inventory first."""
-        order = ("inventory", "targets", "macs", "public_urls")
-        return " ".join(dict.fromkeys(self.parts.errors[p] for p in order if p in self.parts.errors))
+        """Each distinct message once, the page's inventory first. A topology failure is named
+        (`Topology: ...`) so the page can tell a stale topology from other partial failures;
+        when the page's inventory failed too, the cycle is an error and that says it all."""
+        order = ("inventory", "targets", "macs", "topology", "public_urls")
+        errors = self.parts.errors
+        messages = []
+        for part in order:
+            if part not in errors:
+                continue
+            named = part == "topology" and "inventory" not in errors
+            messages.append(TOPOLOGY_ERROR_PREFIX + errors[part] if named else errors[part])
+        return " ".join(dict.fromkeys(messages))
 
     # ---- readers without a subscription ----
 

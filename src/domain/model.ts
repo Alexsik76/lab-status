@@ -1,5 +1,7 @@
 /** Domain model: normalized inventory records and the rendered tree. */
 
+import type { RawTopology } from '../types/topology'
+
 export type State = 'up' | 'down' | 'stopped' | 'unknown'
 
 /** Statuses a single service check can resolve to. */
@@ -77,6 +79,8 @@ export interface Inventory {
   devices: DeviceRecord[]
   vms: VmRecord[]
   services: ServiceRecord[]
+  /** NetBox cabling (validated, otherwise as sent); null until it was first read. */
+  topology?: RawTopology | null
 }
 
 // ---- Tree (output of `buildTree`) ----
