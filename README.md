@@ -25,7 +25,10 @@ independent sources:
    and sent as `proxmox` / `metrics` events of `GET /api/stream`;
 5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`.
 
-A second page, `#/arp`, lists the router's ARP table live, each entry matched to the
+A second page, `#/topology`, draws the physical network from NetBox cabling (see
+[Topology](#topology)).
+
+A third page, `#/arp`, lists the router's ARP table live, each entry matched to the
 NetBox object owning its MAC, with three views: unknown (no NetBox match), active, and
 disconnected (`failed` / `incomplete`).
 
@@ -36,7 +39,7 @@ and survives NetBox being unreachable. Refreshing never blanks what is on screen
 The page makes exactly two kinds of requests besides its static files: the stream
 (`GET /api/stream`) and, on the Refresh button, `POST /api/refresh`.
 
-**Refresh block.** The right end of the header is one button, as tall as the Hosts | ARP
+**Refresh block.** The right end of the header is one button, as tall as the Hosts | Topology | ARP
 switch (`--header-control-height`) and styled like it: a binary clock on top and the local time
 of the last inventory update (HH:MM:SS) below. The clock is the age in whole seconds of the
 NetBox inventory (`updatedAt` of the `inventory` source, the data Refresh re-reads), counting
@@ -72,14 +75,31 @@ UTC) changes. A failed poll keeps the last data and reports the error; polling g
 
 | Source | Upstream | Period | `data` |
 |---|---|---|---|
-| `inventory` | NetBox: the page's GraphQL query and REST services, virtual machines, devices, MAC addresses; NPM proxy hosts; all concurrently, each data set once | 300 s (`INVENTORY_PERIOD_S`) | the GraphQL `data` object unchanged |
+| `inventory` | NetBox: the page's GraphQL query and REST services, virtual machines, devices, MAC addresses, cables, interfaces, VLANs; NPM proxy hosts; all concurrently, each data set once | 300 s (`INVENTORY_PERIOD_S`) | the GraphQL `data` object unchanged, plus the key `topology` (below) |
 | `proxmox` | `cluster/resources` | 15 s (`PROXMOX_PERIOD_S`) | the Proxmox `data` array unchanged |
 | `metrics` | `nodes/<node>/rrddata?timeframe=hour&cf=AVERAGE` for every node of the latest cluster resources, concurrently | 60 s (`PROXMOX_METRICS_PERIOD_S`), and at once when the node set changes | `{node: points}`; a node that fails gets `[]` |
 
 The `inventory` cycle is the backend's only NetBox (and NPM) read: the service checks take
 their targets and public URLs from it, and the ARP mirror its MAC directory (a changed
 directory re-sends the ARP snapshot). A part that fails keeps its previous value; if only the
-page's inventory failed the status is `error`, otherwise `live` with the failure in `error`.
+page's inventory failed the status is `error`, otherwise `live` with the failure in `error`
+(parts in the order inventory, targets, MAC directory, topology, NPM). A failed topology read
+is named `Topology: <message>`, so the page can tell that only the cabling is stale; the last
+topology is kept and still published.
+
+The `topology` key of the `inventory` data (`null` until NetBox cabling was first read):
+
+```
+{ "vlans":  [{ "vid", "name" }],
+  "ports":  [{ "id", "deviceId", "name", "order", "type", "speedKbps", "mode", "untagged", "tagged": [vid], "mgmtOnly" }],
+  "cables": [{ "id", "type", "a": portId, "b": portId }] }
+```
+
+Only connected cables with a single interface on each end are kept, and none that touches a
+device with status `inventory` (reserve hardware, hidden on the Hosts page too). Only ports
+that terminate a kept cable are listed; `order` is the interface's index in NetBox's natural
+order within its device. Ids are strings, like the GraphQL ids.
+
 `POST /api/refresh` runs every polling source at once, reconciles the container lists and
 starts a full round of service checks.
 
@@ -129,6 +149,58 @@ restarts), the browser gives up on it; the page then reopens it itself after 2 s
 the delay up to 30 s. In the backend, a source that crashes is restarted after 2 s while
 pages are connected.
 
+## Topology
+
+`#/topology` is a physical network diagram: devices are cards, the ports of routers, switches
+and access points are jacks, cables are orthogonal lines. Nothing is placed by hand; the page
+lays the graph out with [elkjs](https://github.com/kieler/elkjs). Guests, containers and
+services are not drawn: the Hosts page shows them. The page and elkjs load as a separate
+chunk on the first visit.
+
+**Data.** The backend reads `dcim/cables/`, `dcim/interfaces/` and `ipam/vlans/` on the
+inventory cycle (devices come from the same cycle's `dcim/devices/`) and publishes the compact
+`topology` structure inside the `inventory` payload (see [Event stream](#event-stream)). The
+NetBox fields that drive the picture:
+
+| NetBox field | Effect |
+|---|---|
+| cable `status` = `connected`, both ends interfaces | the cable is drawn |
+| device `status` = `inventory` | the device and its cables are left out |
+| device `status` = `offline` | the card is dimmed |
+| device role slug `router` | root of the diagram (top) |
+| device role slug `router`, `switch`, `access-point` | ports drawn as a jack row in NetBox order |
+| device role slug `server` | a Hosts machine: summary line, link to its tile |
+| interface `mode` (`tagged`, `tagged-all`) or `tagged_vlans` | trunk cable (light, with a dark core) |
+| interface `untagged_vlan` | access cable in the VLAN's colour |
+| interface `speed`, else the nominal speed of its `type` | line width (10G / 2.5G / 1G / 100M) and a speed tag on everything but 1G |
+
+A cable is a trunk when either end is tagged, otherwise an access cable in the untagged VLAN
+of either end, otherwise grey ("no VLAN data"). A VLAN is never guessed from addresses. A cable
+takes the lower speed of its two ends. VLAN colours are tokens `--color-vlan-<vid>` in
+`tokens.css` for vids 1, 10, 20 … 100; other vids use `--color-vlan-other`. The legend lists
+only what the diagram shows.
+
+**Layout.** Root: the device with role `router` (a part of the network the router does not
+reach starts from its own switch-like device, else the device with most cables). A BFS over
+the cables gives every device a depth; each cable runs from the shallower device (port on its
+SOUTH side) to the deeper one (NORTH side). ELK `layered`, direction `DOWN`, orthogonal edge
+routing; switch-like devices keep their port order (`FIXED_ORDER`, pitch 54 px, card width
+max(330, ports x 54 + 40)), other devices fix only the side (`FIXED_SIDE`). The layout runs
+again only when devices, ports, cables or card sizes change, not on status or metrics events.
+Cables are an SVG layer under absolutely positioned HTML cards; the diagram is scaled to the
+page width, never above 1 and not below 0.6 (it scrolls horizontally then).
+
+**Cards.** Icon, name, model (else role), primary IP. Hosts machines add a line with their
+state, guest and container counts, and current CPU / memory from Proxmox; other devices show
+the router's ARP presence (online / unreachable) when the router knows one of their MACs.
+
+**Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
+Hosts page has a "Show on topology" button (only when the device is on the diagram) to
+`#/topology?focus=<deviceId>`. On arrival the target is scrolled into view, centred, and
+pulses in the accent colour for 1.6 s (a static outline with `prefers-reduced-motion`), then
+the `focus` parameter is removed with `history.replaceState`, so reload and Back do not replay
+it. An unknown id is ignored. The focus wins over the page's restored scroll position.
+
 ## ARP mirror
 
 The `arp` source talks to the RouterOS API (port 8728) only while the stream is active:
@@ -149,10 +221,10 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | Path | Purpose |
 |---|---|
 | `src/api/` | validation of the stream payloads (inventory, service checks, container list), the refresh request, typed errors |
-| `src/domain/` | pure logic: normalizing NetBox data, building the tree, state rules, ARP presence |
-| `src/composables/` | the shared stream (`useEventStream`) and one reader per source (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`, `useSourceStatuses`), combined in `useLab` |
-| `src/components/` | render-only components: the tree, the ARP page, the refresh clock, error page, skeleton |
-| `src/presentation/` | display helpers: layout, links, platform icons, hardware text, the clock's bits and colours |
+| `src/domain/` | pure logic: normalizing NetBox data, building the tree, state rules, ARP presence, the topology graph |
+| `src/composables/` | the shared stream (`useEventStream`) and one reader per source (`useInventory`, `useStatuses`, `useContainerStatuses`, `useProxmox`, `useArp`, `useSourceStatuses`), combined in `useLab`; the ELK layout (`useTopologyLayout`) and the focus jump (`useFocusTarget`) |
+| `src/components/` | render-only components: the tree, the Topology page (cards, cables, legend), the ARP page, the refresh clock, error page, skeleton |
+| `src/presentation/` | display helpers: layout, links, platform icons, hardware text, the clock's bits and colours, routes, the topology's ELK input and drawing |
 | `src/__fixtures__/` | synthetic responses covering all topology cases, used by the tests |
 | `backend/app/` | FastAPI: stream hub and polling base, ARP mirror, inventory cycle (NetBox, NPM), Proxmox, Portainer container states, service checks |
 | `backend/tests/` | pytest suite |
@@ -166,7 +238,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | Variable | Used by | Meaning |
 |---|---|---|
 | `NETBOX_URL` | api | NetBox base URL, e.g. `http://192.0.2.10:8000` (no trailing slash) |
-| `NETBOX_TOKEN` | api | API token of a read-only NetBox user (GraphQL and REST); it needs view rights on devices, virtual machines, services, IP addresses, and MAC addresses |
+| `NETBOX_TOKEN` | api | API token of a read-only NetBox user (GraphQL and REST); it needs view rights on devices, virtual machines, services, IP addresses, MAC addresses, cables, interfaces, and VLANs |
 | `INVENTORY_PERIOD_S` | api | optional: period of the NetBox / NPM cycle, default `300` |
 | `ROUTEROS_HOST` | api | Router address for the API service |
 | `ROUTEROS_PORT` | api | API port, default `8728` |

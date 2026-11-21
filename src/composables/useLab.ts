@@ -2,11 +2,15 @@ import { computed, readonly, ref, type Ref } from 'vue'
 import type { ArpPresenceIndex } from '../domain/arp'
 import { matchDockerContainers } from '../domain/containerStatuses'
 import { mapMachineMetrics, matchProxmoxGuests } from '../domain/proxmox'
-import { buildTree, countTree } from '../domain/tree'
+import { topologyDeviceIds } from '../domain/topologyLinks'
+import { buildTree, countTree, MACHINE_ROLE } from '../domain/tree'
 import { useContainerStatuses } from './useContainerStatuses'
 import { useInventory } from './useInventory'
 import { useProxmox } from './useProxmox'
 import { useStatuses, type StatusPhase } from './useStatuses'
+
+/** Start of the topology part's message in the inventory status (backend/app/inventory.py). */
+export const TOPOLOGY_ERROR_PREFIX = 'Topology: '
 
 export type LabView = 'loading' | 'fatal' | 'empty' | 'tree'
 
@@ -53,6 +57,19 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
   )
   const counts = computed(() => (tree.value ? countTree(tree.value) : null))
 
+  /** Changes only with the inventory; the graph itself is built in the Topology chunk. */
+  const topology = computed(() => {
+    const inv = inventory.data.value
+    if (!inv?.topology) return null
+    const machineIds = new Set(inv.devices.filter((d) => d.roleSlug === MACHINE_ROLE).map((d) => d.id))
+    return { data: inv.topology, devices: inv.devices, machineIds }
+  })
+  /** The backend names a failed topology read `Topology: ...` while the rest refreshed. */
+  const topologyError = computed(() => {
+    const status = inventory.status.value
+    return status?.state === 'live' && status.error?.includes(TOPOLOGY_ERROR_PREFIX) ? status.error : null
+  })
+
   const view = computed<LabView>(() => {
     if (tree.value) {
       return tree.value.machines.length === 0 && tree.value.unplaced.length === 0 ? 'empty' : 'tree'
@@ -95,6 +112,11 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
     view,
     tree,
     counts,
+    topology,
+    topologyDevices: computed(() => topologyDeviceIds(topology.value?.data, topology.value?.devices ?? [])),
+    topologyError,
+    /** The inventory status says why there is no topology (when it says anything). */
+    inventoryError: inventory.errorMessage,
     livePhase,
     statusPhase: statuses.phase,
     statusError: statuses.errorMessage,

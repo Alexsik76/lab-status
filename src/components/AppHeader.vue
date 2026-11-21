@@ -4,16 +4,17 @@ import type { ArpPhase } from '../composables/useArp'
 import type { TreeCounts } from '../domain/model'
 import type { StreamState } from '../composables/useEventStream'
 import type { SourceStatuses } from '../composables/useSourceStatuses'
+import type { Page } from '../presentation/route'
 import HoverTip from './HoverTip.vue'
 import RefreshClock from './RefreshClock.vue'
 
-export type Page = 'hosts' | 'arp'
+export type { Page } from '../presentation/route'
 
 const props = withDefaults(
   defineProps<{
     page: Page
     counts: TreeCounts | null
-    /** Hosts page: the refresh block (clock fed by the sources' status events, time of the inventory). */
+    /** Hosts and Topology pages: the refresh block (clock fed by the sources' status events, time of the inventory). */
     refreshing: boolean
     updatedAt: Date | null
     statuses?: SourceStatuses
@@ -55,6 +56,9 @@ const liveText = computed(() =>
       <a href="#/" class="switch-item" :class="{ 'is-active': page === 'hosts' }" :aria-current="page === 'hosts' ? 'page' : undefined">
         Hosts
       </a>
+      <a href="#/topology" class="switch-item" :class="{ 'is-active': page === 'topology' }" :aria-current="page === 'topology' ? 'page' : undefined">
+        Topology
+      </a>
       <a href="#/arp" class="switch-item" :class="{ 'is-active': page === 'arp' }" :aria-current="page === 'arp' ? 'page' : undefined">
         ARP
         <Transition name="badge">
@@ -64,7 +68,7 @@ const liveText = computed(() =>
     </nav>
 
     <div class="header-right">
-      <template v-if="page === 'hosts'">
+      <template v-if="page !== 'arp'">
         <RefreshClock
           :statuses="statuses"
           :stream-state="streamState"
@@ -114,12 +118,12 @@ const liveText = computed(() =>
   font-size: 12px;
 }
 
-/* Hosts | ARP: two equal halves, a thumb slides under the active one. */
+/* Hosts | Topology | ARP: three equal parts, a thumb slides under the active one. */
 .page-switch {
   grid-area: switch;
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 2px;
   box-sizing: border-box;
   height: var(--header-control-height);
@@ -134,14 +138,18 @@ const liveText = computed(() =>
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc(50% - 4px);
+  /* (padding box - 2 x 3px padding - 2 x 2px gaps) / 3 */
+  width: calc((100% - 10px) / 3);
   border-radius: var(--radius-sm);
   background: var(--color-bg-hover);
   box-shadow: inset 0 0 0 1px var(--color-border-btn-hover);
   transition: transform 0.22s cubic-bezier(0.3, 0.7, 0.3, 1);
 }
-.on-arp .switch-thumb {
+.on-topology .switch-thumb {
   transform: translateX(calc(100% + 2px));
+}
+.on-arp .switch-thumb {
+  transform: translateX(calc(200% + 4px));
 }
 
 .switch-item {

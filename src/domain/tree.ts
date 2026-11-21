@@ -24,7 +24,8 @@ import {
   type ProxmoxGuestIndex,
 } from './proxmox'
 
-const MACHINE_ROLE = 'server'
+/** Devices with this role are the machines of the Hosts page. */
+export const MACHINE_ROLE = 'server'
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 const byName = (a: { name: string }, b: { name: string }) => collator.compare(a.name, b.name)

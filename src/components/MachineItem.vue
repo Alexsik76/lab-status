@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import type { Machine } from '../domain/model'
+import { topologyDevicesKey } from '../injection'
+import { routeHash } from '../presentation/route'
 import { describeHardware, formatHardware } from '../presentation/hardware'
 import { resolveHostDomainUrl, urlHostLabel } from '../presentation/hostLinks'
 import { orderMachineUnits } from '../presentation/layout'
@@ -16,6 +18,12 @@ import Tag from './Tag.vue'
 const props = defineProps<{
   machine: Machine
 }>()
+
+const topologyDevices = inject(topologyDevicesKey, null)
+/** The machine is on the topology diagram: offer the jump there. */
+const topologyHref = computed(() =>
+  topologyDevices?.value.has(props.machine.id) ? routeHash('topology', props.machine.id) : null,
+)
 
 const hwText = computed(() => formatHardware(props.machine.hardware))
 const hwTooltip = computed(() => describeHardware(props.machine.hardware) ?? undefined)
@@ -55,6 +63,7 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
       `state-${machine.state}`,
       { 'is-unreachable': machine.state === 'down' },
     ]"
+    :data-focus-device="machine.id"
   >
     <!-- Left Host Sidebar Card -->
     <div class="host-card">
@@ -87,6 +96,20 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
           <span class="host-name">{{ machine.name }}</span>
         </LinkOrPlain>
         <span class="spacer"></span>
+        <a
+          v-if="topologyHref"
+          :href="topologyHref"
+          class="topology-link"
+          title="Show on topology"
+          aria-label="Show on topology"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+            <rect x="4.5" y="1" width="5" height="3.4" rx="0.8" />
+            <rect x="0.8" y="9.6" width="5" height="3.4" rx="0.8" />
+            <rect x="8.2" y="9.6" width="5" height="3.4" rx="0.8" />
+            <path d="M7 4.4 V7 M3.3 9.6 V7 H10.7 V9.6" />
+          </svg>
+        </a>
         <StateBadge :state="machine.state" variant="machine" />
       </div>
 
@@ -279,6 +302,29 @@ const memSpark = computed(() => metrics.value?.mem.spark ?? null)
 
 .spacer {
   flex: 1;
+}
+
+.topology-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-dim);
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.topology-link:hover,
+.topology-link:focus-visible {
+  color: var(--color-text-accent);
+  background: var(--color-bg-control-hover);
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .topology-link {
+    transition: none;
+  }
 }
 
 .host-meta {

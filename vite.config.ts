@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue()],
+    // The Topology chunk carries elkjs (about 1.4 MB, 0.45 MB gzipped); it loads on its first visit.
+    build: { chunkSizeWarningLimit: 1600 },
     server: {
       proxy: {
         '/api/refresh': {

@@ -1,0 +1,89 @@
+<script setup lang="ts">
+import type { SpeedBucket } from '../domain/topology'
+import type { RawTopologyVlan } from '../types/topology'
+import { cableWidth, styleColor, vlanColor } from '../presentation/topologyLayout'
+
+/** What the cables mean: trunk, the VLANs present, no VLAN data, widths by speed. */
+defineProps<{
+  vlans: readonly RawTopologyVlan[]
+  hasTrunk: boolean
+  hasUnknown: boolean
+  speeds: readonly SpeedBucket[]
+}>()
+
+const trunk = styleColor({ kind: 'trunk', vlan: null })
+const unknown = styleColor({ kind: 'unknown', vlan: null })
+</script>
+
+<template>
+  <aside class="topo-legend" aria-label="Legend">
+    <ul class="legend-group">
+      <li v-if="hasTrunk">
+        <svg width="26" height="10" aria-hidden="true">
+          <line x1="1" y1="5" x2="25" y2="5" :stroke="trunk" stroke-width="5" />
+          <line x1="1" y1="5" x2="25" y2="5" stroke="var(--color-bg-page)" stroke-width="2" />
+        </svg>
+        trunk
+      </li>
+      <li v-for="v in vlans" :key="v.vid">
+        <svg width="26" height="10" aria-hidden="true">
+          <line x1="1" y1="5" x2="25" y2="5" :stroke="vlanColor(v.vid)" stroke-width="3" />
+        </svg>
+        <span class="vid">{{ v.vid }}</span>{{ v.name ? ` ${v.name}` : '' }}
+      </li>
+      <li v-if="hasUnknown">
+        <svg width="26" height="10" aria-hidden="true">
+          <line x1="1" y1="5" x2="25" y2="5" :stroke="unknown" stroke-width="3" />
+        </svg>
+        no VLAN data
+      </li>
+    </ul>
+    <ul v-if="speeds.length" class="legend-group">
+      <li v-for="s in speeds" :key="s">
+        <svg width="26" height="10" aria-hidden="true">
+          <line x1="1" y1="5" x2="25" y2="5" stroke="var(--color-text-dim)" :stroke-width="cableWidth(s)" />
+        </svg>
+        {{ s }}
+      </li>
+    </ul>
+  </aside>
+</template>
+
+<style scoped>
+.topo-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-tile);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-bg-tile) 92%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.legend-group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.legend-group + .legend-group {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-tile);
+}
+li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+svg {
+  flex: none;
+}
+.vid {
+  color: var(--color-text-secondary);
+}
+</style>

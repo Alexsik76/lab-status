@@ -1,5 +1,7 @@
 /** Raw shapes of the NetBox GraphQL response (see `api/netbox.ts` for the query). */
 
+import type { RawTopology } from './topology'
+
 export interface RawTag {
   name: string
   color?: string | null
@@ -48,6 +50,8 @@ export interface RawInventory {
   device_list: RawDevice[]
   virtual_machine_list: RawVirtualMachine[]
   service_list: RawService[]
+  /** Added by the backend beside the GraphQL lists; null until NetBox cabling was first read. */
+  topology?: RawTopology | null
 }
 
 export interface GraphQLResponse<T> {
