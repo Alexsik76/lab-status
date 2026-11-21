@@ -29,9 +29,22 @@ const props = defineProps<{
 }>()
 
 /** Rebuilt only with the inventory; live states reach the cards through `machines` and `presence`. */
-const graph = computed(() =>
-  props.topology ? buildTopologyGraph(props.topology.data, props.topology.devices, props.topology.machineIds) : null,
+/**
+ * Machines with Proxmox metrics (their cards have a load line). A string, so the graph is
+ * rebuilt, and laid out again, only when the set changes, not on every metrics event.
+ */
+const metricKey = computed(() =>
+  [...props.machines.values()]
+    .filter((m) => m.metrics)
+    .map((m) => m.id)
+    .sort()
+    .join(','),
 )
+const graph = computed(() => {
+  if (!props.topology) return null
+  const metricIds = new Set(metricKey.value ? metricKey.value.split(',') : [])
+  return buildTopologyGraph(props.topology.data, props.topology.devices, props.topology.machineIds, metricIds)
+})
 const { placement, phase, error } = useTopologyLayout(graph)
 
 const viewport = ref<HTMLElement | null>(null)

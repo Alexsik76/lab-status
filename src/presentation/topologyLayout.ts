@@ -8,46 +8,89 @@ import type { CableStyle, SpeedBucket, TopologyGraph, TopologyNode } from '../do
 
 // ---- card geometry ----
 
-export const PORT_PITCH = 54
+/**
+ * A card is a fixed stack of single-line rows (`cardLines`); `TopologyCard.vue` renders each
+ * row at exactly its height from `CARD_LINE_HEIGHT`, so the size given to ELK is the size drawn.
+ * A new row on the card needs a new line kind here.
+ */
+
+export const PORT_PITCH = 42
 export const JACK_WIDTH = 24
+/** Longest port name shown in full next to a jack; longer ones are cut (tooltip has it all). */
+export const JACK_NAME_MAX = PORT_PITCH - 4
 const SWITCH_MIN_WIDTH = 330
-const CARD_WIDTH = 210
-/** Icon + name, role or model, address. */
-const CARD_BASE_HEIGHT = 70
-/** The summary of a Hosts machine (state and counts, then the load). */
-const SUMMARY_HEIGHT = 34
-/** Port names next to a jack row. */
-const JACK_BAND_HEIGHT = 24
+export const CARD_WIDTH = 190
+
+export type CardLine = 'title' | 'sub' | 'ip' | 'summary' | 'load'
+
+export const CARD_LINE_HEIGHT: Readonly<Record<CardLine, number>> = {
+  /** Icon, name and the state badge. */
+  title: 22,
+  /** Model, else role. */
+  sub: 15,
+  /** Primary IP. */
+  ip: 15,
+  /** A Hosts machine: guest and container counts. */
+  summary: 18,
+  /** A Hosts machine with Proxmox metrics: CPU and memory. */
+  load: 15,
+}
+
+/** Padding above and below the rows. */
+export const CARD_PADDING_Y = 9
+/** The card's border (box-sizing: border-box), top and bottom. */
+export const CARD_BORDER = 1
+/** Room for the port names beside a jack row, added on each side that has jacks. */
+export const JACK_BAND_HEIGHT = 18
 
 export interface CardSize {
   width: number
   height: number
 }
 
+/** The rows a card shows, top to bottom. Depends only on what the layout key covers. */
+export function cardLines(node: TopologyNode): CardLine[] {
+  const lines: CardLine[] = ['title']
+  if (node.model || node.roleSlug) lines.push('sub')
+  if (node.ip) lines.push('ip')
+  if (node.isMachine) lines.push('summary')
+  if (node.hasMetrics) lines.push('load')
+  return lines
+}
+
+export function jackBands(node: TopologyNode): { north: boolean; south: boolean } {
+  if (!node.switchLike) return { north: false, south: false }
+  return { north: node.ports.some((p) => p.side === 'NORTH'), south: node.ports.some((p) => p.side === 'SOUTH') }
+}
+
 export function cardSize(node: TopologyNode): CardSize {
+  const bands = jackBands(node)
+  const rows = cardLines(node).reduce((sum, line) => sum + CARD_LINE_HEIGHT[line], 0)
+  const height = 2 * (CARD_BORDER + CARD_PADDING_Y) + rows + (bands.north ? JACK_BAND_HEIGHT : 0) + (bands.south ? JACK_BAND_HEIGHT : 0)
+  if (!node.switchLike) return { width: CARD_WIDTH, height }
   const south = node.ports.filter((p) => p.side === 'SOUTH').length
   const north = node.ports.length - south
-  let height = CARD_BASE_HEIGHT + (node.isMachine ? SUMMARY_HEIGHT : 0)
-  if (!node.switchLike) return { width: CARD_WIDTH, height }
-  if (south) height += JACK_BAND_HEIGHT
-  if (north) height += JACK_BAND_HEIGHT
-  return { width: Math.max(SWITCH_MIN_WIDTH, Math.max(south, north) * PORT_PITCH + 40), height }
+  // An access point or a single-uplink switch is an ordinary card; a jack row needs its pitch.
+  const jacksWidth = Math.max(south, north) * PORT_PITCH + 40
+  const width = south <= 1 ? Math.max(CARD_WIDTH, jacksWidth) : Math.max(SWITCH_MIN_WIDTH, jacksWidth)
+  return { width, height }
 }
 
 // ---- ELK input ----
 
-/** Options that gave a good result on real data (see README, Topology). */
+/** Options measured on real data for a compact result (see README, Topology). */
 export const LAYOUT_OPTIONS: Readonly<Record<string, string>> = {
   'elk.algorithm': 'layered',
   'elk.direction': 'DOWN',
   'elk.edgeRouting': 'ORTHOGONAL',
   'elk.layered.spacing.nodeNodeBetweenLayers': '64',
-  'elk.spacing.nodeNode': '34',
+  'elk.spacing.nodeNode': '20',
   'elk.spacing.edgeEdge': '16',
   'elk.spacing.edgeNode': '26',
   'elk.layered.spacing.edgeEdgeBetweenLayers': '14',
   'elk.layered.spacing.edgeNodeBetweenLayers': '26',
-  'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+  'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+  'elk.layered.compaction.postCompaction.strategy': 'LEFT',
   'elk.layered.crossingMinimization.greedySwitch.type': 'TWO_SIDED',
   'elk.layered.thoroughness': '40',
   'elk.padding': '[top=28,left=28,bottom=28,right=28]',
@@ -226,10 +269,23 @@ export const trunkWidths = (speed: SpeedBucket | null) => {
 export const speedTag = (speed: SpeedBucket | null) => (speed && speed !== '1G' ? speed : null)
 
 /** VLANs with their own colour token (`--color-vlan-<vid>` in tokens.css). */
-export const PALETTE_VIDS: ReadonlySet<number> = new Set([1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+export const PALETTE_VIDS: ReadonlySet<number> = new Set([1, 10, 20, 30, 40, 50, 60, 61, 70, 80, 90, 100])
 
-export const vlanColor = (vid: number) =>
-  PALETTE_VIDS.has(vid) ? `var(--color-vlan-${vid})` : 'var(--color-vlan-other)'
+const GOLDEN_ANGLE = 137.508
+const FALLBACK_LIGHTNESS = [0.7, 0.8, 0.62] as const
+
+/**
+ * Colour of a vid without a token: a hue stepped by the golden angle per vid (neighbouring
+ * vids land far apart on the wheel) and one of three lightness levels, so the colour is stable
+ * and two unlisted VLANs differ.
+ */
+export function fallbackVlanColor(vid: number): string {
+  const hue = ((vid * GOLDEN_ANGLE) % 360).toFixed(2)
+  const lightness = FALLBACK_LIGHTNESS[vid % FALLBACK_LIGHTNESS.length]
+  return `oklch(${lightness} 0.13 ${hue})`
+}
+
+export const vlanColor = (vid: number) => (PALETTE_VIDS.has(vid) ? `var(--color-vlan-${vid})` : fallbackVlanColor(vid))
 
 /** Stroke colour of a cable (and its jacks). */
 export function styleColor(style: CableStyle): string {

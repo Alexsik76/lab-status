@@ -3,14 +3,25 @@ import { computed } from 'vue'
 import type { Machine, State } from '../domain/model'
 import type { TopologyNode } from '../domain/topology'
 import { routeHash } from '../presentation/route'
-import { JACK_WIDTH, styleColor, type PlacedNode } from '../presentation/topologyLayout'
+import {
+  CARD_BORDER,
+  CARD_LINE_HEIGHT,
+  CARD_PADDING_Y,
+  JACK_BAND_HEIGHT,
+  JACK_NAME_MAX,
+  JACK_WIDTH,
+  cardLines,
+  jackBands,
+  styleColor,
+  type PlacedNode,
+} from '../presentation/topologyLayout'
 import OsIcon from './OsIcon.vue'
 import StateBadge from './StateBadge.vue'
 
 /**
  * One device on the topology: an HTML card at its ELK position. A Hosts machine links to its
- * tile on the Hosts page and shows a summary line; other devices show their ARP presence when
- * the router knows it. Switch-like devices draw their cabled ports as jacks on the edges.
+ * tile on the Hosts page, shows its state beside the name and a counts (and load) row; other
+ * devices show their ARP presence beside the name when the router knows it. Switch-like devices draw their cabled ports as jacks on the edges.
  */
 const props = defineProps<{
   node: TopologyNode
@@ -35,6 +46,14 @@ const containerCount = computed(() => {
   return inGuests + m.apps.length
 })
 
+/** The rows and paddings are the ones `cardSize` gave ELK: every row has its fixed height. */
+const lines = computed(() => cardLines(props.node))
+const bands = computed(() => jackBands(props.node))
+const bodyStyle = computed(() => ({
+  paddingTop: `${CARD_PADDING_Y + (bands.value.north ? JACK_BAND_HEIGHT : 0)}px`,
+  paddingBottom: `${CARD_PADDING_Y + (bands.value.south ? JACK_BAND_HEIGHT : 0)}px`,
+}))
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 const jacks = computed(() =>
@@ -51,25 +70,36 @@ const jacks = computed(() =>
     :href="href ?? undefined"
     class="topo-card"
     :class="{ 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike }"
-    :style="{ left: `${placed.x}px`, top: `${placed.y}px`, width: `${placed.width}px`, height: `${placed.height}px` }"
+    :style="{
+      left: `${placed.x}px`,
+      top: `${placed.y}px`,
+      width: `${placed.width}px`,
+      height: `${placed.height}px`,
+      borderWidth: `${CARD_BORDER}px`,
+    }"
     :data-focus-device="node.id"
     :aria-label="href ? `${node.name}: show on the Hosts page` : undefined"
   >
-    <div class="card-body" :class="{ 'has-north': node.switchLike && jacks.some((j) => j.north) }">
-      <div class="card-title">
-        <OsIcon :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
-        <span class="card-name">{{ node.name }}</span>
-        <StateBadge v-if="!machine && state" :state="state" variant="machine" class="card-state" />
-      </div>
-      <div class="card-meta">
-        <span class="card-sub">{{ subtitle }}</span>
-        <span v-if="node.ip" class="card-ip">{{ node.ip }}</span>
-      </div>
-      <div v-if="machine" class="card-summary">
-        <StateBadge :state="machine.state" variant="machine" />
-        <span>{{ plural(machine.guests.length, 'guest') }} · {{ plural(containerCount, 'container') }}</span>
-        <span v-if="machine.metrics" class="card-load">
-          CPU {{ machine.metrics.cpu.currentPct }} · MEM {{ machine.metrics.mem.currentPct }}
+    <div class="card-body" :style="bodyStyle">
+      <div
+        v-for="line in lines"
+        :key="line"
+        class="card-line"
+        :class="`line-${line}`"
+        :style="{ height: `${CARD_LINE_HEIGHT[line]}px` }"
+      >
+        <template v-if="line === 'title'">
+          <OsIcon :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
+          <span class="card-name">{{ node.name }}</span>
+          <StateBadge v-if="node.isMachine || state" :state="state ?? 'unknown'" variant="machine" class="card-state" />
+        </template>
+        <span v-else-if="line === 'sub'" class="card-text" :title="subtitle">{{ subtitle }}</span>
+        <span v-else-if="line === 'ip'" class="card-text">{{ node.ip }}</span>
+        <span v-else-if="line === 'summary'" class="card-text">
+          {{ machine ? `${plural(machine.guests.length, 'guest')} · ${plural(containerCount, 'container')}` : '—' }}
+        </span>
+        <span v-else-if="line === 'load'" class="card-text">
+          CPU {{ machine?.metrics?.cpu.currentPct ?? '—' }} · MEM {{ machine?.metrics?.mem.currentPct ?? '—' }}
         </span>
       </div>
     </div>
@@ -82,7 +112,7 @@ const jacks = computed(() =>
         :style="{ left: `${j.x - JACK_WIDTH / 2}px`, '--jack-color': j.color }"
         :title="j.port.name"
       >
-        <span class="jack-name">{{ j.port.name }}</span>
+        <span class="jack-name" :style="{ maxWidth: `${JACK_NAME_MAX}px` }">{{ j.port.name }}</span>
       </span>
       <span
         v-else
@@ -100,7 +130,8 @@ const jacks = computed(() =>
   position: absolute;
   box-sizing: border-box;
   display: block;
-  border: 1px solid var(--color-border-guest);
+  border-style: solid;
+  border-color: var(--color-border-guest);
   border-radius: var(--radius-lg);
   background: var(--color-bg-tile);
   color: inherit;
@@ -126,66 +157,58 @@ const jacks = computed(() =>
 }
 
 .card-body {
+  box-sizing: border-box;
+  height: 100%;
+  padding-left: 12px;
+  padding-right: 12px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 9px 12px 0;
-}
-.card-body.has-north {
-  padding-top: 26px;
 }
 
-.card-title {
+/* One row of fixed height (see CARD_LINE_HEIGHT): nothing wraps, long text is cut. */
+.card-line {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+.card-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .card-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
   font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 600;
   color: var(--color-text-host);
   transition: color 0.12s ease;
 }
-
-.card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.35;
-}
-.card-sub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.line-sub {
   color: var(--color-text-model);
 }
-.card-ip {
+.line-ip {
   color: var(--color-text-secondary);
 }
-
-.card-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  margin-top: 3px;
-  font-family: var(--font-mono);
+.line-summary {
   font-size: 10px;
   color: var(--color-text-muted);
 }
-.card-summary :deep(.variant-machine) {
-  padding-left: 0;
+.card-state {
+  margin-right: -6px;
 }
-.card-load {
+.line-load {
+  font-size: 10px;
   color: var(--color-text-pct);
 }
 
@@ -216,12 +239,11 @@ const jacks = computed(() =>
 .jack-name {
   position: absolute;
   left: 50%;
-  max-width: 50px;
   overflow: hidden;
   text-overflow: ellipsis;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 9px;
   line-height: 1;
   white-space: nowrap;
   color: var(--color-text-dim);

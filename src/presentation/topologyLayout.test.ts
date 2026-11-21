@@ -4,8 +4,18 @@ import { topologyPayload } from '../__fixtures__/topology'
 import { normalizeInventory } from '../domain/normalize'
 import { buildTopologyGraph } from '../domain/topology'
 import {
+  CARD_BORDER,
+  CARD_LINE_HEIGHT,
+  CARD_PADDING_Y,
+  CARD_WIDTH,
+  JACK_BAND_HEIGHT,
+  PALETTE_VIDS,
   cableWidth,
+  cardLines,
   cardSize,
+  fallbackVlanColor,
+  jackBands,
+  type CardLine,
   fitScale,
   layoutKey,
   roundedPath,
@@ -50,10 +60,31 @@ describe('toElkGraph', () => {
     expect(elk.layoutOptions['elk.direction']).toBe('DOWN')
   })
 
-  it('sizes switch cards by their ports, others by content', () => {
-    expect(cardSize(nodeOf('sw-core-01')).width).toBe(330) // 5 * 54 + 40 = 310 < 330
-    expect(cardSize({ ...nodeOf('sw-core-01'), ports: Array(8).fill(nodeOf('sw-core-01').ports[1]) }).width).toBe(8 * 54 + 40)
-    expect(cardSize(nodeOf('node-alpha')).height).toBeGreaterThan(cardSize({ ...nodeOf('node-alpha'), isMachine: false }).height)
+  it('sizes switch cards by their jack rows, single-uplink ones like ordinary cards', () => {
+    const sw = nodeOf('sw-core-01') // 1 NORTH + 5 SOUTH ports
+    expect(cardSize(sw).width).toBe(330) // 5 * 42 + 40 = 250 < 330
+    expect(cardSize({ ...sw, ports: Array(9).fill(sw.ports[1]) }).width).toBe(9 * 42 + 40)
+    // At most one SOUTH port (an access point, a switch with one cable down): ordinary width.
+    expect(cardSize({ ...sw, ports: sw.ports.slice(0, 2) }).width).toBe(CARD_WIDTH)
+    expect(cardSize({ ...sw, ports: sw.ports.slice(0, 1) }).width).toBe(CARD_WIDTH)
+    expect(cardSize(nodeOf('node-alpha')).width).toBe(CARD_WIDTH)
+  })
+
+  it('makes the card as tall as its rows, paddings, border and jack bands', () => {
+    const rows = (lines: CardLine[]) => lines.reduce((n, l) => n + CARD_LINE_HEIGHT[l], 0)
+    const frame = 2 * (CARD_BORDER + CARD_PADDING_Y)
+    const alpha = nodeOf('node-alpha')
+    expect(cardLines(alpha)).toEqual(['title', 'sub', 'ip', 'summary'])
+    expect(cardLines({ ...alpha, hasMetrics: true })).toEqual(['title', 'sub', 'ip', 'summary', 'load'])
+    expect(cardLines({ ...alpha, isMachine: false, hasMetrics: false, ip: null, model: null, roleSlug: null })).toEqual(['title'])
+    for (const node of graph.nodes) {
+      const bands = (jackBands(node).north ? JACK_BAND_HEIGHT : 0) + (jackBands(node).south ? JACK_BAND_HEIGHT : 0)
+      expect(cardSize(node).height).toBe(frame + rows(cardLines(node)) + bands)
+    }
+    const sw = nodeOf('sw-core-01')
+    expect(jackBands(sw)).toEqual({ north: true, south: true })
+    expect(jackBands(nodeOf('gw-router-01'))).toEqual({ north: false, south: true })
+    expect(jackBands(alpha)).toEqual({ north: false, south: false })
   })
 
   it('has a key that ignores everything but the structure', () => {
@@ -85,10 +116,22 @@ describe('drawing helpers', () => {
 
   it('colours by VLAN token with a fallback', () => {
     expect(vlanColor(20)).toBe('var(--color-vlan-20)')
-    expect(vlanColor(345)).toBe('var(--color-vlan-other)')
+    expect(vlanColor(61)).toBe('var(--color-vlan-61)')
+    expect(vlanColor(345)).toBe(fallbackVlanColor(345))
     expect(styleColor({ kind: 'trunk', vlan: null })).toBe('var(--color-cable-trunk)')
     expect(styleColor({ kind: 'access', vlan: 30 })).toBe('var(--color-vlan-30)')
     expect(styleColor({ kind: 'unknown', vlan: null })).toBe('var(--color-cable-unknown)')
+  })
+
+  it('derives a stable colour for an unlisted vid, different for every vid', () => {
+    expect(fallbackVlanColor(345)).toBe(fallbackVlanColor(345))
+    expect(fallbackVlanColor(345)).toMatch(/^oklch\(0\.\d+ 0\.13 \d+\.\d\d\)$/)
+    const unlisted = Array.from({ length: 4094 }, (_, i) => i + 1).filter((v) => !PALETTE_VIDS.has(v))
+    expect(new Set(unlisted.map(fallbackVlanColor)).size).toBe(unlisted.length)
+    // Neighbouring vids land far apart on the hue wheel.
+    const hue = (vid: number) => Number(fallbackVlanColor(vid).split(' ')[2].replace(')', ''))
+    const gap = Math.abs(hue(201) - hue(202))
+    expect(Math.min(gap, 360 - gap)).toBeGreaterThan(90)
   })
 
   it('fits to the width, never above 1 nor below 0.6', () => {
