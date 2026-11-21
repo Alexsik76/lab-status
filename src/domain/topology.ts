@@ -49,6 +49,8 @@ export interface TopologyNode {
   switchLike: boolean
   /** The device is a machine on the Hosts page. */
   isMachine: boolean
+  /** A Hosts machine with Proxmox metrics: its card has a load line. */
+  hasMetrics: boolean
   /** Cables away from the root (0 for a root). */
   depth: number
   /** NORTH ports, then SOUTH ports, each in NetBox order. */
@@ -171,6 +173,7 @@ export function buildTopologyGraph(
   topology: RawTopology,
   devices: readonly DeviceRecord[],
   machineIds: ReadonlySet<string> = new Set(),
+  metricIds: ReadonlySet<string> = new Set(),
 ): TopologyGraph {
   const byId = new Map(devices.map((d) => [d.id, d]))
   const portsById = new Map(topology.ports.map((p) => [p.id, p]))
@@ -243,6 +246,7 @@ export function buildTopologyGraph(
         offline: d.offline,
         switchLike: isSwitchLike(id),
         isMachine: machineIds.has(id),
+        hasMetrics: machineIds.has(id) && metricIds.has(id),
         depth: depth.get(id)!,
         ports,
       }

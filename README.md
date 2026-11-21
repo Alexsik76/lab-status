@@ -177,22 +177,31 @@ NetBox fields that drive the picture:
 A cable is a trunk when either end is tagged, otherwise an access cable in the untagged VLAN
 of either end, otherwise grey ("no VLAN data"). A VLAN is never guessed from addresses. A cable
 takes the lower speed of its two ends. VLAN colours are tokens `--color-vlan-<vid>` in
-`tokens.css` for vids 1, 10, 20 … 100; other vids use `--color-vlan-other`. The legend lists
-only what the diagram shows.
+`tokens.css` for vids 1, 10, 20 … 100 and 61; any other vid gets a colour derived from its
+number (hue stepped by the golden angle, one of three lightness levels), stable and different
+for every vid. The legend lists only what the diagram shows.
 
 **Layout.** Root: the device with role `router` (a part of the network the router does not
 reach starts from its own switch-like device, else the device with most cables). A BFS over
 the cables gives every device a depth; each cable runs from the shallower device (port on its
 SOUTH side) to the deeper one (NORTH side). ELK `layered`, direction `DOWN`, orthogonal edge
-routing; switch-like devices keep their port order (`FIXED_ORDER`, pitch 54 px, card width
-max(330, ports x 54 + 40)), other devices fix only the side (`FIXED_SIDE`). The layout runs
-again only when devices, ports, cables or card sizes change, not on status or metrics events.
+routing, node placement `BRANDES_KOEPF` with `LEFT` post-compaction, node spacing 20.
+Switch-like devices keep their port order (`FIXED_ORDER`, pitch 42 px, card width
+max(330, ports x 42 + 40)); one with at most one SOUTH port (an access point, a single-uplink
+switch) is as wide as an ordinary card (190 px). Other devices fix only the side
+(`FIXED_SIDE`). Port names longer than the pitch are cut, the full name is in the tooltip. The
+layout runs again only when devices, ports, cables or card rows change, not on status or
+metrics events (a machine gaining or losing Proxmox metrics adds or drops its load row).
 Cables are an SVG layer under absolutely positioned HTML cards; the diagram is scaled to the
 page width, never above 1 and not below 0.6 (it scrolls horizontally then).
 
-**Cards.** Icon, name, model (else role), primary IP. Hosts machines add a line with their
-state, guest and container counts, and current CPU / memory from Proxmox; other devices show
-the router's ARP presence (online / unreachable) when the router knows one of their MACs.
+**Cards.** A stack of single-line rows of fixed height: icon and name, model (else role),
+primary IP. Hosts machines show their state beside the name and add a row with guest and
+container counts and, when Proxmox reports them, a row with current CPU / memory. Other
+devices show the router's ARP presence (online / unreachable) beside the name when the router
+knows one of their MACs. The
+height given to ELK is computed from the same rows (`cardLines`, `CARD_LINE_HEIGHT`), so a card
+never overflows its box.
 
 **Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
 Hosts page has a "Show on topology" button (only when the device is on the diagram) to

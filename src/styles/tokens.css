@@ -110,7 +110,7 @@
   --color-spark-mem: oklch(0.76 0.08 300);
 
   /* Topology: cables and jacks. Access cables take the colour of their VLAN (by vid);
-     a vid without its own token uses --color-vlan-other. */
+     a vid without its own token gets a colour derived from the vid (fallbackVlanColor). */
   --color-cable-trunk: oklch(0.86 0.01 250);
   --color-cable-unknown: oklch(0.5 0.01 250);
   --color-vlan-1: oklch(0.72 0.03 250);
@@ -120,9 +120,10 @@
   --color-vlan-40: oklch(0.7 0.16 30);
   --color-vlan-50: oklch(0.72 0.14 330);
   --color-vlan-60: oklch(0.74 0.11 200);
+  /* Pale rose: lighter and softer than 40 (orange-red), far in hue from 60 (cyan). */
+  --color-vlan-61: oklch(0.84 0.09 350);
   --color-vlan-70: oklch(0.72 0.13 290);
   --color-vlan-80: oklch(0.76 0.13 60);
   --color-vlan-90: oklch(0.74 0.12 125);
   --color-vlan-100: oklch(0.7 0.1 270);
-  --color-vlan-other: oklch(0.7 0.07 20);
 }
