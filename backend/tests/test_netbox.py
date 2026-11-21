@@ -5,6 +5,8 @@ DEVICES = [
      "primary_ip4": {"address": "192.0.2.10/24"}, "custom_fields": {}},
     {"id": 2, "name": "srv-off", "status": {"value": "offline"}, "role": {"name": "Server"}, "description": "",
      "primary_ip4": {"address": "192.0.2.11/24"}, "custom_fields": {}},
+    {"id": 3, "name": "srv-spare", "status": {"value": "inventory"}, "role": {"name": "Server"}, "description": "",
+     "primary_ip4": {"address": "192.0.2.12/24"}, "custom_fields": {}},
 ]
 VMS = [
     {"id": 10, "name": "vm-a", "status": {"value": "active"}, "role": None, "description": "Docker host",
@@ -34,6 +36,7 @@ def test_targets_follow_n8n_rules() -> None:
         _service(105, "docs", "dcim.device", 1, "srv-a", 8080, check=False),  # not the health service
         _service(106, "cam", "dcim.device", 1, "srv-a", 8554, scheme="rtsp"),  # non-HTTP scheme
         _service(107, "rtc", "dcim.device", 1, "srv-a", 8555, scheme="webrtc"),  # non-HTTP scheme
+        _service(108, "web", "dcim.device", 3, "srv-spare", 80),  # parent in reserve: skipped
     ]
     targets = build_targets(services, VMS, DEVICES)
     assert [(t.name, t.url, t.service_id) for t in targets] == [

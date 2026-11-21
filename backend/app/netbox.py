@@ -119,6 +119,8 @@ def build_mac_directory(
 
 
 CHECK_SCHEMES = ("http", "https")
+#: Parent statuses whose services are not checked: switched off on purpose, or kept in reserve.
+UNCHECKED_STATUSES = ("offline", "inventory")
 
 
 @dataclass(frozen=True)
@@ -135,7 +137,8 @@ def build_targets(services: list[Json], vms: list[Json], devices: list[Json]) ->
     """Same rules as the n8n `Service targets ← NetBox` sync.
 
     Only services with the `check` custom field set (the one that represents the application's
-    health) and an http or https `scheme`; services whose parent is offline are skipped.
+    health) and an http or https `scheme`; services whose parent is offline or in
+    reserve (`inventory`) are skipped.
     Address: the IP bound to the service, else the host VM's primary IP for a container,
     else the parent's own primary IP.
     """
@@ -151,7 +154,7 @@ def build_targets(services: list[Json], vms: list[Json], devices: list[Json]) ->
             continue
         on_device = service.get("parent_object_type") == "dcim.device"
         parent = (device_by_id if on_device else vm_by_id).get(parent_ref.get("id"))
-        if parent is None or _choice(parent.get("status")) == "offline":
+        if parent is None or _choice(parent.get("status")) in UNCHECKED_STATUSES:
             continue
 
         bound = service.get("ipaddresses") or []
