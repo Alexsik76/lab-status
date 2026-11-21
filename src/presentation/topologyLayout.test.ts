@@ -15,6 +15,7 @@ import {
   cardSize,
   fallbackVlanColor,
   jackBands,
+  titleBadge,
   type CardLine,
   fitScale,
   layoutKey,
@@ -68,6 +69,13 @@ describe('toElkGraph', () => {
     expect(cardSize({ ...sw, ports: sw.ports.slice(0, 2) }).width).toBe(CARD_WIDTH)
     expect(cardSize({ ...sw, ports: sw.ports.slice(0, 1) }).width).toBe(CARD_WIDTH)
     expect(cardSize(nodeOf('node-alpha')).width).toBe(CARD_WIDTH)
+  })
+
+  it('keeps the full state badge only on cards wide enough for it beside a long name', () => {
+    expect(titleBadge(CARD_WIDTH)).toBe('dot')
+    expect(titleBadge(cardSize(nodeOf('sw-core-01')).width)).toBe('full') // a jack-row switch, 330
+    expect(titleBadge(294)).toBe('dot')
+    expect(titleBadge(295)).toBe('full')
   })
 
   it('makes the card as tall as its rows, paddings, border and jack bands', () => {

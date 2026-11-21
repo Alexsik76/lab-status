@@ -12,6 +12,7 @@ import {
   JACK_WIDTH,
   cardLines,
   jackBands,
+  titleBadge,
   styleColor,
   type PlacedNode,
 } from '../presentation/topologyLayout'
@@ -48,6 +49,8 @@ const containerCount = computed(() => {
 
 /** The rows and paddings are the ones `cardSize` gave ELK: every row has its fixed height. */
 const lines = computed(() => cardLines(props.node))
+/** Full badge on wide cards; elsewhere the dot, so the name keeps its room. */
+const badge = computed(() => titleBadge(props.placed.width))
 const bands = computed(() => jackBands(props.node))
 const bodyStyle = computed(() => ({
   paddingTop: `${CARD_PADDING_Y + (bands.value.north ? JACK_BAND_HEIGHT : 0)}px`,
@@ -80,18 +83,23 @@ const jacks = computed(() =>
     :data-focus-device="node.id"
     :aria-label="href ? `${node.name}: show on the Hosts page` : undefined"
   >
-    <div class="card-body" :style="bodyStyle">
+    <div class="card-body" :class="`body-${badge}`" :style="bodyStyle">
       <div
         v-for="line in lines"
         :key="line"
         class="card-line"
-        :class="`line-${line}`"
+        :class="[`line-${line}`, line === 'title' ? `badge-${badge}` : '']"
         :style="{ height: `${CARD_LINE_HEIGHT[line]}px` }"
       >
         <template v-if="line === 'title'">
           <OsIcon :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
-          <span class="card-name">{{ node.name }}</span>
-          <StateBadge v-if="node.isMachine || state" :state="state ?? 'unknown'" variant="machine" class="card-state" />
+          <span class="card-name" :title="node.name">{{ node.name }}</span>
+          <StateBadge
+            v-if="node.isMachine || state"
+            :state="state ?? 'unknown'"
+            :variant="badge === 'full' ? 'machine' : 'dot'"
+            class="card-state"
+          />
         </template>
         <span v-else-if="line === 'sub'" class="card-text" :title="subtitle">{{ subtitle }}</span>
         <span v-else-if="line === 'ip'" class="card-text">{{ node.ip }}</span>
@@ -204,8 +212,20 @@ const jacks = computed(() =>
   font-size: 10px;
   color: var(--color-text-muted);
 }
-.card-state {
+.badge-full .card-state {
   margin-right: -6px;
+}
+/* Ordinary cards: the state is a dot; a slightly smaller name, tighter gaps and side padding
+   leave room for a 16-character name (see FULL_BADGE_MIN_WIDTH). Heights are unchanged. */
+.body-dot {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.badge-dot {
+  gap: 5px;
+}
+.badge-dot .card-name {
+  font-size: 15px;
 }
 .line-load {
   font-size: 10px;

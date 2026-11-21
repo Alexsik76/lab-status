@@ -43,6 +43,18 @@ export const CARD_BORDER = 1
 /** Room for the port names beside a jack row, added on each side that has jacks. */
 export const JACK_BAND_HEIGHT = 18
 
+/**
+ * The title row: icon, name and state. The full state badge stays only where it fits beside a
+ * 16-character name (about 134 px at 16 px); narrower cards show the state as a dot, with a
+ * 15 px name and tighter gaps, so such a name still fits in an ordinary card.
+ * Width budget: border 2 + padding 24 + icon 18 + gap 8 + name 134 + gap 8 + badge 101.
+ */
+export const FULL_BADGE_MIN_WIDTH = 2 * CARD_BORDER + 24 + 18 + 8 + 134 + 8 + 101
+
+export type TitleBadge = 'full' | 'dot'
+
+export const titleBadge = (cardWidth: number): TitleBadge => (cardWidth >= FULL_BADGE_MIN_WIDTH ? 'full' : 'dot')
+
 export interface CardSize {
   width: number
   height: number

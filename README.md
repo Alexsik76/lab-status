@@ -196,7 +196,10 @@ Cables are an SVG layer under absolutely positioned HTML cards; the diagram is s
 page width, never above 1 and not below 0.6 (it scrolls horizontally then).
 
 **Cards.** A stack of single-line rows of fixed height: icon and name, model (else role),
-primary IP. Hosts machines show their state beside the name and add a row with guest and
+primary IP. The state sits beside the name: as the full badge on cards wide enough for it
+next to a 16-character name (`FULL_BADGE_MIN_WIDTH`, i.e. switches with a jack row), and as a
+coloured dot elsewhere (the word in its tooltip and for screen readers), so the name of an
+ordinary 190 px card stays readable. Hosts machines show their state there and add a row with guest and
 container counts and, when Proxmox reports them, a row with current CPU / memory. Other
 devices show the router's ARP presence (online / unreachable) beside the name when the router
 knows one of their MACs. The

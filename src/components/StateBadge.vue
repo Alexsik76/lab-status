@@ -7,7 +7,8 @@ import { statusPhaseKey } from '../injection'
 const props = withDefaults(
   defineProps<{
     state: State
-    variant?: 'machine' | 'guest' | 'container' | 'default'
+    /** `dot`: the coloured dot only; the word is the tooltip and is read by screen readers. */
+    variant?: 'machine' | 'guest' | 'container' | 'default' | 'dot'
     blinking?: boolean
   }>(),
   {
@@ -45,12 +46,15 @@ const machineLabel = computed(() => {
       { 'is-blinking': blinking },
     ]"
     :data-state="pending ? 'pending' : state"
+    :title="variant === 'dot' ? machineLabel : undefined"
   >
     <!-- Dot indicator -->
     <span class="status-dot"></span>
 
+    <span v-if="variant === 'dot'" class="sr-only">{{ machineLabel }}</span>
+
     <!-- Machine variant label -->
-    <span v-if="variant === 'machine'" class="status-text">
+    <span v-else-if="variant === 'machine'" class="status-text">
       {{ machineLabel }}
     </span>
 
@@ -172,6 +176,39 @@ const machineLabel = computed(() => {
 .variant-container.state-unknown .status-dot {
   background: transparent;
   border: 1.5px dashed var(--color-state-unknown-dot);
+}
+
+/* Dot variant: the state as a coloured dot (the word is the tooltip / screen-reader text) */
+.variant-dot {
+  cursor: help;
+}
+.variant-dot .status-dot {
+  width: 8px;
+  height: 8px;
+}
+.variant-dot.state-up .status-dot {
+  background: var(--color-state-up);
+}
+.variant-dot.state-down .status-dot {
+  background: var(--color-state-down);
+}
+.variant-dot.state-stopped .status-dot {
+  border: 1.5px solid var(--color-state-stopped-dot);
+}
+.variant-dot.state-pending .status-dot,
+.variant-dot.state-unknown .status-dot {
+  border: 1.5px dashed var(--color-state-unknown-dot);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Default fallback */
