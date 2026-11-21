@@ -140,6 +140,20 @@ describe('icon', () => {
   })
 })
 
+describe('normalizeInventory (reserve)', () => {
+  it('leaves out a device in reserve together with its services', () => {
+    const [spare, ...rest] = rawInventory.device_list
+    const inventory = normalizeInventory({
+      ...rawInventory,
+      device_list: [{ ...spare, status: 'inventory' }, ...rest],
+    })
+    expect(inventory.devices.map((d) => d.id)).not.toContain(spare.id)
+    expect(inventory.devices).toHaveLength(rest.length)
+    expect(inventory.services.some((s) => s.parent?.kind === 'device' && s.parent.id === spare.id)).toBe(false)
+    expect(inventory.vms.some((vm) => vm.deviceId === spare.id)).toBe(false)
+  })
+})
+
 describe('normalizeInventory (real data)', () => {
   const inventory = normalizeInventory(rawInventory)
 

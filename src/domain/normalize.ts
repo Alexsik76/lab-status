@@ -193,10 +193,24 @@ function normalizeService(raw: RawService): ServiceRecord {
   }
 }
 
+/** NetBox status of hardware kept in reserve; it is not part of the running lab. */
+const RESERVE_STATUS = 'inventory'
+
+/** Objects in reserve are left out, together with the guests and services that belong to them. */
 export function normalizeInventory(raw: RawInventory): Inventory {
+  const devices = raw.device_list.filter((d) => d.status !== RESERVE_STATUS)
+  const deviceIds = new Set(devices.map((d) => d.id))
+  const vms = raw.virtual_machine_list.filter(
+    (vm) => vm.status !== RESERVE_STATUS && (!vm.device?.id || deviceIds.has(vm.device.id)),
+  )
+  const vmIds = new Set(vms.map((vm) => vm.id))
+  const services = raw.service_list.map(normalizeService).filter(({ parent }) => {
+    if (!parent) return true
+    return parent.kind === 'device' ? deviceIds.has(parent.id) : vmIds.has(parent.id)
+  })
   return {
-    devices: raw.device_list.map(normalizeDevice),
-    vms: raw.virtual_machine_list.map(normalizeVm),
-    services: raw.service_list.map(normalizeService),
+    devices: devices.map(normalizeDevice),
+    vms: vms.map(normalizeVm),
+    services,
   }
 }
