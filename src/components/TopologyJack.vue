@@ -4,8 +4,8 @@ import type { CableKind } from '../domain/topology'
 import { JACK_SIZE, type JackShape } from '../presentation/topologyLayout'
 
 /**
- * A port socket as inline SVG: an RJ45 outline with its stepped latch notch, an SFP cage with
- * its opening, or a plain rectangle. Drawn with the notch / opening towards the cable (down on
+ * A port socket as inline SVG: an RJ45 port seen from the front (housing, cavity with the
+ * latch notch, five contact pins), an SFP cage with its opening, or a plain rectangle. Drawn with the notch / opening towards the cable (down on
  * the bottom edge, up on the top edge). Colours come from `--jack-color` (the cable's style).
  */
 const props = defineProps<{ shape: JackShape; kind: CableKind; north: boolean }>()
@@ -23,11 +23,11 @@ const size = computed(() => JACK_SIZE[props.shape])
     aria-hidden="true"
   >
     <g :transform="north ? `matrix(1 0 0 -1 0 ${size.height})` : undefined">
-      <path
-        v-if="shape === 'rj45'"
-        class="body"
-        d="M3.5 1 H26.5 Q29 1 29 3.5 V14.5 Q29 16.5 27 16.5 H21 V18.5 H18 V21 H12 V18.5 H9 V16.5 H3 Q1 16.5 1 14.5 V3.5 Q1 1 3.5 1 Z"
-      />
+      <template v-if="shape === 'rj45'">
+        <rect class="body" x="1" y="1" width="28" height="20" rx="3" />
+        <path class="opening" d="M5.5 4.5 H24.5 V13.5 H20.2 V17.8 H9.8 V13.5 H5.5 Z" />
+        <path class="pins" d="M8.6 4.5 V8 M11.8 4.5 V8 M15 4.5 V8 M18.2 4.5 V8 M21.4 4.5 V8" />
+      </template>
       <template v-else-if="shape === 'sfp'">
         <rect class="body" x="1" y="1" width="34" height="16" rx="2" />
         <rect class="opening" x="6" y="5.5" width="24" height="7.5" rx="1" />
@@ -52,6 +52,13 @@ const size = computed(() => JACK_SIZE[props.shape])
   fill: var(--color-bg-page);
   stroke: var(--jack-color);
   stroke-width: 1;
+  stroke-linejoin: round;
+}
+.pins {
+  fill: none;
+  stroke: var(--jack-color);
+  stroke-width: 1;
+  opacity: 0.85;
 }
 .kind-trunk .body {
   fill: var(--color-bg-page);

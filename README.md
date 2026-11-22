@@ -209,12 +209,13 @@ INCLUDE_CHILDREN` on the root, padding top 28 / sides and bottom 12); the cables
 at the root, and member positions are converted back to absolute coordinates. The rectangle is
 drawn under the cables and cards; its label (name, member count, and the VLAN when all the
 members' cables are access cables of one VLAN) sits on a small page-coloured chip above the
-cables. Border and label take that VLAN's colour, else a neutral one. Member cards keep their
+cables, at the bottom-left corner and centred on the bottom border, away from the top edge
+where the cables enter the group. Border and label take that VLAN's colour, else a neutral one. Member cards keep their
 links, focus and highlight; offline members stay dimmed.
 
 **Jacks.** The ports of switch-like devices are drawn by interface type as inline SVG
-(`TopologyJack.vue`): copper (`*base-t`, `*base-tx`) as an RJ45 socket with its latch notch
-(30 x 22), the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`, `*-qsfp*`, `*base-x-*`) as a cage with
+(`TopologyJack.vue`): copper (`*base-t`, `*base-tx`) as an RJ45 port seen from the front:
+housing, cavity with the latch notch and five contact pins (30 x 22), the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`, `*-qsfp*`, `*base-x-*`) as a cage with
 its opening (36 x 18), anything else as a plain rectangle (24 x 12); each is centred on the
 card edge, its notch or opening towards the cable, coloured like its cable. The jack band
 inside the card (half the tallest jack, a gap and the port name) is part of the card height.
