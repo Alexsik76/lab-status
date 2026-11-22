@@ -130,4 +130,20 @@ describe('TopologyCard height = the size given to ELK', () => {
     expect(state.text()).toBe('unreachable')
     expect(wrapper.find('.line-title').classes()).toContain('badge-full')
   })
+
+  it('marks only a card that links to the Hosts page with the arrow, outside the sized rows', () => {
+    const link = renderedHeight(nodeOf('node-alpha'), { machine: machine('11', true) }).wrapper
+    expect(link.element.tagName).toBe('A')
+    expect(link.classes()).toContain('is-link')
+    const mark = link.find('.link-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.attributes('aria-hidden')).toBe('true')
+    expect(mark.element.parentElement).toBe(link.element)
+
+    for (const props of [{ machine: null }, { presence: 'down' as const }]) {
+      const plain = renderedHeight(props.machine === null ? nodeOf('node-alpha') : nodeOf('sw-core-01'), props).wrapper
+      expect(plain.element.tagName).toBe('DIV')
+      expect(plain.find('.link-mark').exists()).toBe(false)
+    }
+  })
 })
