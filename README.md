@@ -23,7 +23,9 @@ independent sources:
    as `containers` events of `GET /api/stream`;
 4. **Proxmox**: live guest states, node status, and CPU/memory load graphs, polled by the backend
    and sent as `proxmox` / `metrics` events of `GET /api/stream`;
-5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`.
+5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`;
+6. **Router CAPsMAN (Wi-Fi)**: wireless networks, access points and clients, polled by the backend
+   and sent as `wifi` events of `GET /api/stream` (shown on the Topology page).
 
 A second page, `#/topology`, draws the physical network from NetBox cabling (see
 [Topology](#topology)).
@@ -59,17 +61,18 @@ assistive technology is "Refresh, data N s old, updated HH:MM:SS".
 ## Event stream
 
 The page holds one Server-Sent Events connection, `GET /api/stream`; the SSE `event:`
-field names the source of each message (`arp`, `inventory`, `services`, `proxmox`, `metrics`, `containers`). The backend runs its sources
+field names the source of each message (`arp`, `inventory`, `services`, `proxmox`, `metrics`, `containers`, `wifi`). The backend runs its sources
 only while at least one page is connected: the first subscriber starts them, and when the
 last one leaves they keep running for `STREAM_GRACE_S` seconds (default 10) and stop only
 if nobody reconnected, so a page reload reuses the running sessions. A new subscriber, and
 a client that fell too far behind, first receives each source's current state.
 `GET /api/health` reports the subscriber count and each source's state.
 
-Polling sources (`inventory`, `proxmox`, `metrics`; `containers` and `services` alike) publish two kinds of events: `{"type": "data", "data": ...}`
+Polling sources (`inventory`, `proxmox`, `metrics`, `wifi`; `containers` and `services` alike) publish two kinds of events: `{"type": "data", "data": ...}`
 only when the data changed, and `{"type": "status", "state", "error", "updatedAt", "periodS"}`
 whenever the state, the error or the time of the last successful fetch (`updatedAt`, ISO 8601
-UTC) changes. A failed poll keeps the last data and reports the error; polling goes on.
+UTC) changes. A failed poll keeps the last data and reports the error; polling goes on (`wifi`
+alone publishes an empty snapshot instead, so the page never shows stale wireless clients).
 `state` describes the published data: `error` means the last poll produced none, while
 `live` with a non-null `error` means it succeeded only in part.
 
@@ -78,6 +81,7 @@ UTC) changes. A failed poll keeps the last data and reports the error; polling g
 | `inventory` | NetBox: the page's GraphQL query and REST services, virtual machines, devices, MAC addresses, cables, interfaces, VLANs; NPM proxy hosts; all concurrently, each data set once | 300 s (`INVENTORY_PERIOD_S`) | the GraphQL `data` object unchanged, plus the key `topology` (below) |
 | `proxmox` | `cluster/resources` | 15 s (`PROXMOX_PERIOD_S`) | the Proxmox `data` array unchanged |
 | `metrics` | `nodes/<node>/rrddata?timeframe=hour&cf=AVERAGE` for every node of the latest cluster resources, concurrently | 60 s (`PROXMOX_METRICS_PERIOD_S`), and at once when the node set changes | `{node: points}`; a node that fails gets `[]` |
+| `wifi` | RouterOS API: `print` of six legacy CAPsMAN menus on one short session (see [Wi-Fi source](#wi-fi-source)) | 15 s, and at once when the NetBox MAC directory or device names change | `{networks, aps, radios, clients}` |
 
 The `inventory` cycle is the backend's only NetBox (and NPM) read: the service checks take
 their targets and public URLs from it, and the ARP mirror its MAC directory (a changed
@@ -243,12 +247,58 @@ labels to 45 %. Leaving or blurring the card restores the view; the transitions 
 off with `prefers-reduced-motion`. The neighbours come from the pure `traceOf(graph, deviceId)`
 in `src/domain/topology.ts`; the page keeps one traced device id.
 
+**Wi-Fi block.** Under the wired diagram, full width, a grid built without ELK: columns are the
+access points (in the order of their cards on the diagram, left to right, the rest by name),
+rows the networks (SSID + band), each row tinted in its VLAN's colour (`--color-vlan-*`) with
+the SSID, band and "VLAN <id> <name>" at its head. A cell is empty when the access point does
+not broadcast the network, "radio disabled" when the interface is disabled, otherwise a radio
+mark with the channel in MHz (marked "down" when not running) and the client chips (name; the
+tooltip has MAC, IP, signal and uptime; a chip of a Hosts machine links to its tile), or "no
+clients". Cross-highlight through the hover trace: pointing at an access point's card
+emphasises its column; pointing at a column header or one of its chips traces the card and its
+cables on the diagram (an access point not in NetBox highlights only its column).
+
+**Layers.** Next to the legend, one button per layer (`LAYERS` in `src/presentation/layers.ts`:
+Wired, Wi-Fi; a new layer is one entry), each cycling shown -> grey -> hidden. Grey is 20 %
+opacity and greyscale; hidden draws nothing (the wired diagram keeps its space, the Wi-Fi block
+collapses). Access-point cards stay fully visible while Wired is grey, as anchors for the Wi-Fi
+block. The states are remembered in local storage (default: both shown). The legend has a
+dashed "Wi-Fi" sample while the Wi-Fi block is on the page.
+
 **Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
 Hosts page has a "Show on topology" button (only when the device is on the diagram) to
 `#/topology?focus=<deviceId>`. On arrival the target is scrolled into view, centred, and
 pulses in the accent colour for 1.6 s (a static outline with `prefers-reduced-motion`), then
 the `focus` parameter is removed with `history.replaceState`, so reload and Back do not replay
 it. An unknown id is ignored. The focus wins over the page's restored scroll position.
+
+## Wi-Fi source
+
+The `wifi` source (`backend/app/wifi.py`) uses the router connection settings of the ARP mirror
+(`ROUTEROS_*`, no new variables) and reads, on one session per cycle, `/caps-man/interface`,
+`/caps-man/configuration`, `/caps-man/datapath`, `/caps-man/remote-cap`, `/caps-man/radio` and
+`/caps-man/registration-table` (the legacy CAPsMAN). `/caps-man/security` is never read, and no
+passphrase or security profile is copied into the event. Its `data`:
+
+```
+{ "networks": [{ "ssid", "band": "2.4" | "5" | null, "vlan" }],
+  "aps":      [{ "id", "name", "deviceId" }],
+  "radios":   [{ "apId", "ssid", "band", "channel", "state": "running" | "disabled" | "down" }],
+  "clients":  [{ "apId", "ssid", "band", "mac", "name", "deviceId", "ip", "signal", "uptime" }] }
+```
+
+- One radio entry per CAPsMAN interface; a slave (virtual) interface belongs to its master's
+  radio (same access point, channel and band, its own SSID). `channel` is the frequency in MHz;
+  `band` comes from it, or for a disabled radio from the configuration / channel profile name.
+  `state`: `disabled` (the interface or its master), `running`, or `down` (enabled, not running).
+- SSID -> VLAN: configuration -> datapath -> `vlan-id` (an inline `datapath.vlan-id` wins).
+- Access point -> NetBox device: a CAP base / radio / interface MAC in the NetBox MAC directory,
+  else a NetBox device named like the CAP identity, else none (`name` = identity).
+- Client `name`: the NetBox object owning its MAC, else the DHCP lease comment, else the lease
+  host name (both from the ARP mirror), else the MAC; `ip` from the lease / ARP table, else the
+  CAP's `last-ip`; `signal` in dBm; `uptime` as RouterOS shows it, without fractions of a second.
+- If the menus are absent or the read fails, the source publishes an empty snapshot and a
+  status error starting with `Wi-Fi: `; nothing else depends on it.
 
 ## ARP mirror
 
@@ -291,7 +341,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `INVENTORY_PERIOD_S` | api | optional: period of the NetBox / NPM cycle, default `300` |
 | `ROUTEROS_HOST` | api | Router address for the API service |
 | `ROUTEROS_PORT` | api | API port, default `8728` |
-| `ROUTEROS_USER` / `ROUTEROS_PASSWORD` | api | RouterOS user in a group with `read,api` policies |
+| `ROUTEROS_USER` / `ROUTEROS_PASSWORD` | api | RouterOS user in a group with `read,api` policies (ARP mirror and the CAPsMAN menus of the Wi-Fi source; `sensitive` is not needed) |
 | `PROXMOX_URL` | api | Proxmox VE base URL, e.g. `https://192.0.2.11:8006` (TLS is not verified: self-signed certificates work) |
 | `PROXMOX_TOKEN` | api | Proxmox API token, e.g. `user@realm!token=uuid`; Proxmox data is off unless both are set |
 | `PROXMOX_PERIOD_S` / `PROXMOX_METRICS_PERIOD_S` | api | optional: polling periods, default `15` / `60` |

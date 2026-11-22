@@ -3,12 +3,14 @@ import type { SpeedBucket } from '../domain/topology'
 import type { RawTopologyVlan } from '../types/topology'
 import { cableWidth, styleColor, vlanColor } from '../presentation/topologyLayout'
 
-/** What the cables mean: trunk, the VLANs present, no VLAN data, widths by speed. */
+/** What the cables mean: trunk, the VLANs present, no VLAN data, Wi-Fi, widths by speed. */
 defineProps<{
   vlans: readonly RawTopologyVlan[]
   hasTrunk: boolean
   hasUnknown: boolean
   speeds: readonly SpeedBucket[]
+  /** The Wi-Fi block is on the page. */
+  wifi?: boolean
 }>()
 
 const trunk = styleColor({ kind: 'trunk', vlan: null })
@@ -36,6 +38,14 @@ const unknown = styleColor({ kind: 'unknown', vlan: null })
           <line x1="1" y1="5" x2="25" y2="5" :stroke="unknown" stroke-width="3" />
         </svg>
         no VLAN data
+      </li>
+    </ul>
+    <ul v-if="wifi" class="legend-group">
+      <li data-legend="wifi">
+        <svg width="26" height="10" aria-hidden="true">
+          <line x1="1" y1="5" x2="25" y2="5" stroke="var(--color-text-secondary)" stroke-width="2" stroke-dasharray="4 3" />
+        </svg>
+        Wi-Fi
       </li>
     </ul>
     <ul v-if="speeds.length" class="legend-group">

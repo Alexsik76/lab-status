@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx
 
-from .netbox import MacMatch, NetBoxClient, Target, build_mac_directory, build_targets
+from .netbox import MacMatch, NetBoxClient, Target, _choice, build_mac_directory, build_targets
 from .npm import NpmClient, PublicUrlMap, fetch_public_url_map
 from .polling import PollingSource
 from .topology import build_topology
@@ -94,6 +94,8 @@ class InventoryParts:
     macs: dict[str, MacMatch] | None = None
     public_urls: PublicUrlMap | None = None
     topology: Json | None = None
+    #: NetBox device id by device name (reserve hardware left out), for the Wi-Fi source.
+    device_ids: dict[str, str] | None = None
     #: Messages of the parts that failed in the last cycle, by part name.
     errors: dict[str, str] = field(default_factory=dict)
 
@@ -161,6 +163,13 @@ class InventorySource(PollingSource):
                     callback(macs)
         else:
             errors["macs"] = describe("NetBox", first_error("mac_addresses", "devices", "vms"))
+
+        if ok("devices"):
+            self.parts.device_ids = {
+                d["name"]: str(d["id"])
+                for d in results["devices"]
+                if d.get("name") and _choice(d.get("status")) != "inventory"
+            }
 
         if ok("cables", "interfaces", "vlans", "devices"):
             self.parts.topology = build_topology(

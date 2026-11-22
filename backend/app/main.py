@@ -22,6 +22,7 @@ from .polling import PollingSource
 from .proxmox import proxmox_sources
 from .routeros import RouterOsConnection
 from .services import ServicesSource
+from .wifi import WifiSource
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -51,6 +52,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     arp = ArpSource(connect)
     inventory = InventorySource(netbox, npm, settings.netbox_public_url, settings.inventory_period_s)
     inventory.on_macs_changed.append(arp.set_macs)
+    wifi = WifiSource(connect, arp.hints)
+    inventory.on_macs_changed.append(wifi.set_macs)
+    inventory.on_cycle.append(lambda parts: wifi.set_device_ids(parts.device_ids))
     checker = ServiceChecker(
         inventory.load_targets, checks_http, settings.service_check_exclude, inventory.load_public_urls
     )
@@ -62,7 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         source.on_change.append(services.on_container)
     app.state.services = services
     app.state.hub = StreamHub(
-        [arp, inventory, services, *proxmox_sources(settings, proxmox_http), *containers],
+        [arp, inventory, services, wifi, *proxmox_sources(settings, proxmox_http), *containers],
         grace_s=settings.stream_grace_s,
     )
     try:

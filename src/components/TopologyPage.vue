@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ArpPresenceIndex } from '../domain/arp'
 import { arpObjectKey } from '../domain/arp'
 import type { DeviceRecord, Machine } from '../domain/model'
@@ -13,7 +13,12 @@ import NoticeBanner from './NoticeBanner.vue'
 import TopologyCables from './TopologyCables.vue'
 import TopologyCard from './TopologyCard.vue'
 import TopologyGroups from './TopologyGroups.vue'
+import TopologyLayerSwitch from './TopologyLayerSwitch.vue'
 import TopologyLegend from './TopologyLegend.vue'
+import TopologyWifi from './TopologyWifi.vue'
+import { buildWifiGrid } from '../domain/wifi'
+import { loadLayerStates, saveLayerStates, type LayerId, type LayerState } from '../presentation/layers'
+import type { WifiData } from '../types/wifi'
 
 /**
  * The physical network from NetBox cabling, laid out by ELK: an SVG layer of cables under
@@ -27,6 +32,10 @@ const props = defineProps<{
   presence: ArpPresenceIndex
   /** Set when there is no topology and none is coming (it could not be read). */
   unavailable?: string | null
+  /** The router's wireless networks (`wifi` source); null until the first snapshot. */
+  wifi?: WifiData | null
+  /** Why there is no Wi-Fi data (the source's error), if so. */
+  wifiError?: string | null
 }>()
 
 /** Rebuilt only with the inventory; live states reach the cards through `machines` and `presence`. */
@@ -57,10 +66,35 @@ const scale = computed(() => fitScale(viewportWidth.value, placement.value?.widt
  * neighbours and their ports are emphasised, the rest toned down.
  */
 const tracedId = ref<string | null>(null)
+/** The access point traced together with it: its column in the Wi-Fi block. */
+const tracedApId = ref<string | null>(null)
 const trace = computed(() => (graph.value && tracedId.value ? traceOf(graph.value, tracedId.value) : null))
 const onTrace = (deviceId: string | null) => {
   tracedId.value = deviceId
+  tracedApId.value = deviceId ? (props.wifi?.aps.find((ap) => ap.deviceId === deviceId)?.id ?? null) : null
 }
+/** From the Wi-Fi block: a column header or chip traces its access point's card. */
+const onApTrace = (apId: string | null) => {
+  tracedApId.value = apId
+  const deviceId = apId ? (props.wifi?.aps.find((ap) => ap.id === apId)?.deviceId ?? null) : null
+  tracedId.value = deviceId && graph.value?.nodes.some((n) => n.id === deviceId) ? deviceId : null
+}
+
+/** Layers: Wired and Wi-Fi, each shown / grey / hidden, remembered in local storage. */
+const layers = ref(loadLayerStates())
+watch(layers, (states) => saveLayerStates(states), { deep: true })
+const onLayer = (id: LayerId, state: LayerState) => {
+  layers.value = { ...layers.value, [id]: state }
+}
+
+/** Access-point cards stay fully visible when the wired layer is grey: anchors for Wi-Fi. */
+const apDeviceIds = computed(() => new Set((props.wifi?.aps ?? []).flatMap((ap) => (ap.deviceId ? [ap.deviceId] : []))))
+
+const wifiGrid = computed(() => {
+  if (!props.wifi) return null
+  const p = placement.value
+  return buildWifiGrid(props.wifi, (deviceId) => p?.nodes.get(deviceId)?.x)
+})
 
 const isEmpty = computed(() => graph.value !== null && graph.value.edges.length === 0)
 
@@ -108,18 +142,21 @@ const tags = computed(() => {
     </div>
 
     <template v-else-if="graph">
-      <TopologyLegend
-        class="topo-legend-corner"
-        :vlans="graph.vlans"
-        :has-trunk="graph.hasTrunk"
-        :has-unknown="graph.hasUnknown"
-        :speeds="graph.speeds"
-      />
+      <div class="topo-legend-corner">
+        <TopologyLayerSwitch :states="layers" @change="onLayer" />
+        <TopologyLegend
+          :vlans="graph.vlans"
+          :has-trunk="graph.hasTrunk"
+          :has-unknown="graph.hasUnknown"
+          :speeds="graph.speeds"
+          :wifi="layers.wifi !== 'hidden'"
+        />
+      </div>
       <div ref="viewport" class="topo-viewport">
         <div class="topo-sizer" :style="{ width: `${placement.width * scale}px`, height: `${placement.height * scale}px` }">
           <div
             class="topo-canvas"
-            :class="{ 'is-tracing': !!trace }"
+            :class="[{ 'is-tracing': !!trace }, `layer-wired-${layers.wired}`]"
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
             <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
@@ -139,6 +176,7 @@ const tags = computed(() => {
               :presence="c.presence"
               :traced="trace?.nodeIds.has(c.node.id) ?? false"
               :traced-ports="trace?.portIds ?? null"
+              :anchor="apDeviceIds.has(c.node.id)"
               @trace="onTrace"
             />
             <span
@@ -155,6 +193,18 @@ const tags = computed(() => {
         </div>
       </div>
     </template>
+
+    <TopologyWifi
+      v-if="layers.wifi !== 'hidden'"
+      class="topo-wifi-layer"
+      :class="`layer-wifi-${layers.wifi}`"
+      :grid="wifiGrid"
+      :vlans="topology?.data.vlans ?? []"
+      :machines="machines"
+      :traced-ap-id="tracedApId"
+      :error="wifiError ?? null"
+      @trace="onApTrace"
+    />
   </section>
 </template>
 
@@ -187,6 +237,30 @@ const tags = computed(() => {
   top: 0;
   right: 0;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+/*
+ * Layers. Grey: faded and colourless (access-point cards stay as anchors for the Wi-Fi block);
+ * hidden: the wired diagram keeps its space but draws nothing, the Wi-Fi block is not rendered.
+ */
+.layer-wired-grey :deep(.topo-card:not(.is-anchor)),
+.layer-wired-grey :deep(.topo-cables),
+.layer-wired-grey :deep(.topo-group),
+.layer-wired-grey :deep(.group-label),
+.layer-wired-grey .speed-tag {
+  opacity: 0.2;
+  filter: grayscale(1);
+}
+.layer-wired-hidden {
+  visibility: hidden;
+}
+.layer-wifi-grey {
+  opacity: 0.2;
+  filter: grayscale(1);
 }
 
 /* Narrow screens: the legend takes its own row instead of covering the diagram. */

@@ -116,6 +116,7 @@ async def test_one_cycle_feeds_inventory_targets_mac_directory_and_public_urls()
     assert source.parts.public_urls == {("192.0.2.20", 9428): "https://logs.example.com"}
     assert source.parts.macs["02:00:00:00:00:AA"].name == "srv-a"
     assert seen_macs == [source.parts.macs]
+    assert source.parts.device_ids == {"srv-a": "1"}  # for the Wi-Fi source
     # Each data set is read once per cycle, even when two parts need it.
     netbox_reads = [p for p in upstream.requests if not p.startswith("/api/tokens") and p != "/api/nginx/proxy-hosts"]
     assert sorted(netbox_reads) == sorted(["/graphql/", *REST])

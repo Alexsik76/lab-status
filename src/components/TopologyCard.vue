@@ -37,6 +37,8 @@ const props = defineProps<{
   traced?: boolean
   /** Hover trace: the ports at the ends of the traced cables (null when nothing is traced). */
   tracedPorts?: ReadonlySet<string> | null
+  /** An access point of the Wi-Fi block: stays visible when the wired layer is grey. */
+  anchor?: boolean
 }>()
 
 /**
@@ -102,7 +104,7 @@ const jacks = computed(() =>
     :is="href ? 'a' : 'div'"
     :href="href ?? undefined"
     class="topo-card"
-    :class="{ 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike, 'is-traced': traced }"
+    :class="{ 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike, 'is-traced': traced, 'is-anchor': anchor }"
     :style="{
       left: `${placed.x}px`,
       top: `${placed.y}px`,
