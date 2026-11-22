@@ -78,6 +78,11 @@ alone publishes an empty snapshot instead, so the page never shows stale wireles
 `state` describes the published data: `error` means the last poll produced none, while
 `live` with a non-null `error` means it succeeded only in part.
 
+Error texts are short, fixed messages that name the failing system and the kind of failure
+(e.g. `Wi-Fi: cannot connect to the router`, `Portainer is unreachable.`, a service check's
+`timed out`); they never carry the router's address or the text of an exception. The details
+(addresses, the operating system's error, the router's own reply) go to the server log only.
+
 | Source | Upstream | Period | `data` |
 |---|---|---|---|
 | `inventory` | NetBox: the page's GraphQL query and REST services, virtual machines, devices, MAC addresses, cables, interfaces, VLANs; NPM proxy hosts; all concurrently, each data set once | 300 s (`INVENTORY_PERIOD_S`) | the GraphQL `data` object unchanged, plus the key `topology` (below) |
@@ -142,7 +147,9 @@ filtered by id (only the list endpoint gives the status text, e.g. `Up 4 days (h
 empty answer removes it (`destroy`). The same container is re-read again 3 s and 15 s after
 its last event, in case a later event is still delayed. Every 300 s (`CONTAINERS_PERIOD_S`), and on refresh, all environments are
 re-listed, which corrects missed events. Its events have the same shape as the polling
-sources'; `data` is `[{"env", "name", "state", "status"}]` sorted by environment and name
+sources', except that `status` is sent only when the state or the error changes (a container
+event or a re-list that only moves `updatedAt` sends none; `GET /api/health` and a new
+subscriber get the current time); `data` is `[{"env", "name", "state", "status"}]` sorted by environment and name
 (`env` is the Portainer environment name), `periodS` the re-list period. An environment that
 fails keeps its entries and reconnects after 2 s, doubling to 60 s; it is reported as
 `"<env>: <error>"` in `error` (several joined by `; `), with `state` staying `live` while

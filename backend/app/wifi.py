@@ -27,7 +27,7 @@ from typing import Any
 from .arp import ClientHints
 from .netbox import MacMatch
 from .polling import PollingSource
-from .routeros import RouterOsConnection, RouterOsError
+from .routeros import RouterOsConnection, RouterOsError, describe
 
 log = logging.getLogger(__name__)
 
@@ -227,7 +227,8 @@ async def read_menus(conn: RouterOsConnection) -> dict[str, Rows]:
     async for reply in conn.replies():
         if reply.word in ("!trap", "!fatal"):
             path = MENUS.get(reply.tag or "", "")
-            raise RouterOsError(f"{path} {reply.attrs.get('message', reply.word)}".strip())
+            message = f"the router refused to read {path}" if path else "the router refused a read"
+            raise RouterOsError(message, reply.attrs.get("message", reply.word))
         if reply.word == "!re" and reply.tag in rows:
             rows[reply.tag].append(dict(reply.attrs))
         elif reply.word == "!done" and reply.tag in pending:
@@ -281,4 +282,7 @@ class WifiSource(PollingSource):
     def describe_error(self, exc: Exception) -> str:
         if isinstance(exc, TimeoutError):
             return f"{ERROR_PREFIX}the router did not answer in time."
-        return f"{ERROR_PREFIX}{exc}" if str(exc) else f"{ERROR_PREFIX}{type(exc).__name__}"
+        return ERROR_PREFIX + describe(exc)
+
+    def error_detail(self, exc: Exception) -> str | None:
+        return getattr(exc, "detail", None) or (None if isinstance(exc, RouterOsError) else repr(exc))

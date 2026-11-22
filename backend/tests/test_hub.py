@@ -2,6 +2,7 @@ import asyncio
 
 from app.hub import Event, Source, StreamHub
 from app.main import format_sse
+from app.polling import PollingSource
 
 
 class PushSource(Source):
@@ -223,3 +224,40 @@ async def test_pending_restart_is_dropped_when_the_hub_stops() -> None:
     hub.unsubscribe(queue)
     await asyncio.sleep(0.1)
     assert source.runs == 1 and not hub.running
+
+
+class CountingPoller(PollingSource):
+    def __init__(self) -> None:
+        super().__init__("counting", period_s=0.01)
+        self.fetches = 0
+
+    async def fetch(self) -> int:
+        self.fetches += 1
+        return self.fetches
+
+
+async def test_a_polling_source_polls_while_a_page_is_connected_and_not_after_the_grace_period() -> None:
+    poller = CountingPoller()
+    hub = StreamHub([poller], grace_s=0.05)
+    await asyncio.sleep(0.05)
+    assert poller.fetches == 0  # nobody connected: no polling at all
+
+    page = hub.subscribe()
+    await asyncio.sleep(0.1)
+    seen = poller.fetches
+    assert seen >= 3
+    await asyncio.sleep(0.1)
+    assert poller.fetches > seen  # an open page keeps getting fresh data
+    assert any(event["type"] == "data" for _, event in drain_now(page))
+
+    hub.unsubscribe(page)  # the page closed its stream (a tab hidden for 10 s does the same)
+    await asyncio.sleep(0.1)
+    assert not hub.running and poller.state == "idle"
+    stopped_at = poller.fetches
+    await asyncio.sleep(0.1)
+    assert poller.fetches == stopped_at
+    # A refresh request without a page does not poll either.
+    poller.refresh()
+    await asyncio.sleep(0.05)
+    assert poller.fetches == stopped_at
+    await hub.aclose()

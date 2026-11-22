@@ -4,6 +4,7 @@ Targets and public URLs come from the `inventory` source's cycle; the `services`
 when to check what."""
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
@@ -13,10 +14,26 @@ import httpx
 from .netbox import Target
 from .npm import PublicUrlMap
 
+log = logging.getLogger(__name__)
+
 CHECK_TIMEOUT_S = 3.0
 RETRY_DELAY_S = 2.0
 #: Checks running at the same time.
 CONCURRENCY = 16
+
+
+def describe_check_error(exc: httpx.HTTPError) -> str:
+    """The page's message for a failed check: the kind of failure only. The exception text
+    (which names the address, and carries the OS error) goes to the server log."""
+    if isinstance(exc, httpx.TimeoutException):
+        return "timed out"
+    if isinstance(exc, httpx.ConnectError):
+        return "connection failed"
+    if isinstance(exc, httpx.RemoteProtocolError):
+        return "invalid HTTP response"
+    if isinstance(exc, httpx.NetworkError):
+        return "network error"
+    return f"request failed ({type(exc).__name__})"
 
 
 async def check_target(client: httpx.AsyncClient, target: Target) -> dict[str, Any]:
@@ -26,7 +43,9 @@ async def check_target(client: httpx.AsyncClient, target: Target) -> dict[str, A
         try:
             response = await client.get(target.url, timeout=CHECK_TIMEOUT_S, follow_redirects=False)
         except httpx.HTTPError as exc:
-            error = str(exc) or type(exc).__name__
+            error = describe_check_error(exc)
+            if attempt == 1:
+                log.info("Service check of %s failed: %s", target.name, str(exc) or type(exc).__name__)
             if attempt == 0:
                 await asyncio.sleep(RETRY_DELAY_S)
             continue

@@ -14,7 +14,7 @@ from typing import Any
 
 from .hub import Event, Source
 from .netbox import MacMatch
-from .routeros import RouterOsConnection, RouterOsError
+from .routeros import RouterOsConnection, RouterOsError, describe, log_detail
 
 log = logging.getLogger(__name__)
 
@@ -240,8 +240,8 @@ class ArpSource(Source):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                log.warning("ARP mirror session failed: %s", exc)
-                self._set_state("error", str(exc))
+                log.warning("ARP mirror session failed: %s", log_detail(exc))
+                self._set_state("error", describe(exc))
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60.0)
             else:
@@ -261,7 +261,7 @@ class ArpSource(Source):
             conn.send(["/ip/dhcp-server/lease/print", ".tag=lease-print"])
             async for reply in conn.replies():
                 if reply.word in ("!trap", "!fatal"):
-                    raise RouterOsError(reply.attrs.get("message", reply.word))
+                    raise RouterOsError("the router refused to follow the ARP table", reply.attrs.get("message", reply.word))
                 printing = bool(pending)
                 if reply.word == "!done" and reply.tag in pending:
                     pending.discard(reply.tag)

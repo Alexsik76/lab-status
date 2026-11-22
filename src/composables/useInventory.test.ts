@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { effectScope } from 'vue'
+import { effectScope, nextTick } from 'vue'
 import { netboxResponse } from '../__fixtures__'
 import { FakeEventSource } from '../__fixtures__/fakeEventSource'
 import { REFRESH_URL } from '../config'
@@ -218,6 +218,31 @@ describe('useInventory & storage persistence', () => {
       expect(JSON.parse(localStorage.getItem(INVENTORY_STORAGE_KEY) ?? 'null')?.timestamp).toBe('2026-11-16T12:05:00.000Z'),
     )
     expect(inv.errorMessage.value).toBeNull()
+  })
+
+  it('touches the storage once per new time, not for every status', async () => {
+    useInventoryOnStream()
+    deliver(netboxResponse.data, '2026-11-16T12:00:00Z')
+    await nextTick()
+    // Every store of the inventory serializes it and reads the stored copy to compare.
+    const getItem = vi.spyOn(localStorage, 'getItem')
+    const setItem = vi.spyOn(localStorage, 'setItem')
+    try {
+      // A status repeating the time, and one that only reports an error: nothing to store.
+      FakeEventSource.latest().emit('inventory', status('live', null, '2026-11-16T12:00:00Z'))
+      FakeEventSource.latest().emit('inventory', status('live', 'Nginx Proxy Manager is unreachable.', '2026-11-16T12:00:00Z'))
+      await nextTick()
+      expect(getItem).not.toHaveBeenCalled()
+      expect(setItem).not.toHaveBeenCalled()
+      // The next successful cycle with unchanged data: one write, with the new time.
+      FakeEventSource.latest().emit('inventory', status('live', null, '2026-11-16T12:05:00Z'))
+      await nextTick()
+      expect(setItem).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(localStorage.getItem(INVENTORY_STORAGE_KEY) ?? 'null')?.timestamp).toBe('2026-11-16T12:05:00.000Z')
+    } finally {
+      getItem.mockRestore()
+      setItem.mockRestore()
+    }
   })
 
   it('takes updatedAt from a status that arrives before the data (a new subscriber)', () => {

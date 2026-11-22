@@ -123,8 +123,9 @@ async def test_initial_list_of_every_docker_environment_in_the_webhook_shape() -
         {"env": "docker-1", "name": "n8n", "state": "running", "status": "Up 4 days"},
         {"env": "docker-2", "name": "frigate", "state": "running", "status": "Up 2 days (healthy)"},
     ]
-    assert events[-1]["type"] == "status" and events[-1]["state"] == "live" and events[-1]["error"] is None
-    assert events[-1]["periodS"] == 300.0 and events[-1]["updatedAt"]
+    status = [e for e in events if e["type"] == "status"][-1]
+    assert status["state"] == "live" and status["error"] is None
+    assert status["periodS"] == 300.0 and status["updatedAt"]
     health = source.health()["environments"]
     assert set(health) == {"docker-1", "docker-2"}  # the Kubernetes environment is skipped
     assert health["docker-1"] == {"state": "live", "error": None, "updatedAt": health["docker-1"]["updatedAt"],
@@ -178,6 +179,41 @@ async def test_no_event_is_published_when_nothing_changed() -> None:
     source.refresh()  # reconcile, same lists
     await asyncio.sleep(0.05)
     assert len([e for e in events if e["type"] == "data"]) == data_events
+    await stop(task)
+
+
+async def test_a_container_event_publishes_its_data_and_no_status_while_the_state_holds() -> None:
+    fake = two_envs()
+    source, events = make(fake, follow_up_s=(0.02, 0.04))
+    task = await start(source)
+    env = fake.envs[3]
+    before = len(events)
+    env.containers["a2"] = container("a2", "n8n", "exited", "Exited (0) 1 second ago")
+    await env.events.put(event("die", "a2"))
+    await asyncio.sleep(0.08)  # the event's re-read and both delayed re-reads, all unchanged after the first
+    assert container_reads(fake, "a2") == 3
+    assert [e["type"] for e in events[before:]] == ["data"]
+    # The status still reports the state, and a new subscriber gets the latest time.
+    assert source.health()["environments"]["docker-1"]["updatedAt"]
+    assert source.initial_events()[0]["state"] == "live"
+    await stop(task)
+
+
+async def test_status_is_published_when_an_environment_fails_and_recovers() -> None:
+    fake = two_envs()
+    source, events = make(fake, backoff=(0.01, 0.01))
+    task = await start(source)
+    before = len(events)
+    fake.envs[6].down = True
+    await fake.envs[6].events.put(CLOSE)
+    await asyncio.sleep(0.03)
+    fake.envs[6].down = False
+    await asyncio.sleep(0.05)
+    statuses = [e for e in events[before:] if e["type"] == "status"]
+    errors = [s["error"] for s in statuses]
+    assert errors[0] == "docker-2: Portainer closed the Docker event stream."
+    assert "docker-2: Portainer is unreachable." in errors and errors[-1] is None
+    assert all(s["state"] == "live" for s in statuses)  # docker-1 stayed live
     await stop(task)
 
 
@@ -300,6 +336,29 @@ async def test_in_the_hub_initial_events_and_stop() -> None:
     await hub.aclose()
     assert source.state == "idle" and source.data  # entries kept for the next subscriber
     assert all(env.state == "idle" for env in source.environments.values())
+
+
+async def test_no_portainer_request_after_the_last_page_left_and_the_grace_period() -> None:
+    fake = two_envs()
+    source, _ = make(fake, period_s=0.02, follow_up_s=(0.5,))
+    hub = StreamHub([source], grace_s=0.05)
+    page = hub.subscribe()
+    await asyncio.sleep(0.05)
+    await fake.envs[3].events.put(event("start", "a1"))  # leaves a delayed re-read pending
+    await asyncio.sleep(0.02)
+    assert source.environments[3].follow_ups
+    requests = len(fake.requests)
+    await asyncio.sleep(0.05)
+    assert len(fake.requests) > requests  # re-lists go on while the page is connected
+
+    hub.unsubscribe(page)
+    await asyncio.sleep(0.1)
+    assert not hub.running
+    assert all(env.task is None and not env.follow_ups for env in source.environments.values())
+    requests = len(fake.requests)
+    await asyncio.sleep(0.6)  # past the re-list period and the cancelled re-read
+    assert len(fake.requests) == requests
+    await hub.aclose()
 
 
 def test_source_absent_when_portainer_is_not_configured() -> None:
