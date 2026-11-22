@@ -6,9 +6,13 @@ import { vlanColor, type PlacedGroup } from '../presentation/topologyLayout'
 /**
  * Group rectangles: dashed, rounded, a label at the top left with the group's name, member
  * count and common VLAN. Not interactive. Drawn twice: the frames under the cables and cards
- * (`part="frame"`), the labels on a page-coloured chip above the cables (`part="label"`), so a
- * cable crossing the group's top edge does not run through the text.
+ * (`part="frame"`), the labels on a page-coloured chip above the cables (`part="label"`). The
+ * chip sits at the bottom-left corner, centred on the bottom border: cables enter a group from
+ * the top, so nothing runs through the text there.
  */
+/** Distance of the label chip from the frame's left edge. */
+const LABEL_INSET = 10
+
 const props = defineProps<{
   groups: readonly PlacedGroup[]
   vlans: readonly RawTopologyVlan[]
@@ -50,7 +54,7 @@ const items = computed(() => {
       class="group-label"
       :class="{ 'has-vlan': !!g.color }"
       :data-group="g.group.id"
-      :style="{ left: `${g.x + 10}px`, top: `${g.y + 5}px`, ...(g.color ? { '--group-color': g.color } : {}) }"
+      :style="{ left: `${g.x + LABEL_INSET}px`, top: `${g.y + g.height}px`, ...(g.color ? { '--group-color': g.color } : {}) }"
     >
       {{ g.label }}
     </span>
@@ -71,6 +75,7 @@ const items = computed(() => {
   --group-color: var(--color-border-dashed);
   position: absolute;
   z-index: 2;
+  transform: translateY(-50%);
   padding: 2px 4px;
   border-radius: var(--radius-xs);
   background: var(--color-bg-page);
