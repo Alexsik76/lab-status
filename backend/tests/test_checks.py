@@ -38,3 +38,16 @@ async def test_results_match_the_webhook_shape() -> None:
     assert (by_name["svc3"]["up"], by_name["svc3"]["code"]) == (True, 302)
     assert (by_name["svc4"]["up"], by_name["svc4"]["code"]) == (False, 503)
     assert by_name["svc2"]["service_id"] == 2
+
+
+async def test_a_failed_check_names_the_kind_of_failure_only() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.port == 1:
+            raise httpx.ConnectError("[Errno 111] Connect call failed ('192.0.2.1', 1)", request=request)
+        raise httpx.ReadTimeout("timed out reading from 192.0.2.1:5", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        refused = await checks.check_target(client, Target("svc1", "http://192.0.2.1:1", 1))
+        slow = await checks.check_target(client, Target("svc5", "http://192.0.2.1:5", 5))
+    assert refused["error"] == "connection failed"
+    assert slow["error"] == "timed out"

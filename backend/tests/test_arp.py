@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from app.arp import ArpSource, presence
 from app.hub import StreamHub
 from app.netbox import MacMatch
-from app.routeros import Reply
+from app.routeros import Reply, RouterOsError
 
 MATCH = MacMatch("device", "1", "srv-a", "Server", "active", "", "eth0", None)
 
@@ -324,3 +324,37 @@ def test_hints_for_wifi_clients_from_leases_and_arp_rows() -> None:
     other = source.hints("02:00:00:00:00:bb")
     assert (other.lease_comment, other.lease_host_name, other.ip) == (None, None, "192.0.2.20")
     assert source.hints("02:00:00:00:00:CC").ip is None
+
+
+async def test_a_failed_session_reports_a_short_message_and_logs_the_details(caplog) -> None:
+    attempts = 0
+
+    async def connect():
+        nonlocal attempts
+        attempts += 1
+        raise RouterOsError("cannot connect to the router", "192.0.2.1:8728: Connection refused")
+
+    source = ArpSource(connect)
+    events: list[dict] = []
+    source.attach(events.append)
+    with caplog.at_level("WARNING"):
+        task = asyncio.create_task(source.run())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert events[-1] == {"type": "status", "state": "error", "error": "cannot connect to the router"}
+    assert "192.0.2.1:8728" in caplog.text
+
+
+async def test_a_trap_reply_reports_a_short_message() -> None:
+    async def connect():
+        return FakeConnection([Reply("!trap", "listen", {"message": "no such command"})])
+
+    source = ArpSource(connect)
+    events: list[dict] = []
+    source.attach(events.append)
+    task = asyncio.create_task(source.run())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert events[-1]["error"] == "the router refused to follow the ARP table"

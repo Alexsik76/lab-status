@@ -80,8 +80,12 @@ export function useInventory(stream: EventStream = useEventStream()) {
     stream.on<PolledEvent<Partial<RawInventory>>>('inventory', (event) => {
       if (event.type === 'status') {
         status.value = event
+        // Only a new time is stored: a status that repeats it (or only changes the state or
+        // the error) leaves the stored inventory as it is.
         if (event.updatedAt && state.value) {
-          updatedAt.value = new Date(event.updatedAt)
+          const at = new Date(event.updatedAt)
+          if (at.getTime() === updatedAt.value?.getTime()) return
+          updatedAt.value = at
           persist()
         }
         return

@@ -68,7 +68,8 @@ def describe(system: str, exc: BaseException) -> str:
         return f"{system} responded with HTTP {response.status_code} {response.reason_phrase}.".replace(" .", ".")
     if isinstance(exc, httpx.HTTPError):
         return f"{system} is unreachable."
-    return f"{system} returned an unexpected response ({type(exc).__name__}: {exc})."
+    log.warning("%s: unexpected failure: %r", system, exc)
+    return f"{system} returned an unexpected response ({type(exc).__name__})."
 
 
 async def fetch_inventory(netbox: NetBoxClient) -> Json:

@@ -17,7 +17,9 @@ container is re-read again 3 s and 15 s after its last event. A full re-list of 
 Environments are independent: one that fails keeps its last entries, reconnects with backoff
 (2 s doubling to 60 s), and is reported as `"<env>: <error>"` in the source error, while the
 others stay live. The payload is the whole list in the shape of the former n8n webhook,
-`[{"env", "name", "state", "status"}]`, sorted by environment and name.
+`[{"env", "name", "state", "status"}]`, sorted by environment and name. A status event is
+published only when the state or the error changes; a read that only moves `updatedAt` sends
+none (the page shows this source as live, not by age).
 """
 
 import asyncio
@@ -66,7 +68,8 @@ def describe(exc: BaseException) -> str:
         return f"Portainer responded with HTTP {r.status_code} {r.reason_phrase}.".replace(" .", ".")
     if isinstance(exc, httpx.HTTPError):
         return "Portainer is unreachable."
-    return f"Portainer returned an unexpected response ({type(exc).__name__}: {exc})."
+    log.warning("Portainer: unexpected failure: %r", exc)
+    return f"Portainer returned an unexpected response ({type(exc).__name__})."
 
 
 class PortainerClient:
@@ -361,7 +364,7 @@ class ContainersSource(Source):
         env.state, env.error = LIVE, None
         env.updated_at = self.updated_at = self._clock()
         self._publish_data()
-        self._publish_status(force=True)
+        self._publish_status()
 
     def _env_failed(self, env: Environment, exc: BaseException) -> None:
         message = describe(exc)
@@ -377,7 +380,7 @@ class ContainersSource(Source):
             self.data, self.has_data = entries, True
             self.publish({"type": "data", "data": entries})
 
-    def _publish_status(self, force: bool = False) -> None:
+    def _publish_status(self) -> None:
         errors = [f"Portainer: {self._list_error}"] if self._list_error else []
         errors += [f"{env.name}: {env.error}" for env in self.environments.values() if env.error]
         error = "; ".join(errors) or None
@@ -388,14 +391,14 @@ class ContainersSource(Source):
             state = ERROR
         else:
             state = CONNECTING
-        self._set_status(state, error, force)
+        self._set_status(state, error)
 
     def _status_event(self) -> Event:
         return {"type": "status", "state": self.state, "error": self.error,
                 "updatedAt": iso(self.updated_at), "periodS": self.period_s}
 
-    def _set_status(self, state: str, error: str | None, force: bool = False) -> None:
-        if not force and (state, error) == (self.state, self.error):
+    def _set_status(self, state: str, error: str | None) -> None:
+        if (state, error) == (self.state, self.error):
             return
         self.state, self.error = state, error
         self.publish(self._status_event())

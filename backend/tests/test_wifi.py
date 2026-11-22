@@ -1,9 +1,11 @@
 import asyncio
 from collections.abc import AsyncIterator
 
+import pytest
+
 from app.arp import ClientHints
 from app.netbox import MacMatch
-from app.routeros import Reply
+from app.routeros import Reply, RouterOsConnection
 from app.wifi import EMPTY, WifiSource, band_of, build_wifi, radio_state, read_menus, uptime_text
 
 # Invented network: three access points (one known to NetBox by MAC, one by name, one unknown).
@@ -226,7 +228,7 @@ async def test_missing_capsman_gives_an_empty_snapshot_and_a_wifi_error() -> Non
     await source.cycle()
     assert events[-2] == {"type": "data", "data": EMPTY}
     assert events[-1]["state"] == "error"
-    assert events[-1]["error"] == "Wi-Fi: /caps-man/interface no such command prefix"
+    assert events[-1]["error"] == "Wi-Fi: the router refused to read /caps-man/interface"
     assert bad.closed
 
 
@@ -239,7 +241,10 @@ async def test_unreachable_router_is_reported_with_the_prefix() -> None:
     source.attach(events.append)
     await source.cycle()
     assert events[0] == {"type": "data", "data": EMPTY}
-    assert events[1]["state"] == "error" and events[1]["error"].startswith("Wi-Fi: ")
+    assert events[1] | {"updatedAt": None} == {
+        "type": "status", "state": "error", "error": "Wi-Fi: the router is unreachable",
+        "updatedAt": None, "periodS": source.period_s,
+    }
     await asyncio.sleep(0)
 
 
@@ -265,3 +270,25 @@ async def test_new_netbox_data_triggers_a_cycle_while_running() -> None:
     task.cancel()
     latest = [e for e in events if e["type"] == "data"][-1]["data"]
     assert next(a for a in latest["aps"] if a["name"] == "ap-yard")["deviceId"] == "72"
+
+
+async def test_a_failed_connection_names_no_address_on_the_page(caplog: pytest.LogCaptureFixture) -> None:
+    async def connect():
+        return await RouterOsConnection.open("127.0.0.1", _closed_port(), "user", "secret-password", timeout=1)
+
+    source = WifiSource(connect, lambda mac: ClientHints())
+    events: list[dict] = []
+    source.attach(events.append)
+    with caplog.at_level("WARNING"):
+        await source.cycle()
+    assert events[-1]["error"] == "Wi-Fi: cannot connect to the router"
+    assert "127.0.0.1" in caplog.text  # the details stay in the server log
+    assert "secret-password" not in caplog.text
+
+
+def _closed_port() -> int:
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]

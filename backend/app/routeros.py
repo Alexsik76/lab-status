@@ -11,7 +11,34 @@ from dataclasses import dataclass, field
 
 
 class RouterOsError(Exception):
-    """Login failure, a `!trap`/`!fatal` reply, or a broken connection."""
+    """Login failure, a `!trap`/`!fatal` reply, or a broken connection.
+
+    `str(exc)` is a short message safe to show on the page: it never names the router's
+    address, and carries no text from the operating system or the router. What the server
+    log needs on top of it (host and port, the OS error, the router's own reply) is in
+    `detail`."""
+
+    def __init__(self, message: str, detail: str | None = None) -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
+def describe(exc: BaseException) -> str:
+    """The page's message for a failed router session: short, lowercase, no final period."""
+    if isinstance(exc, RouterOsError):
+        return str(exc)
+    if isinstance(exc, TimeoutError):
+        return "the router did not answer in time"
+    if isinstance(exc, OSError):
+        return "the router is unreachable"
+    return f"unexpected error ({type(exc).__name__})"
+
+
+def log_detail(exc: BaseException) -> str:
+    """The server log's account of the same failure, with the details the page does not get."""
+    detail = getattr(exc, "detail", None)
+    text = str(exc) or type(exc).__name__
+    return f"{text} ({detail})" if detail else text
 
 
 def encode_length(n: int) -> bytes:
@@ -47,7 +74,7 @@ async def read_length(reader: asyncio.StreamReader) -> int:
         return ((first & 0x0F) << 24) | int.from_bytes(await reader.readexactly(3), "big")
     if first == 0xF0:
         return int.from_bytes(await reader.readexactly(4), "big")
-    raise RouterOsError(f"unexpected control byte 0x{first:02x}")
+    raise RouterOsError("the router sent an invalid reply", f"unexpected control byte 0x{first:02x}")
 
 
 async def read_sentence(reader: asyncio.StreamReader) -> list[str]:
@@ -93,7 +120,8 @@ class RouterOsConnection:
         try:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout)
         except (OSError, TimeoutError) as exc:
-            raise RouterOsError(f"cannot connect to {host}:{port}: {exc}") from exc
+            reason = str(exc) or type(exc).__name__
+            raise RouterOsError("cannot connect to the router", f"{host}:{port}: {reason}") from exc
         conn = cls(reader, writer)
         try:
             await asyncio.wait_for(conn._login(username, password), timeout)
@@ -107,9 +135,9 @@ class RouterOsConnection:
         try:
             reply = parse_sentence(await read_sentence(self._reader))
         except (asyncio.IncompleteReadError, OSError) as exc:
-            raise RouterOsError("connection closed during login") from exc
+            raise RouterOsError("connection closed during login", str(exc) or type(exc).__name__) from exc
         if reply.word != "!done":
-            raise RouterOsError(f"login failed: {reply.attrs.get('message', reply.word)}")
+            raise RouterOsError("the router rejected the login", reply.attrs.get("message", reply.word))
 
     def send(self, words: Iterable[str]) -> None:
         self._writer.write(encode_sentence(words))
@@ -120,7 +148,7 @@ class RouterOsConnection:
             try:
                 words = await read_sentence(self._reader)
             except (asyncio.IncompleteReadError, OSError) as exc:
-                raise RouterOsError("connection to the router was closed") from exc
+                raise RouterOsError("connection to the router was closed", str(exc) or type(exc).__name__) from exc
             if words:
                 yield parse_sentence(words)
 

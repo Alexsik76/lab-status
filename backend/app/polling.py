@@ -69,6 +69,10 @@ class PollingSource(Source):
         """The message shown on the page for a failed fetch."""
         return str(exc) or type(exc).__name__
 
+    def error_detail(self, exc: Exception) -> str | None:
+        """What the server log adds to `describe_error` for a failed fetch (never shown on the page)."""
+        return None
+
     def cycle_warning(self) -> str | None:
         """After a successful fetch: what part of it failed, if any (reported as `error`)."""
         return None
@@ -131,7 +135,8 @@ class PollingSource(Source):
         except Exception as exc:
             self._completed()
             message = self.describe_error(exc)
-            log.warning("Source %s: fetch failed: %s", self.name, message)
+            detail = self.error_detail(exc)
+            log.warning("Source %s: fetch failed: %s%s", self.name, message, f" ({detail})" if detail else "")
             self._set_status(ERROR, message)
             return
         self._completed()
