@@ -224,13 +224,16 @@ const jacks = computed(() =>
 }
 .topo-card.is-link:hover,
 .topo-card.is-link:focus-visible {
-  border-color: color-mix(in oklch, var(--color-text-accent) 70%, transparent);
   background: var(--color-bg-spine);
   outline: none;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
 }
-/* A card that opens the Hosts page: a small arrow in its top-right corner, above the title row. */
+/*
+ * A card that opens the Hosts page: a small arrow in its top-right corner, above the title row.
+ * On hover or focus it turns amber, blinks three times quickly, then pulses for as long as the
+ * hover lasts; leaving the card stops the animation and the arrow returns to its normal colour.
+ */
 .link-mark {
   position: absolute;
   top: 1px;
@@ -244,6 +247,28 @@ const jacks = computed(() =>
 .topo-card.is-link:hover .link-mark,
 .topo-card.is-link:focus-visible .link-mark {
   color: var(--color-text-accent);
+  animation:
+    link-mark-blink 0.2s steps(1, end) 3,
+    link-mark-pulse 1.4s ease-in-out 0.6s infinite;
+}
+@keyframes link-mark-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes link-mark-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 4px color-mix(in oklch, var(--color-text-accent) 70%, transparent);
+  }
+  50% {
+    opacity: 0.4;
+    text-shadow: none;
+  }
 }
 .topo-card.is-link:hover .card-name,
 .topo-card.is-link:focus-visible .card-name {
@@ -430,6 +455,10 @@ const jacks = computed(() =>
   .topo-card.is-link:hover,
   .topo-card.is-link:focus-visible {
     transform: none;
+  }
+  .topo-card.is-link:hover .link-mark,
+  .topo-card.is-link:focus-visible .link-mark {
+    animation: none;
   }
 }
 </style>
