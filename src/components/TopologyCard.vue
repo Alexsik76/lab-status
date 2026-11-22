@@ -144,7 +144,11 @@ const jacks = computed(() =>
         :style="{ height: `${CARD_LINE_HEIGHT[line]}px` }"
       >
         <template v-if="line === 'title'">
-          <OsIcon :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
+          <svg v-if="node.inFrame" class="wifi-glyph" width="14" height="14" viewBox="0 0 14 14" aria-label="Wi-Fi">
+            <path d="M2.6 6.2 A6.2 6.2 0 0 1 11.4 6.2 M4.7 8.3 A3.2 3.2 0 0 1 9.3 8.3" />
+            <circle cx="7" cy="10.6" r="1.2" />
+          </svg>
+          <OsIcon v-else :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
           <span class="card-name" :title="node.name">{{ node.name }}</span>
           <StateBadge
             v-if="node.isMachine || state"
@@ -276,6 +280,17 @@ const jacks = computed(() =>
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.wifi-glyph {
+  flex: none;
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.wifi-glyph circle {
+  fill: var(--color-text-muted);
+  stroke: none;
 }
 .card-name {
   flex: 1;

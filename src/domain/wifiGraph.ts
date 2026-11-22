@@ -122,6 +122,12 @@ export const radioPortId = (key: string) => `radio:${key}`
 export const clientPortId = (mac: string) => `wlan:${mac}`
 export const clientNodeId = (mac: string) => `wifi:${mac}`
 export const wifiEdgeId = (mac: string) => `wifi:${mac}`
+export const frameNodeId = (key: string) => `wififrame:${key}`
+export const framePortId = (key: string) => `wififrame-port:${key}`
+export const frameEdgeId = (key: string) => `wififrame:${key}`
+
+/** Wi-Fi-only clients of one radio are packed into a frame from this many on. */
+export const FRAME_MIN_MEMBERS = 2
 
 const styleOf = (vlan: number | null): CableStyle => (vlan !== null ? { kind: 'access', vlan } : { kind: 'unknown', vlan: null })
 
@@ -147,11 +153,13 @@ export function withWifi(
 
   // Radio ports, after the access point's copper ports.
   const nextOrder = new Map<string, number>()
+  const radioPortLabel = new Map<string, string>()
   for (const r of radios) {
     const ap = byId.get(r.apDeviceId)!
     const order = nextOrder.get(ap.id) ?? Math.max(-1, ...ap.ports.map((p) => p.order)) + 1
     nextOrder.set(ap.id, order + 1)
     const state = live.radios.get(r.key)
+    radioPortLabel.set(r.key, radioLabel(r.ssid, state))
     addPort(ap.id, {
       id: radioPortId(r.key),
       deviceId: ap.id,
@@ -168,9 +176,23 @@ export function withWifi(
     })
   }
 
-  // Clients: a port on an existing card, or a card of their own.
+  // Clients: a port on an existing card, or a card of their own; the Wi-Fi-only clients of one
+  // radio packed into a frame from FRAME_MIN_MEMBERS on.
   const newNodes: TopologyNode[] = []
   const edges: TopologyEdge[] = []
+  const ownCards = new Map<string, TopologyNode[]>()
+  const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
+  const edge = (id: string, radio: PlannedRadio, target: string, targetDevice: string): TopologyEdge => ({
+    id,
+    source: radioPortId(radio.key),
+    target,
+    sourceDevice: radio.apDeviceId,
+    targetDevice,
+    cableType: null,
+    style: styleOf(radio.vlan),
+    speed: null,
+    medium: 'wifi',
+  })
   for (const c of plan.clients) {
     const radio = radioByKey.get(c.radioKey)
     if (!radio) continue
@@ -192,37 +214,78 @@ export function withWifi(
       off: !live.connected.has(c.mac),
     }
     if (existing) {
+      // A wired device also on Wi-Fi is never moved: its own port and line.
       addPort(existing.id, port)
-    } else {
-      newNodes.push({
-        id: nodeId,
-        name: c.name,
-        roleSlug: null,
-        model: null,
-        ip: c.ip,
-        icon: null,
-        platform: null,
-        offline: !live.connected.has(c.mac),
-        switchLike: false,
-        isMachine: c.deviceId !== null && machineIds.has(c.deviceId),
-        hasMetrics: false,
-        depth: ap.depth + 1,
-        ports: [port],
-        kind: 'wifi-client',
-        deviceId: c.deviceId,
-      })
+      edges.push(edge(wifiEdgeId(c.mac), radio, port.id, nodeId))
+      continue
     }
-    edges.push({
-      id: wifiEdgeId(c.mac),
-      source: radioPortId(radio.key),
-      target: port.id,
-      sourceDevice: ap.id,
-      targetDevice: nodeId,
-      cableType: null,
-      style: styleOf(radio.vlan),
-      speed: null,
-      medium: 'wifi',
+    const card: TopologyNode = {
+      id: nodeId,
+      name: c.name,
+      roleSlug: null,
+      model: null,
+      ip: c.ip,
+      icon: null,
+      platform: null,
+      offline: !live.connected.has(c.mac),
+      switchLike: false,
+      isMachine: c.deviceId !== null && machineIds.has(c.deviceId),
+      hasMetrics: false,
+      depth: ap.depth + 1,
+      ports: [port],
+      kind: 'wifi-client',
+      deviceId: c.deviceId,
+    }
+    ownCards.set(radio.key, [...(ownCards.get(radio.key) ?? []), card])
+  }
+  for (const [key, cards] of ownCards) {
+    const radio = radioByKey.get(key)!
+    const ap = byId.get(radio.apDeviceId)!
+    if (cards.length < FRAME_MIN_MEMBERS) {
+      const [card] = cards
+      newNodes.push(card)
+      edges.push(edge(card.ports[0].cableId, radio, card.ports[0].id, card.id))
+      continue
+    }
+    const members = cards
+      .map((card) => ({ ...card, ports: [], inFrame: true }))
+      .sort((a, b) => collator.compare(a.name, b.name) || (a.id < b.id ? -1 : 1))
+    const anyConnected = members.some((m) => !m.offline)
+    const radioPort = radioPortLabel.get(key) ?? radio.ssid
+    newNodes.push({
+      id: frameNodeId(key),
+      name: radio.ssid,
+      roleSlug: null,
+      model: null,
+      ip: null,
+      icon: null,
+      platform: null,
+      offline: !anyConnected,
+      switchLike: false,
+      isMachine: false,
+      hasMetrics: false,
+      depth: ap.depth + 1,
+      ports: [
+        {
+          id: framePortId(key),
+          deviceId: frameNodeId(key),
+          name: radio.ssid,
+          order: 0,
+          type: null,
+          side: 'NORTH',
+          cableId: frameEdgeId(key),
+          style: styleOf(radio.vlan),
+          mgmtOnly: false,
+          kind: 'radio',
+          bare: true,
+          off: !anyConnected,
+        },
+      ],
+      kind: 'wifi-group',
+      members,
+      label: `${radioPort} · ${members.length}`,
     })
+    edges.push(edge(frameEdgeId(key), radio, framePortId(key), frameNodeId(key)))
   }
 
   const side = (p: TopologyPort) => Number(p.side === 'SOUTH')

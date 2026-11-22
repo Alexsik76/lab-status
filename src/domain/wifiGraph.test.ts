@@ -9,6 +9,9 @@ import { buildTopologyGraph } from './topology'
 import {
   clientNodeId,
   clientPortId,
+  frameEdgeId,
+  frameNodeId,
+  framePortId,
   mergePlan,
   planKey,
   radioKey,
@@ -55,36 +58,60 @@ describe('Wi-Fi in the graph', () => {
     expect(radioLabel('Home', { channel: 5180, state: 'running' })).toBe('Home · 5180')
   })
 
-  it('gives a client that is already on the diagram a NORTH radio port, others a card of their own', () => {
+  it('gives a client that is already on the diagram a NORTH radio port and its own line', () => {
     const { graph } = build()
     const alpha = graph.nodes.find((n) => n.id === '11')! // node-alpha: wired, also on Wi-Fi
     const wlan = alpha.ports.find((p) => p.kind === 'radio')!
     expect([wlan.id, wlan.label, wlan.side]).toEqual([clientPortId('02:BB:00:00:00:03'), 'wlan', 'NORTH'])
     expect(graph.nodes.some((n) => n.id === clientNodeId('02:BB:00:00:00:03'))).toBe(false)
-
-    const plug = graph.nodes.find((n) => n.id === clientNodeId('02:BB:00:00:00:01'))!
-    expect(plug).toMatchObject({ kind: 'wifi-client', name: 'plug-kitchen', ip: '192.0.2.31', isMachine: false, offline: false })
-    expect(plug.ports.map((p) => [p.kind, p.side, p.label])).toEqual([['radio', 'NORTH', 'wlan']])
-    expect(graph.nodes.filter((n) => n.kind === 'wifi-client')).toHaveLength(2)
+    expect(graph.edges.find((e) => e.id === wifiEdgeId('02:BB:00:00:00:03'))).toMatchObject({ target: wlan.id, sourceDevice: '2' })
   })
 
-  it('links each client from its radio port, coloured by the network VLAN, without speed', () => {
+  it('packs two or more Wi-Fi-only clients of one radio into a frame with one line', () => {
     const { graph } = build()
-    const wifi = graph.edges.filter((e) => e.medium === 'wifi')
-    expect(wifi).toHaveLength(3)
-    const plug = wifi.find((e) => e.id === wifiEdgeId('02:BB:00:00:00:01'))!
-    expect(plug).toMatchObject({
-      source: radioPortId(radioKey(WEST, 'Gadgets', '2.4')),
-      target: clientPortId('02:BB:00:00:00:01'),
-      sourceDevice: '14',
+    const key = radioKey(WEST, 'Gadgets', '2.4')
+    const frame = graph.nodes.find((n) => n.id === frameNodeId(key))!
+    expect(frame).toMatchObject({ kind: 'wifi-group', label: 'Gadgets · 2412 · 2' })
+    expect(frame.members!.map((m) => [m.name, m.kind, m.inFrame, m.ports.length])).toEqual([
+      ['bulb-hall', 'wifi-client', true, 0], // sorted by name
+      ['plug-kitchen', 'wifi-client', true, 0],
+    ])
+    expect(frame.members![1]).toMatchObject({ ip: '192.0.2.31', offline: false })
+    expect(frame.ports.map((p) => [p.id, p.side, p.bare])).toEqual([[framePortId(key), 'NORTH', true]])
+    // The members are not nodes of their own, and one line replaces their two.
+    expect(graph.nodes.some((n) => n.kind === 'wifi-client')).toBe(false)
+    const lines = graph.edges.filter((e) => e.medium === 'wifi')
+    expect(lines.map((e) => e.id).sort()).toEqual([frameEdgeId(key), wifiEdgeId('02:BB:00:00:00:03')].sort())
+    expect(lines.find((e) => e.id === frameEdgeId(key))).toMatchObject({
+      source: radioPortId(key),
+      target: framePortId(key),
+      targetDevice: frameNodeId(key),
       style: { kind: 'access', vlan: 30 },
       speed: null,
     })
-    expect(wifi.find((e) => e.id === wifiEdgeId('02:BB:00:00:00:03'))!.sourceDevice).toBe('2')
+  })
+
+  it('keeps a single Wi-Fi-only client as its own card with its own line', () => {
+    const single = { ...wifiPayload, clients: wifiPayload.clients.filter((c) => c.name !== 'bulb-hall') }
+    const { graph } = build(single)
+    const plug = graph.nodes.find((n) => n.id === clientNodeId('02:BB:00:00:00:01'))!
+    expect(plug).toMatchObject({ kind: 'wifi-client', name: 'plug-kitchen', ip: '192.0.2.31', isMachine: false, offline: false })
+    expect(plug.ports.map((p) => [p.kind, p.side, p.label])).toEqual([['radio', 'NORTH', 'wlan']])
+    expect(graph.nodes.some((n) => n.kind === 'wifi-group')).toBe(false)
+    expect(graph.edges.find((e) => e.id === wifiEdgeId('02:BB:00:00:00:01'))).toMatchObject({ target: clientPortId('02:BB:00:00:00:01') })
+  })
+
+  it('never moves a wired device on Wi-Fi into a frame', () => {
+    // node-alpha (wired) and one Wi-Fi-only client on the same radio: no frame of two.
+    const data = { ...wifiPayload, clients: [...wifiPayload.clients, { ...wifiPayload.clients[2], mac: '02:BB:00:00:00:44', name: 'tablet', deviceId: null }] }
+    const { graph } = build(data)
+    expect(graph.nodes.some((n) => n.id === frameNodeId(radioKey(EAST, 'Gadgets', '2.4')))).toBe(false)
+    expect(graph.nodes.find((n) => n.id === '11')!.ports.some((p) => p.label === 'wlan')).toBe(true)
+    expect(graph.nodes.find((n) => n.id === clientNodeId('02:BB:00:00:00:44'))!.kind).toBe('wifi-client')
   })
 
   it('a Wi-Fi client of a Hosts machine links there', () => {
-    const data = { ...wifiPayload, clients: [{ ...wifiPayload.clients[0], deviceId: '99', name: 'laptop' }] }
+    const data = { ...wifiPayload, clients: [{ ...wifiPayload.clients[0], deviceId: '99', name: 'laptop' }] } // alone: own card
     const { graph } = build(data)
     const laptop = graph.nodes.find((n) => n.kind === 'wifi-client')!
     expect(laptop.isMachine).toBe(false)
@@ -100,10 +127,19 @@ describe('the plan: what reaches the layout', () => {
     const { next, structural } = mergePlan(first.plan, gone)
     expect(structural).toBe(false)
     const graph = withWifi(wired, next, wifiLive(next, gone), machineIds)
-    const plug = graph.nodes.find((n) => n.id === clientNodeId('02:BB:00:00:00:01'))!
-    expect(plug.offline).toBe(true)
-    expect(plug.ports[0].off).toBe(true)
+    const frame = graph.nodes.find((n) => n.kind === 'wifi-group')!
+    const plug = frame.members!.find((m) => m.name === 'plug-kitchen')!
+    expect(plug.offline).toBe(true) // dimmed, in place
+    expect(frame.offline).toBe(false) // bulb-hall is still there: the frame's line stays
+    expect(frame.members).toHaveLength(2)
     expect(layoutKey(graph)).toBe(layoutKey(first.graph))
+    // All members gone: the frame's line goes too (port off), still no relayout.
+    const none = { ...wifiPayload, clients: wifiPayload.clients.filter((c) => c.apId !== WEST) }
+    const empty = mergePlan(next, none)
+    const g2 = withWifi(wired, empty.next, wifiLive(empty.next, none), machineIds)
+    expect(empty.structural).toBe(false)
+    expect(g2.nodes.find((n) => n.kind === 'wifi-group')!.ports[0].off).toBe(true)
+    expect(layoutKey(g2)).toBe(layoutKey(first.graph))
   })
 
   it('a channel, signal or radio state change is not structural', () => {
@@ -116,6 +152,16 @@ describe('the plan: what reaches the layout', () => {
     const { next, structural } = mergePlan(first.plan, tuned)
     expect(structural).toBe(false)
     expect(layoutKey(withWifi(wired, next, wifiLive(next, tuned), machineIds))).toBe(layoutKey(first.graph))
+  })
+
+  it('a client joining or leaving a frame changes the frame size: structural', () => {
+    const { plan } = build()
+    const third = { ...wifiPayload, clients: [...wifiPayload.clients, { ...wifiPayload.clients[0], mac: '02:BB:00:00:00:55', name: 'camera-door' }] }
+    const merged = mergePlan(plan, third)
+    expect(merged.structural).toBe(true)
+    const g = withWifi(wired, merged.next, wifiLive(merged.next, third), machineIds)
+    expect(g.nodes.find((n) => n.kind === 'wifi-group')!.members).toHaveLength(3)
+    expect(layoutKey(g)).not.toBe(layoutKey(build().graph))
   })
 
   it('a new client, a client on another radio, or a new radio is structural', () => {

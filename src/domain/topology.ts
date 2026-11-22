@@ -42,6 +42,8 @@ export interface TopologyPort {
   label?: string
   /** A radio that is disabled or down: drawn dimmed, no links. */
   off?: boolean
+  /** No jack and no dot: where a Wi-Fi line meets a client frame's top edge. */
+  bare?: boolean
 }
 
 export interface TopologyNode {
@@ -63,10 +65,20 @@ export interface TopologyNode {
   depth: number
   /** NORTH ports, then SOUTH ports, each in NetBox order. */
   ports: TopologyPort[]
-  /** `wifi-client`: a wireless client not otherwise on the diagram (title + IP). */
-  kind?: 'device' | 'wifi-client'
+  /**
+   * `wifi-client`: a wireless client not otherwise on the diagram (title + IP).
+   * `wifi-group`: a frame packing the Wi-Fi-only clients of one radio (two or more), laid out
+   * by ELK as one node of fixed size; its `members` are positioned inside it by the page.
+   */
+  kind?: 'device' | 'wifi-client' | 'wifi-group'
   /** The NetBox device behind the card, when not the node id itself (a Wi-Fi client's). */
   deviceId?: string | null
+  /** A `wifi-group`'s clients, sorted by name (cards without ports). */
+  members?: TopologyNode[]
+  /** A `wifi-group`'s label, e.g. `Home · 5180 · 3`. */
+  label?: string
+  /** A member of a `wifi-group`: no port of its own, a Wi-Fi glyph before its name. */
+  inFrame?: boolean
 }
 
 export interface TopologyEdge {

@@ -4,12 +4,12 @@ import { computed, ref, watch } from 'vue'
 import type { ArpPresenceIndex } from '../domain/arp'
 import { arpObjectKey } from '../domain/arp'
 import type { DeviceRecord, Machine } from '../domain/model'
-import { buildTopologyGraph, traceOf } from '../domain/topology'
+import { buildTopologyGraph, traceOf, type TopologyNode } from '../domain/topology'
 import { wifiLive, withWifi } from '../domain/wifiGraph'
 import { useWifiPlan } from '../composables/useWifiPlan'
 import type { RawTopology } from '../types/topology'
 import { useTopologyLayout } from '../composables/useTopologyLayout'
-import { JACK_SIZE, drawsJack, fitScale, portShape, speedTag } from '../presentation/topologyLayout'
+import { JACK_SIZE, drawsJack, fitScale, packFrame, portShape, speedTag, type PlacedNode } from '../presentation/topologyLayout'
 import LoadingSpinner from './LoadingSpinner.vue'
 import NoticeBanner from './NoticeBanner.vue'
 import TopologyCables from './TopologyCables.vue'
@@ -18,6 +18,7 @@ import TopologyGroups from './TopologyGroups.vue'
 import TopologyLayerSwitch from './TopologyLayerSwitch.vue'
 import TopologyLegend from './TopologyLegend.vue'
 import TopologyWifi from './TopologyWifi.vue'
+import TopologyWifiFrames from './TopologyWifiFrames.vue'
 import { buildWifiGrid } from '../domain/wifi'
 import { loadLayerStates, saveLayerStates, type LayerId, type LayerState } from '../presentation/layers'
 import type { WifiData } from '../types/wifi'
@@ -90,9 +91,23 @@ const scale = computed(() => fitScale(viewportWidth.value, placement.value?.widt
  * Wi-Fi lines, neighbours and their ports are emphasised, the rest toned down.
  */
 const tracedId = ref<string | null>(null)
+/** A Wi-Fi frame member pointed at: its frame is traced, and only this member stands out. */
+const tracedMember = ref<string | null>(null)
+const frameOfMember = computed(
+  () => new Map((graph.value?.nodes ?? []).flatMap((n) => (n.members ?? []).map((m) => [m.id, n.id] as const))),
+)
 const trace = computed(() => (graph.value && tracedId.value ? traceOf(graph.value, tracedId.value) : null))
 const onTrace = (nodeId: string | null) => {
-  tracedId.value = nodeId
+  const frame = nodeId ? frameOfMember.value.get(nodeId) : undefined
+  tracedMember.value = frame ? nodeId : null
+  tracedId.value = frame ?? nodeId
+}
+const isTraced = (nodeId: string, frameId?: string) => {
+  const t = trace.value
+  if (!t) return false
+  if (!frameId) return t.nodeIds.has(nodeId)
+  // A member: traced with its frame (the access point was pointed at), or when it is the one.
+  return t.nodeIds.has(frameId) && (tracedMember.value === null || tracedMember.value === nodeId)
 }
 
 /** Wi-Fi lines of clients not connected now: laid out (no relayout), not drawn. */
@@ -111,16 +126,35 @@ const cards = computed(() => {
   const g = graph.value
   const p = placement.value
   if (!g || !p) return []
-  return g.nodes.flatMap((node) => {
-    const placed = p.nodes.get(node.id)
-    if (!placed) return []
+  const item = (node: TopologyNode, placed: PlacedNode, frameId?: string) => {
     const deviceId = node.deviceId ?? (node.kind === 'wifi-client' ? null : node.id)
     const machine = node.isMachine && deviceId ? (props.machines.get(deviceId) ?? null) : null
     const presence = machine || !deviceId ? null : (props.presence.get(arpObjectKey('device', deviceId)) ?? null)
     // Cards with a radio port (access points, wired devices also on Wi-Fi, Wi-Fi clients) stay
     // visible when the wired layer is grey.
-    const anchor = node.ports.some((port) => port.kind === 'radio')
-    return [{ node, placed, machine, presence, anchor }]
+    const anchor = node.inFrame || node.ports.some((port) => port.kind === 'radio')
+    return { node, placed, machine, presence, anchor, frameId }
+  }
+  return g.nodes.flatMap((node) => {
+    const placed = p.nodes.get(node.id)
+    if (!placed) return []
+    if (node.kind !== 'wifi-group') return [item(node, placed)]
+    // A frame of Wi-Fi clients: its members at their grid slots, relative to the frame.
+    const { slots } = packFrame(node.members ?? [])
+    return (node.members ?? []).map((member, i) =>
+      item(member, { x: placed.x + slots[i].x, y: placed.y + slots[i].y, width: slots[i].width, height: slots[i].height, ports: new Map() }, node.id),
+    )
+  })
+})
+
+/** Wi-Fi client frames with their placement, for the frame and label layers. */
+const frames = computed(() => {
+  const g = graph.value
+  const p = placement.value
+  if (!g || !p) return []
+  return g.nodes.flatMap((node) => {
+    const placed = node.kind === 'wifi-group' ? p.nodes.get(node.id) : undefined
+    return placed ? [{ node, ...placed }] : []
   })
 })
 
@@ -173,6 +207,7 @@ const tags = computed(() => {
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
             <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
+            <TopologyWifiFrames part="frame" :frames="frames" :traced="trace?.nodeIds ?? null" />
             <TopologyCables
               :edges="graph.edges"
               :routes="placement.edges"
@@ -188,7 +223,7 @@ const tags = computed(() => {
               :placed="c.placed"
               :machine="c.machine"
               :presence="c.presence"
-              :traced="trace?.nodeIds.has(c.node.id) ?? false"
+              :traced="isTraced(c.node.id, c.frameId)"
               :traced-ports="trace?.portIds ?? null"
               :anchor="c.anchor"
               @trace="onTrace"
@@ -203,6 +238,7 @@ const tags = computed(() => {
               {{ t.text }}
             </span>
             <TopologyGroups part="label" :groups="placement.groups" :vlans="graph.vlans" />
+            <TopologyWifiFrames part="label" :frames="frames" :traced="trace?.nodeIds ?? null" />
           </div>
         </div>
       </div>
@@ -268,7 +304,9 @@ const tags = computed(() => {
 .layer-wifi-grey :deep(.cable.medium-wifi),
 .layer-wifi-grey :deep(.branch),
 .layer-wifi-grey :deep(.jack.shape-radio),
-.layer-wifi-grey :deep(.topo-card.kind-wifi-client) {
+.layer-wifi-grey :deep(.topo-card.kind-wifi-client),
+.layer-wifi-grey :deep(.wifi-frame),
+.layer-wifi-grey :deep(.wifi-frame-label) {
   opacity: 0.2;
   filter: grayscale(1);
 }
@@ -298,6 +336,8 @@ const tags = computed(() => {
 .is-tracing :deep(.topo-card.is-traced .entry:not(.is-traced)),
 .is-tracing :deep(.topo-group),
 .is-tracing :deep(.group-label),
+.is-tracing :deep(.wifi-frame:not(.is-traced)),
+.is-tracing :deep(.wifi-frame-label:not(.is-traced)),
 .is-tracing .speed-tag:not(.is-traced) {
   opacity: 0.45;
 }

@@ -256,7 +256,18 @@ in `src/domain/topology.ts`; the page keeps one traced device id.
   its card; any other client becomes a card of its own (name, address row, one `wlan` port),
   linking to Hosts exactly when its device is a Hosts machine;
 - one Wi-Fi edge per client, from the access point's radio port to the client's port, coloured
-  by the network's VLAN, no speed tag.
+  by the network's VLAN, no speed tag;
+- the Wi-Fi-only clients of one radio, from two on, are packed into a frame (dashed, VLAN
+  colour, label chip "<SSID> · <channel> · <count>" on the bottom border): their compact cards
+  (name, address, a Wi-Fi glyph, no port) in a grid of at most two columns by name, computed by
+  the page; ELK gets the frame as one node of that size, and one Wi-Fi line runs from the radio
+  port to the frame's top edge. A single client keeps its own card and line; a wired device on
+  Wi-Fi is never moved into a frame. Pointing at the access point lights the frame and its
+  members, pointing at a member lights its access point and the frame's line.
+
+Wi-Fi client cards are 150 wide (wired cards 190). An access point's radio ports add to its
+width by the port pitch, but do not make it a 330-wide jack-row card (that minimum is for two
+or more copper / SFP ports).
 
 Radio ports are a pill-shaped housing with a Wi-Fi glyph (same box as RJ45). Wi-Fi lines go
 through ELK with the cables; each straight segment of the route is drawn as a run of quadratic
@@ -265,7 +276,8 @@ stays straight), and where ELK merged the routes of one radio port a small dot m
 
 Stability: the layout is fed a *plan*, the radios plus every client seen since the page was
 opened, each on the radio it was laid out on (`useWifiPlan`). A client that disconnects keeps
-its place until reload (card dimmed, line removed, no relayout). A new client, a client on
+its place until reload (card dimmed, line removed, no relayout; a frame's line goes only when
+none of its members is connected). A client joining or leaving a frame resizes it: structural. A new client, a client on
 another radio, or a change in the radios is a structural change and lays the diagram out again,
 but at most once every 10 s (changes in between are collected and applied together). Channels,
 signal, radio states, names and addresses never cause a relayout.

@@ -73,11 +73,16 @@ describe('TopologyCard height = the size given to ELK', () => {
     const { mergePlan, wifiLive, withWifi } = await import('../domain/wifiGraph')
     const plan = mergePlan(null, wifiPayload).next
     const g = withWifi(graph, plan, wifiLive(plan, wifiPayload), machineIds)
+    const members = g.nodes.flatMap((n) => n.members ?? [])
     for (const id of ['2', '14', '11', 'wifi:02:BB:00:00:00:01']) {
-      const node = g.nodes.find((n) => n.id === id)!
+      const node = g.nodes.find((n) => n.id === id) ?? members.find((m) => m.id === id)!
       const { wrapper, size, height } = renderedHeight(node, {})
       expect(height).toBe(size.height)
-      if (node.kind === 'wifi-client') expect(wrapper.findAll('.card-line').map((l) => l.classes()[1])).toEqual(['line-title', 'line-ip'])
+      if (node.kind === 'wifi-client') {
+        expect(wrapper.findAll('.card-line').map((l) => l.classes()[1])).toEqual(['line-title', 'line-ip'])
+        expect(wrapper.find('.wifi-glyph').exists()).toBe(true) // a frame member: glyph, no port
+        expect(wrapper.find('.jack').exists()).toBe(false)
+      }
     }
   })
 
