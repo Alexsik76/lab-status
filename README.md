@@ -26,7 +26,7 @@ independent sources:
 5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`;
 6. **Router CAPsMAN (Wi-Fi)**: wireless networks, access points and clients, polled by the backend
    and sent as `wifi` events of `GET /api/stream` (shown on the Topology page);
-7. **Home Assistant (Zigbee)**: the Zigbee2MQTT devices, read with one template call, sent as
+7. **Home Assistant (Zigbee)**: the Zigbee2MQTT devices, read over the WebSocket API, sent as
    `zigbee` events of `GET /api/stream` (shown on the Topology page).
 
 A second page, `#/topology`, draws the physical network from NetBox cabling (see
@@ -84,7 +84,7 @@ alone publishes an empty snapshot instead, so the page never shows stale wireles
 | `proxmox` | `cluster/resources` | 15 s (`PROXMOX_PERIOD_S`) | the Proxmox `data` array unchanged |
 | `metrics` | `nodes/<node>/rrddata?timeframe=hour&cf=AVERAGE` for every node of the latest cluster resources, concurrently | 60 s (`PROXMOX_METRICS_PERIOD_S`), and at once when the node set changes | `{node: points}`; a node that fails gets `[]` |
 | `wifi` | RouterOS API: `print` of six legacy CAPsMAN menus on one short session (see [Wi-Fi source](#wi-fi-source)) | 15 s, and at once when the NetBox MAC directory or device names change | `{networks, aps, radios, clients}` |
-| `zigbee` | Home Assistant: one `POST /api/template` (see [Zigbee source](#zigbee-source)) | 60 s, and at once when the coordinator's NetBox device changes | `{coordinator, devices}` |
+| `zigbee` | Home Assistant: one short WebSocket connection (see [Zigbee source](#zigbee-source)) | 60 s, and at once when the coordinator's NetBox device changes | `{coordinator, devices}` |
 
 The `inventory` cycle is the backend's only NetBox (and NPM) read: the service checks take
 their targets and public URLs from it, and the ARP mirror its MAC directory (a changed
@@ -365,21 +365,27 @@ passphrase or security profile is copied into the event. Its `data`:
 
 ## Zigbee source
 
-The `zigbee` source (`backend/app/zigbee.py`) reads Home Assistant, read-only: once per cycle
-`POST {HA_URL}/api/template` with a template that renders the MQTT devices as JSON (no service
-is called, no state changes). It keeps the Zigbee2MQTT bridge (manufacturer `Zigbee2MQTT`) and
-every device whose `via_device` is the bridge. Its `data`:
+The `zigbee` source (`backend/app/zigbee.py`) reads Home Assistant, read-only, through the
+WebSocket API, which a non-admin user may use (`POST /api/template` is admin-only). Once per
+cycle it opens one connection to `{HA_URL}/api/websocket` (`ws://` or `wss://` after the scheme
+of `HA_URL`), authenticates with the token, sends `config/device_registry/list`,
+`config/entity_registry/list`, `config/area_registry/list` and `get_states`, and closes it. No
+service is called, nothing is subscribed to, no registry is changed. It keeps the Zigbee2MQTT
+bridge (manufacturer `Zigbee2MQTT`) and every device whose `via_device_id` is the bridge. Its
+`data`:
 
 ```
 { "coordinator": { "deviceId": string | null, "version": string | null },
   "devices":     [{ "id", "name", "manufacturer", "model", "area", "available" }] }
 ```
 
-`name` is the user's name, else the device name; `available` is true when at least one of the
-device's entities is not `unavailable`; `version` is the bridge's software version when
+`name` is the user's name, else the device name; `area` is the name of the device's area;
+`available` is true when at least one of the device's entities has a state other than
+`unavailable`; `version` is the bridge's software version when
 exposed; `coordinator.deviceId` is the NetBox device with a service named `zigbee-socket` (from
 the inventory cycle), else null. Errors start with `Zigbee: `; the token is only sent in the
-Authorization header and never appears in a message, log line or event. Without `HA_URL` and
+`auth` message and never appears in a message, log line or event (the WebSocket library's frame
+log is kept above DEBUG for this reason). Without `HA_URL` and
 `HA_TOKEN` the source is off: its status says so and the data is empty.
 
 ## ARP mirror
@@ -436,7 +442,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `PORTAINER_TOKEN` | api | API key (`X-API-Key`) of a Portainer user with read-only access to the Docker environments; container states are off unless both are set |
 | `CONTAINERS_PERIOD_S` | api | optional: period of the full container re-list, default `300` |
 | `HA_URL` | api | optional: Home Assistant base URL, e.g. `http://192.0.2.30:8123` |
-| `HA_TOKEN` | api | optional: Home Assistant long-lived access token, used for one read-only template call; the `zigbee` source is off unless both are set |
+| `HA_TOKEN` | api | optional: Home Assistant long-lived access token (a non-admin user is enough), used for read-only WebSocket registry reads; the `zigbee` source is off unless both are set |
 | `STREAM_GRACE_S` | api | optional: seconds the stream sources keep running after the last page disconnected, default `10` |
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 

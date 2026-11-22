@@ -40,7 +40,8 @@ class Settings:
     services_period_s: float = 180.0
     #: Period of the `inventory` source (NetBox inventory, check targets, MAC directory, NPM).
     inventory_period_s: float = 300.0
-    #: Home Assistant base URL and a long-lived access token (read-only use: one template call);
+    #: Home Assistant base URL and a long-lived access token (read-only use: one WebSocket
+    #: connection per cycle, registry lists only);
     #: the `zigbee` source is off unless both are set.
     ha_url: str = ""
     ha_token: str = ""
