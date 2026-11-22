@@ -369,3 +369,31 @@ export function findGroups(
   }
   return groups
 }
+
+/** What a device is directly connected to on the diagram (one hop). */
+export interface Trace {
+  /** Cables with the device at either end. */
+  edgeIds: ReadonlySet<string>
+  /** The device itself and the devices at the other ends of its cables. */
+  nodeIds: ReadonlySet<string>
+  /** The ports at both ends of those cables. */
+  portIds: ReadonlySet<string>
+}
+
+/** The device's cables, neighbours and their ports; all empty for an id not on the graph. */
+export function traceOf(graph: Pick<TopologyGraph, 'nodes' | 'edges'>, deviceId: string): Trace {
+  const edgeIds = new Set<string>()
+  const nodeIds = new Set<string>()
+  const portIds = new Set<string>()
+  if (!graph.nodes.some((n) => n.id === deviceId)) return { edgeIds, nodeIds, portIds }
+  nodeIds.add(deviceId)
+  for (const e of graph.edges) {
+    if (e.sourceDevice !== deviceId && e.targetDevice !== deviceId) continue
+    edgeIds.add(e.id)
+    nodeIds.add(e.sourceDevice)
+    nodeIds.add(e.targetDevice)
+    portIds.add(e.source)
+    portIds.add(e.target)
+  }
+  return { edgeIds, nodeIds, portIds }
+}

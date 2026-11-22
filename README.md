@@ -233,6 +233,16 @@ knows one of their MACs. The
 height given to ELK is computed from the same rows (`cardLines`, `CARD_LINE_HEIGHT`), so a card
 never overflows its box.
 
+**Hover trace.** Pointing at a card (mouse or pen; a tap only follows the link) or focusing it
+from the keyboard traces that device, one hop: its cables are drawn on top at full opacity with
+a soft glow in their own colour, the devices at their other ends get the same brighter border
+as the pointed card, the jacks at both ends glow and their port names stand out, and the speed
+tags of those cables stay. Everything else is toned down, not hidden: other cables to 25 %,
+other cards, the untraced jacks of a traced card, other speed tags and the group frames and
+labels to 45 %. Leaving or blurring the card restores the view; the transitions (150 ms) are
+off with `prefers-reduced-motion`. The neighbours come from the pure `traceOf(graph, deviceId)`
+in `src/domain/topology.ts`; the page keeps one traced device id.
+
 **Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
 Hosts page has a "Show on topology" button (only when the device is on the diagram) to
 `#/topology?focus=<deviceId>`. On arrival the target is scrolled into view, centred, and
