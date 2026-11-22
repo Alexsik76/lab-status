@@ -10,11 +10,11 @@ import { LAYER_STORAGE_KEY } from '../presentation/layers'
 const devices = normalizeInventory(rawInventory).devices
 const machineIds = new Set(devices.filter((d) => d.roleSlug === 'server').map((d) => d.id))
 
-async function mountPage(extra: Record<string, unknown> = {}) {
+async function mountPage(extra: Record<string, unknown> = {}, cards = 7) {
   const wrapper = mount(TopologyPage, {
     props: { topology: { data: topologyPayload, devices, machineIds }, machines: new Map(), presence: new Map(), ...extra },
   })
-  await vi.waitFor(() => expect(wrapper.findAll('.topo-card')).toHaveLength(7), { timeout: 4000 })
+  await vi.waitFor(() => expect(wrapper.findAll('.topo-card')).toHaveLength(cards), { timeout: 4000 })
   return wrapper
 }
 
@@ -66,59 +66,86 @@ describe('TopologyPage hover trace', () => {
   })
 })
 
-describe('TopologyPage Wi-Fi block and layers', () => {
-  it('cross-highlights an access point between the diagram and its Wi-Fi column', async () => {
+describe('TopologyPage Wi-Fi in the diagram', () => {
+  // Fixture: ap-west = device 14, ap-east = device 2; node-alpha (11) is wired and on Wi-Fi;
+  // plug-kitchen and bulb-hall share ap-west's Gadgets radio: one frame of two members.
+  const node = (w: VueWrapper, id: string) => w.find(`.topo-card[data-node="${id}"]`)
+  const FRAME = 'wififrame:[02:AA:00:00:00:01]|Gadgets|2.4'
+
+  it('draws radio ports, a frame of Wi-Fi clients with one wavy line, and the wired device on Wi-Fi', async () => {
     localStorage.clear()
-    const w = await mountPage({ wifi: wifiPayload })
-    // Hovering the access point's card emphasises its column.
-    await card(w, '2').trigger('pointerenter', { pointerType: 'mouse' })
-    expect(w.findAll('.ap-head.is-traced').map((h) => h.text())).toEqual(['ap-east'])
-    await card(w, '2').trigger('pointerleave')
-    expect(w.findAll('.ap-head.is-traced')).toHaveLength(0)
-
-    // Hovering a column header traces the card (and its cables) on the diagram.
-    const west = w.findAll('.ap-head').find((h) => h.text() === 'ap-west')!
-    await west.trigger('pointerenter', { pointerType: 'mouse' })
-    expect(w.find('.topo-canvas').classes()).toContain('is-tracing')
-    expect(tracedCards(w)).toEqual(['1', '14'])
-    expect(tracedCables(w)).toEqual(['7'])
-    await west.trigger('pointerleave')
-    expect(w.find('.topo-canvas').classes()).not.toContain('is-tracing')
-
-    // An access point without a NetBox device highlights only its column.
-    const loft = w.findAll('.ap-head').find((h) => h.text() === 'ap-loft')!
-    await loft.trigger('pointerenter', { pointerType: 'mouse' })
-    expect(w.find('.topo-canvas').classes()).not.toContain('is-tracing')
-    expect(w.findAll('.ap-head.is-traced').map((h) => h.text())).toEqual(['ap-loft'])
+    const w = await mountPage({ wifi: wifiPayload }, 9)
+    expect(w.findAll('.topo-card.kind-wifi-client').map((c) => c.find('.card-name').text())).toEqual(['bulb-hall', 'plug-kitchen'])
+    expect(w.findAll('.topo-card.kind-wifi-client .jack')).toHaveLength(0)
+    expect(w.find(`.wifi-frame[data-frame="${FRAME}"]`).exists()).toBe(true)
+    expect(w.find(`.wifi-frame-label[data-frame="${FRAME}"]`).text()).toBe('Gadgets · 2412 · 2')
+    expect(node(w, '14').findAll('.jack.shape-radio').map((j) => j.attributes('title'))).toEqual(['Gadgets · 2412', 'Home · 5180'])
+    expect(node(w, '2').find('.jack.shape-radio.is-off').attributes('title')).toBe('Visitors · down')
+    expect(node(w, '11').find('.jack.shape-radio').attributes('title')).toBe('wlan')
+    const wifiLines = w.findAll('.cable.medium-wifi')
+    expect(wifiLines.map((l) => l.attributes('data-cable')).sort()).toEqual([FRAME, 'wifi:02:BB:00:00:00:03'].sort())
+    expect(wifiLines[0].find('path').attributes('d')).toContain('Q') // wavy
+    expect(w.find('.topo-legend [data-legend="wifi"] path').exists()).toBe(true)
+    expect(w.find('.topo-legend [data-legend="radio"] .jack-svg').exists()).toBe(true)
   })
 
-  it('cycles the layers, keeps access points as anchors, and remembers the states', async () => {
+  it('traces through a frame: the AP lights the frame and its members, a member lights its AP and the line', async () => {
     localStorage.clear()
-    const w = await mountPage({ wifi: wifiPayload })
+    const w = await mountPage({ wifi: wifiPayload }, 9)
+    await node(w, '14').trigger('pointerenter', { pointerType: 'mouse' })
+    expect(tracedCables(w)).toEqual(['7', FRAME])
+    expect(w.findAll('.topo-card.is-traced').map((c) => c.attributes('data-node')).sort()).toEqual(
+      ['1', '14', 'wifi:02:BB:00:00:00:01', 'wifi:02:BB:00:00:00:02'],
+    )
+    expect(w.find(`.wifi-frame[data-frame="${FRAME}"]`).classes()).toContain('is-traced')
+    await node(w, '14').trigger('pointerleave')
+
+    await node(w, 'wifi:02:BB:00:00:00:02').trigger('pointerenter', { pointerType: 'mouse' })
+    expect(tracedCables(w)).toEqual([FRAME])
+    expect(w.findAll('.topo-card.is-traced').map((c) => c.attributes('data-node')).sort()).toEqual(['14', 'wifi:02:BB:00:00:00:02'])
+  })
+
+  it('keeps a disconnected client in place, dimmed, its line removed', async () => {
+    localStorage.clear()
+    const w = await mountPage({ wifi: wifiPayload }, 9)
+    const before = node(w, 'wifi:02:BB:00:00:00:01').attributes('style')
+    await w.setProps({ wifi: { ...wifiPayload, clients: wifiPayload.clients.slice(1) } })
+    const plug = node(w, 'wifi:02:BB:00:00:00:01')
+    expect(plug.classes()).toContain('is-offline')
+    expect(plug.attributes('style')).toBe(before) // no relayout
+    expect(w.findAll('.cable.medium-wifi')).toHaveLength(2) // the frame's line stays for bulb-hall
+    // node-alpha leaves: its own line goes.
+    await w.setProps({ wifi: { ...wifiPayload, clients: wifiPayload.clients.slice(0, 2) } })
+    expect(w.find('.cable[data-cable="wifi:02:BB:00:00:00:03"]').exists()).toBe(false)
+  })
+
+  it('applies the layers: Wi-Fi grey and hidden, Wired grey keeps the Wi-Fi side visible', async () => {
+    localStorage.clear()
+    const w = await mountPage({ wifi: wifiPayload }, 9)
     const button = (id: string) => w.find(`.layer-btn[data-layer="${id}"]`)
-    expect(w.find('.topo-canvas').classes()).toContain('layer-wired-shown')
-    expect(w.find('.topo-wifi').exists()).toBe(true)
-    expect(w.find('.topo-legend [data-legend="wifi"]').exists()).toBe(true)
+    const canvas = () => w.find('.topo-canvas')
 
     await button('wired').trigger('click')
-    expect(w.find('.topo-canvas').classes()).toContain('layer-wired-grey')
-    expect(card(w, '2').classes()).toContain('is-anchor') // an access point stays visible
-    expect(card(w, '11').classes()).not.toContain('is-anchor')
+    expect(canvas().classes()).toContain('layer-wired-grey')
+    const anchors = w.findAll('.topo-card.is-anchor').map((c) => c.attributes('data-node')).sort()
+    expect(anchors).toEqual(['11', '14', '2', 'wifi:02:BB:00:00:00:01', 'wifi:02:BB:00:00:00:02'])
+    expect(w.find('.wifi-frame').exists()).toBe(true)
+    expect(node(w, '12').classes()).not.toContain('is-anchor') // a wired-only server fades
     await button('wired').trigger('click')
-    expect(w.find('.topo-canvas').classes()).toContain('layer-wired-hidden')
-    await button('wired').trigger('click')
-    expect(w.find('.topo-canvas').classes()).toContain('layer-wired-shown')
+    await button('wired').trigger('click') // back to shown
 
     await button('wifi').trigger('click')
-    expect(w.find('.topo-wifi').classes()).toContain('layer-wifi-grey')
-    await button('wifi').trigger('click')
-    expect(w.find('.topo-wifi').exists()).toBe(false)
+    expect(canvas().classes()).toContain('layer-wifi-grey')
+    expect(w.findAll('.topo-card')).toHaveLength(9)
+    await button('wifi').trigger('click') // hidden: out of the layout
+    await vi.waitFor(() => expect(w.findAll('.topo-card')).toHaveLength(7), { timeout: 4000 })
+    expect(w.find('.jack.shape-radio').exists()).toBe(false)
+    expect(w.find('.cable.medium-wifi').exists()).toBe(false)
+    expect(w.find('.wifi-frame').exists()).toBe(false)
     expect(w.find('.topo-legend [data-legend="wifi"]').exists()).toBe(false)
     expect(JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY)!)).toEqual({ wired: 'shown', wifi: 'hidden' })
-
     // A new page starts from the remembered states.
-    const again = await mountPage({ wifi: wifiPayload })
-    expect(again.find('.topo-wifi').exists()).toBe(false)
+    await mountPage({ wifi: wifiPayload }, 7)
     localStorage.clear()
   })
 })

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { rawInventory } from '../__fixtures__'
 import { topologyPayload } from '../__fixtures__/topology'
 import { normalizeInventory } from '../domain/normalize'
-import { buildTopologyGraph } from '../domain/topology'
+import { buildTopologyGraph, type TopologyNode } from '../domain/topology'
 import {
   CARD_BORDER,
   CARD_LINE_HEIGHT,
@@ -31,6 +31,10 @@ import {
   jackShape,
   type ElkGroupInput,
   type ElkNodeInput,
+  FRAME_GAP,
+  FRAME_PADDING,
+  WIFI_CARD_WIDTH,
+  packFrame,
 } from './topologyLayout'
 
 const devices = normalizeInventory(rawInventory).devices
@@ -106,6 +110,58 @@ describe('toElkGraph', () => {
     expect(layoutKey(same)).toBe(layoutKey(graph))
     const fewer = buildTopologyGraph({ ...topologyPayload, cables: topologyPayload.cables.slice(1) }, devices, machines)
     expect(layoutKey(fewer)).not.toBe(layoutKey(graph))
+  })
+})
+
+describe('Wi-Fi client frames', () => {
+  const member = (name: string): TopologyNode => ({ ...nodeOf('node-alpha'), id: `m-${name}`, name, kind: 'wifi-client', inFrame: true, ports: [], isMachine: false, hasMetrics: false, model: null, roleSlug: null })
+  const names = ['a', 'b', 'c', 'd', 'e']
+
+  it('packs 1, 2, 3 and 5 members in at most two columns, row by row', () => {
+    const cell = cardSize(member('x'))
+    expect(cell).toEqual({ width: WIFI_CARD_WIDTH, height: 2 * (CARD_BORDER + CARD_PADDING_Y) + CARD_LINE_HEIGHT.title + CARD_LINE_HEIGHT.ip })
+    const pack = (n: number) => packFrame(names.slice(0, n).map(member))
+    const w1 = FRAME_PADDING.left + FRAME_PADDING.right + cell.width
+    const w2 = w1 + FRAME_GAP + cell.width
+    const h = (rows: number) => FRAME_PADDING.top + FRAME_PADDING.bottom + rows * cell.height + (rows - 1) * FRAME_GAP
+    expect([pack(1).width, pack(1).height]).toEqual([w1, h(1)])
+    expect([pack(2).width, pack(2).height]).toEqual([w2, h(1)])
+    expect([pack(3).width, pack(3).height]).toEqual([w2, h(2)])
+    expect([pack(5).width, pack(5).height]).toEqual([w2, h(3)])
+    const slots = pack(5).slots
+    expect(slots.map((s) => [s.x, s.y])).toEqual([
+      [FRAME_PADDING.left, FRAME_PADDING.top],
+      [FRAME_PADDING.left + cell.width + FRAME_GAP, FRAME_PADDING.top],
+      [FRAME_PADDING.left, FRAME_PADDING.top + cell.height + FRAME_GAP],
+      [FRAME_PADDING.left + cell.width + FRAME_GAP, FRAME_PADDING.top + cell.height + FRAME_GAP],
+      [FRAME_PADDING.left, FRAME_PADDING.top + 2 * (cell.height + FRAME_GAP)],
+    ])
+  })
+
+  it('keeps an access point with a few radio ports an ordinary card (the 330 minimum is for copper rows)', () => {
+    const sw = nodeOf('sw-core-01')
+    const radio = (i: number) => ({ ...sw.ports[1], id: `r${i}`, kind: 'radio' as const, side: 'SOUTH' as const })
+    const ap = { ...sw, ports: [sw.ports[0], radio(1), radio(2), radio(3)] } // uplink + 3 radios
+    expect(cardSize(ap).width).toBe(CARD_WIDTH) // 3 * 42 + 40 = 166 < 190
+    const busy = { ...sw, ports: [sw.ports[0], ...[1, 2, 3, 4, 5].map(radio)] }
+    expect(cardSize(busy).width).toBe(5 * 42 + 40)
+    expect(cardSize(sw).width).toBe(330) // 5 copper ports: a jack row
+  })
+
+  it('gives ELK the frame as one node of the packed size, with a bare port on its top edge', () => {
+    const frame: TopologyNode = {
+      ...nodeOf('node-alpha'),
+      id: 'wififrame:k',
+      kind: 'wifi-group',
+      members: names.slice(0, 3).map(member),
+      ports: [{ ...nodeOf('node-alpha').ports[0], id: 'wififrame-port:k', side: 'NORTH', kind: 'radio', bare: true }],
+    }
+    const g = { ...graph, nodes: [...graph.nodes, frame] }
+    const elk = toElkGraph(g).children.find((c) => c.id === 'dwififrame:k') as ElkNodeInput
+    const packed = packFrame(frame.members!)
+    expect([elk.width, elk.height]).toEqual([packed.width, packed.height])
+    expect(elk.ports).toEqual([expect.objectContaining({ id: 'pwififrame-port:k', width: 0 })])
+    expect('children' in elk).toBe(false) // ELK does not lay out the members
   })
 })
 

@@ -5,7 +5,8 @@ import { JACK_SIZE, type JackShape } from '../presentation/topologyLayout'
 
 /**
  * A port socket as inline SVG: an RJ45 port seen from the front (housing, cavity with the
- * latch notch, five contact pins), an SFP cage with its opening, or a plain rectangle. Drawn with the notch / opening towards the cable (down on
+ * latch notch, five contact pins), an SFP cage with its opening, a plain rectangle, or a
+ * Wi-Fi radio: a pill-shaped housing with a Wi-Fi glyph (never flipped: the glyph stays upright). Drawn with the notch / opening towards the cable (down on
  * the bottom edge, up on the top edge). Colours come from `--jack-color` (the cable's style).
  */
 const props = defineProps<{ shape: JackShape; kind: CableKind; north: boolean }>()
@@ -22,7 +23,12 @@ const size = computed(() => JACK_SIZE[props.shape])
     :viewBox="`0 0 ${size.width} ${size.height}`"
     aria-hidden="true"
   >
-    <g :transform="north ? `matrix(1 0 0 -1 0 ${size.height})` : undefined">
+    <g v-if="shape === 'radio'" class="radio">
+      <rect class="body" x="1" y="1" width="28" height="20" rx="10" />
+      <path class="glyph" d="M9.6 10.4 A7.6 7.6 0 0 1 20.4 10.4 M12.2 13 A3.9 3.9 0 0 1 17.8 13" />
+      <circle class="glyph-dot" cx="15" cy="15.8" r="1.5" />
+    </g>
+    <g v-else :transform="north ? `matrix(1 0 0 -1 0 ${size.height})` : undefined">
       <template v-if="shape === 'rj45'">
         <rect class="body" x="1" y="1" width="28" height="20" rx="3" />
         <path class="opening" d="M5.5 4.5 H24.5 V13.5 H20.2 V17.8 H9.8 V13.5 H5.5 Z" />
@@ -59,6 +65,15 @@ const size = computed(() => JACK_SIZE[props.shape])
   stroke: var(--jack-color);
   stroke-width: 1;
   opacity: 0.85;
+}
+.glyph {
+  fill: none;
+  stroke: var(--jack-color);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.glyph-dot {
+  fill: var(--jack-color);
 }
 .kind-trunk .body {
   fill: var(--color-bg-page);

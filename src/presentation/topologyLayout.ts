@@ -1,4 +1,4 @@
-import type { CableStyle, SpeedBucket, TopologyGraph, TopologyGroup, TopologyNode } from '../domain/topology'
+import type { CableStyle, SpeedBucket, TopologyGraph, TopologyGroup, TopologyNode, TopologyPort } from '../domain/topology'
 
 /**
  * The ELK input for a topology graph, the mapping of ELK's result to what the page draws,
@@ -21,13 +21,23 @@ export const PORT_PITCH = 42
  * (`*base-t`, `*base-tx`), an SFP cage for the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`,
  * `*-qsfp*`, `*base-x-*`), a plain rectangle for anything else. All fit the port pitch.
  */
-export type JackShape = 'rj45' | 'sfp' | 'plain'
+export type JackShape = 'rj45' | 'sfp' | 'plain' | 'radio'
 
 export const JACK_SIZE: Readonly<Record<JackShape, { width: number; height: number }>> = {
   rj45: { width: 30, height: 22 },
   sfp: { width: 36, height: 18 },
   plain: { width: 24, height: 12 },
+  /** A Wi-Fi radio (access point SSID) or a client's wireless interface: same box as RJ45. */
+  radio: { width: 30, height: 22 },
 }
+
+/** The jack of a port: `radio` for Wi-Fi ports, else by interface type. */
+export const portShape = (port: Pick<TopologyPort, 'kind' | 'type'>): JackShape =>
+  port.kind === 'radio' ? 'radio' : jackShape(port.type)
+
+/** Switch-like devices draw every port as a jack; others only their radio ports (else a dot). */
+export const drawsJack = (node: Pick<TopologyNode, 'switchLike'>, port: Pick<TopologyPort, 'kind' | 'bare'>) =>
+  !port.bare && (node.switchLike || port.kind === 'radio')
 
 export function jackShape(type: string | null): JackShape {
   if (!type) return 'plain'
@@ -43,6 +53,8 @@ const JACK_MAX_HEIGHT = Math.max(...Object.values(JACK_SIZE).map((j) => j.height
 export const JACK_NAME_MAX = PORT_PITCH - 4
 const SWITCH_MIN_WIDTH = 330
 export const CARD_WIDTH = 190
+/** A Wi-Fi client card: name and address only. */
+export const WIFI_CARD_WIDTH = 150
 
 export type CardLine = 'title' | 'sub' | 'ip' | 'summary' | 'load'
 
@@ -71,6 +83,8 @@ export const JACK_LABEL_GAP = 3
  * the tallest jack, the gap and the port name.
  */
 export const JACK_BAND_HEIGHT = JACK_MAX_HEIGHT / 2 + JACK_LABEL_GAP + JACK_LABEL_HEIGHT + 3
+/** A radio port's label takes two lines (SSID, then channel / off / down). */
+export const RADIO_LABEL_EXTRA = JACK_LABEL_HEIGHT + 1
 
 /**
  * The title row: icon, name and state. The full state badge stays only where it fits beside a
@@ -93,27 +107,81 @@ export interface CardSize {
 export function cardLines(node: TopologyNode): CardLine[] {
   const lines: CardLine[] = ['title']
   if (node.model || node.roleSlug) lines.push('sub')
-  if (node.ip) lines.push('ip')
+  // A Wi-Fi client always has its address row (empty while unknown): an address appearing
+  // later must not change the card's height.
+  if (node.ip || node.kind === 'wifi-client') lines.push('ip')
   if (node.isMachine) lines.push('summary')
   if (node.hasMetrics) lines.push('load')
   return lines
 }
 
 export function jackBands(node: TopologyNode): { north: boolean; south: boolean } {
-  if (!node.switchLike) return { north: false, south: false }
-  return { north: node.ports.some((p) => p.side === 'NORTH'), south: node.ports.some((p) => p.side === 'SOUTH') }
+  const drawn = (side: string) => node.ports.some((p) => p.side === side && drawsJack(node, p))
+  return { north: drawn('NORTH'), south: drawn('SOUTH') }
+}
+
+/** Room for the jacks on one side inside the card: 0 without jacks, more with radio labels. */
+export function jackBandHeight(node: TopologyNode, side: 'NORTH' | 'SOUTH'): number {
+  const ports = node.ports.filter((p) => p.side === side && drawsJack(node, p))
+  if (!ports.length) return 0
+  return JACK_BAND_HEIGHT + (ports.some((p) => p.kind === 'radio') ? RADIO_LABEL_EXTRA : 0)
+}
+
+/** Inside a Wi-Fi client frame: padding (the label chip sits on the bottom border) and gaps. */
+export const FRAME_PADDING = { top: 12, left: 10, right: 10, bottom: 16 }
+export const FRAME_GAP = 8
+export const FRAME_COLUMNS = 2
+
+export interface FrameSlot {
+  id: string
+  /** Relative to the frame. */
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * The client cards of a frame in a grid of at most two columns, in member order (by name),
+ * row by row; the frame's size follows. ELK gets the frame as one node of this size.
+ */
+export function packFrame(members: readonly TopologyNode[]): { width: number; height: number; slots: FrameSlot[] } {
+  const columns = Math.max(1, Math.min(FRAME_COLUMNS, members.length))
+  const sizes = members.map((m) => cardSize(m))
+  const cellW = Math.max(0, ...sizes.map((s) => s.width))
+  const cellH = Math.max(0, ...sizes.map((s) => s.height))
+  const rows = Math.ceil(members.length / columns)
+  const slots = members.map((m, i) => ({
+    id: m.id,
+    x: FRAME_PADDING.left + (i % columns) * (cellW + FRAME_GAP),
+    y: FRAME_PADDING.top + Math.floor(i / columns) * (cellH + FRAME_GAP),
+    width: cellW,
+    height: cellH,
+  }))
+  return {
+    width: FRAME_PADDING.left + FRAME_PADDING.right + columns * cellW + (columns - 1) * FRAME_GAP,
+    height: FRAME_PADDING.top + FRAME_PADDING.bottom + rows * cellH + Math.max(0, rows - 1) * FRAME_GAP,
+    slots,
+  }
 }
 
 export function cardSize(node: TopologyNode): CardSize {
-  const bands = jackBands(node)
+  if (node.kind === 'wifi-group') {
+    const { width, height } = packFrame(node.members ?? [])
+    return { width, height }
+  }
   const rows = cardLines(node).reduce((sum, line) => sum + CARD_LINE_HEIGHT[line], 0)
-  const height = 2 * (CARD_BORDER + CARD_PADDING_Y) + rows + (bands.north ? JACK_BAND_HEIGHT : 0) + (bands.south ? JACK_BAND_HEIGHT : 0)
+  const height = 2 * (CARD_BORDER + CARD_PADDING_Y) + rows + jackBandHeight(node, 'NORTH') + jackBandHeight(node, 'SOUTH')
+  if (node.kind === 'wifi-client') return { width: WIFI_CARD_WIDTH, height }
   if (!node.switchLike) return { width: CARD_WIDTH, height }
   const south = node.ports.filter((p) => p.side === 'SOUTH').length
   const north = node.ports.length - south
   // An access point or a single-uplink switch is an ordinary card; a jack row needs its pitch.
+  // The 330 minimum is for a row of copper / SFP ports: an access point's radio ports only
+  // add their pitch, so an AP with a few radios stays an ordinary card.
+  const southCable = node.ports.filter((p) => p.side === 'SOUTH' && p.kind !== 'radio').length
   const jacksWidth = Math.max(south, north) * PORT_PITCH + 40
-  const width = south <= 1 ? Math.max(CARD_WIDTH, jacksWidth) : Math.max(SWITCH_MIN_WIDTH, jacksWidth)
+  const width = southCable <= 1 ? Math.max(CARD_WIDTH, jacksWidth) : Math.max(SWITCH_MIN_WIDTH, jacksWidth)
   return { width, height }
 }
 
@@ -195,7 +263,7 @@ export function toElkGraph(graph: TopologyGraph): ElkGraphInput {
       layoutOptions: { 'elk.portConstraints': node.switchLike ? 'FIXED_ORDER' : 'FIXED_SIDE' },
       ports: node.ports.map((p) => ({
         id: portKey(p.id),
-        width: node.switchLike ? JACK_SIZE[jackShape(p.type)].width : 0,
+        width: drawsJack(node, p) ? JACK_SIZE[portShape(p)].width : 0,
         height: 0,
         layoutOptions: {
           'elk.port.side': p.side,

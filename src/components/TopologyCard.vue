@@ -7,13 +7,13 @@ import {
   CARD_BORDER,
   CARD_LINE_HEIGHT,
   CARD_PADDING_Y,
-  JACK_BAND_HEIGHT,
   JACK_LABEL_GAP,
   JACK_NAME_MAX,
   JACK_SIZE,
   cardLines,
-  jackBands,
-  jackShape,
+  drawsJack,
+  jackBandHeight,
+  portShape,
   titleBadge,
   styleColor,
   type PlacedNode,
@@ -56,7 +56,9 @@ const onFocusIn = (e: FocusEvent) => {
 const endTrace = () => emit('trace', null)
 
 const subtitle = computed(() => props.node.model || props.node.roleSlug || '')
-const href = computed(() => (props.node.isMachine && props.machine ? routeHash('hosts', props.node.id) : null))
+const href = computed(() =>
+  props.node.isMachine && props.machine ? routeHash('hosts', props.node.deviceId ?? props.node.id) : null,
+)
 
 const state = computed<State | null>(() => props.machine?.state ?? props.presence ?? null)
 
@@ -74,18 +76,21 @@ const containerCount = computed(() => {
 const lines = computed(() => cardLines(props.node))
 /** Full badge on wide cards; elsewhere the dot, so the name keeps its room. */
 const badge = computed(() => titleBadge(props.placed.width))
-const bands = computed(() => jackBands(props.node))
 const bodyStyle = computed(() => ({
-  paddingTop: `${CARD_PADDING_Y + (bands.value.north ? JACK_BAND_HEIGHT : 0)}px`,
-  paddingBottom: `${CARD_PADDING_Y + (bands.value.south ? JACK_BAND_HEIGHT : 0)}px`,
+  paddingTop: `${CARD_PADDING_Y + jackBandHeight(props.node, 'NORTH')}px`,
+  paddingBottom: `${CARD_PADDING_Y + jackBandHeight(props.node, 'SOUTH')}px`,
 }))
+/** The NetBox device behind the card (a Wi-Fi client's own id is not one). */
+const focusId = computed(() => props.node.deviceId ?? props.node.id)
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 const jacks = computed(() =>
   props.node.ports.map((port) => {
     const at = props.placed.ports.get(port.id) ?? { x: 0, y: 0 }
-    const shape = jackShape(port.type)
+    const shape = portShape(port)
+    const label = port.label ?? port.name
+    const cut = label.indexOf(' · ')
     return {
       port,
       x: at.x,
@@ -94,6 +99,12 @@ const jacks = computed(() =>
       kind: port.style.kind,
       shape,
       size: JACK_SIZE[shape],
+      jack: drawsJack(props.node, port),
+      radio: port.kind === 'radio',
+      off: !!port.off,
+      label,
+      // A radio label on two lines: SSID, then channel / off / down.
+      lines: port.kind === 'radio' && cut > 0 ? [label.slice(0, cut), label.slice(cut + 3)] : [label],
     }
   }),
 )
@@ -104,7 +115,10 @@ const jacks = computed(() =>
     :is="href ? 'a' : 'div'"
     :href="href ?? undefined"
     class="topo-card"
-    :class="{ 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike, 'is-traced': traced, 'is-anchor': anchor }"
+    :class="[
+      `kind-${node.kind ?? 'device'}`,
+      { 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike, 'is-traced': traced, 'is-anchor': anchor },
+    ]"
     :style="{
       left: `${placed.x}px`,
       top: `${placed.y}px`,
@@ -112,7 +126,8 @@ const jacks = computed(() =>
       height: `${placed.height}px`,
       borderWidth: `${CARD_BORDER}px`,
     }"
-    :data-focus-device="node.id"
+    :data-focus-device="focusId"
+    :data-node="node.id"
     :aria-label="href ? `${node.name}: show on the Hosts page` : undefined"
     @pointerenter="onPointerEnter"
     @pointerleave="endTrace"
@@ -129,7 +144,11 @@ const jacks = computed(() =>
         :style="{ height: `${CARD_LINE_HEIGHT[line]}px` }"
       >
         <template v-if="line === 'title'">
-          <OsIcon :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
+          <svg v-if="node.inFrame" class="wifi-glyph" width="14" height="14" viewBox="0 0 14 14" aria-label="Wi-Fi">
+            <path d="M2.6 6.2 A6.2 6.2 0 0 1 11.4 6.2 M4.7 8.3 A3.2 3.2 0 0 1 9.3 8.3" />
+            <circle cx="7" cy="10.6" r="1.2" />
+          </svg>
+          <OsIcon v-else :icon="node.icon" :label="node.platform" :size="18" :dim="node.offline" />
           <span class="card-name" :title="node.name">{{ node.name }}</span>
           <StateBadge
             v-if="node.isMachine || state"
@@ -139,7 +158,7 @@ const jacks = computed(() =>
           />
         </template>
         <span v-else-if="line === 'sub'" class="card-text" :title="subtitle">{{ subtitle }}</span>
-        <span v-else-if="line === 'ip'" class="card-text">{{ node.ip }}</span>
+        <span v-else-if="line === 'ip'" class="card-text">{{ node.ip ?? '' }}</span>
         <span v-else-if="line === 'summary'" class="card-text">
           {{ machine ? `${plural(machine.guests.length, 'guest')} · ${plural(containerCount, 'container')}` : '—' }}
         </span>
@@ -151,9 +170,9 @@ const jacks = computed(() =>
 
     <template v-for="j in jacks" :key="j.port.id">
       <span
-        v-if="node.switchLike"
+        v-if="j.jack"
         class="jack"
-        :class="[`shape-${j.shape}`, j.north ? 'at-north' : 'at-south', { 'is-traced': tracedPorts?.has(j.port.id) }]"
+        :class="[`shape-${j.shape}`, j.north ? 'at-north' : 'at-south', { 'is-traced': tracedPorts?.has(j.port.id), 'is-off': j.off }]"
         :style="{
           left: `${j.x - j.size.width / 2}px`,
           [j.north ? 'top' : 'bottom']: `${-j.size.height / 2}px`,
@@ -162,10 +181,13 @@ const jacks = computed(() =>
           '--jack-color': j.color,
           '--jack-label-gap': `${JACK_LABEL_GAP}px`,
         }"
-        :title="j.port.name"
+        :title="j.label"
+        :data-port="j.port.id"
       >
         <TopologyJack :shape="j.shape" :kind="j.kind" :north="j.north" />
-        <span class="jack-name" :style="{ maxWidth: `${JACK_NAME_MAX}px` }">{{ j.port.name }}</span>
+        <span class="jack-name" :class="{ 'is-radio': j.radio }" :style="{ maxWidth: `${JACK_NAME_MAX}px` }">
+          <template v-for="(text, k) in j.lines" :key="k"><span class="jack-name-line">{{ text }}</span></template>
+        </span>
       </span>
       <span
         v-else
@@ -259,6 +281,17 @@ const jacks = computed(() =>
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.wifi-glyph {
+  flex: none;
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.wifi-glyph circle {
+  fill: var(--color-text-muted);
+  stroke: none;
+}
 .card-name {
   flex: 1;
   min-width: 0;
@@ -317,6 +350,20 @@ const jacks = computed(() =>
   white-space: nowrap;
   color: var(--color-text-dim);
   pointer-events: none;
+}
+.jack-name.is-radio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.jack-name-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jack.is-off {
+  opacity: 0.45;
 }
 .at-south .jack-name {
   bottom: calc(100% + var(--jack-label-gap));

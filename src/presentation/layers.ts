@@ -1,6 +1,8 @@
 /**
  * Layers of the Topology page and their visibility. Each layer button cycles
  * shown -> grey -> hidden -> shown. A new layer (e.g. Zigbee) is one more entry in `LAYERS`.
+ * Wired: cables, copper jacks, wired-only devices. Wi-Fi: radio ports, Wi-Fi lines and Wi-Fi
+ * client cards (hidden takes them out of the layout).
  */
 
 export type LayerState = 'shown' | 'grey' | 'hidden'
@@ -14,6 +16,8 @@ export type LayerId = (typeof LAYERS)[number]['id']
 export type LayerStates = Record<LayerId, LayerState>
 
 export const LAYER_STORAGE_KEY = 'lab-status:topology-layers'
+/** The Wi-Fi grid under the diagram: open ('1') or collapsed (default). */
+export const WIFI_GRID_OPEN_KEY = 'lab-status:wifi-grid-open'
 
 const ORDER: readonly LayerState[] = ['shown', 'grey', 'hidden']
 

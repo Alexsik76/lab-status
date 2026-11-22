@@ -36,6 +36,14 @@ export interface TopologyPort {
   /** The style of the cable plugged in: the jack is drawn like its cable. */
   style: CableStyle
   mgmtOnly: boolean
+  /** `radio`: a Wi-Fi radio (an access point's SSID) or a client's wireless interface. */
+  kind?: 'cable' | 'radio'
+  /** Label of a radio port, e.g. `Home · 5180` (the jack shows it on two lines). */
+  label?: string
+  /** A radio that is disabled or down: drawn dimmed, no links. */
+  off?: boolean
+  /** No jack and no dot: where a Wi-Fi line meets a client frame's top edge. */
+  bare?: boolean
 }
 
 export interface TopologyNode {
@@ -57,6 +65,20 @@ export interface TopologyNode {
   depth: number
   /** NORTH ports, then SOUTH ports, each in NetBox order. */
   ports: TopologyPort[]
+  /**
+   * `wifi-client`: a wireless client not otherwise on the diagram (title + IP).
+   * `wifi-group`: a frame packing the Wi-Fi-only clients of one radio (two or more), laid out
+   * by ELK as one node of fixed size; its `members` are positioned inside it by the page.
+   */
+  kind?: 'device' | 'wifi-client' | 'wifi-group'
+  /** The NetBox device behind the card, when not the node id itself (a Wi-Fi client's). */
+  deviceId?: string | null
+  /** A `wifi-group`'s clients, sorted by name (cards without ports). */
+  members?: TopologyNode[]
+  /** A `wifi-group`'s label, e.g. `Home · 5180 · 3`. */
+  label?: string
+  /** A member of a `wifi-group`: no port of its own, a Wi-Fi glyph before its name. */
+  inFrame?: boolean
 }
 
 export interface TopologyEdge {
@@ -69,6 +91,8 @@ export interface TopologyEdge {
   cableType: string | null
   style: CableStyle
   speed: SpeedBucket | null
+  /** `wifi`: from an access point's radio to a client, drawn as a wavy line. */
+  medium?: 'cable' | 'wifi'
 }
 
 /**

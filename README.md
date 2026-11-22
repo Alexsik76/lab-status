@@ -247,23 +247,60 @@ labels to 45 %. Leaving or blurring the card restores the view; the transitions 
 off with `prefers-reduced-motion`. The neighbours come from the pure `traceOf(graph, deviceId)`
 in `src/domain/topology.ts`; the page keeps one traced device id.
 
-**Wi-Fi block.** Under the wired diagram, full width, a grid built without ELK: columns are the
-access points (in the order of their cards on the diagram, left to right, the rest by name),
-rows the networks (SSID + band), each row tinted in its VLAN's colour (`--color-vlan-*`) with
-the SSID, band and "VLAN <id> <name>" at its head. A cell is empty when the access point does
-not broadcast the network, "radio disabled" when the interface is disabled, otherwise a radio
-mark with the channel in MHz (marked "down" when not running) and the client chips (name; the
-tooltip has MAC, IP, signal and uptime; a chip of a Hosts machine links to its tile), or "no
-clients". Cross-highlight through the hover trace: pointing at an access point's card
-emphasises its column; pointing at a column header or one of its chips traces the card and its
-cables on the diagram (an access point not in NetBox highlights only its column).
+**Wi-Fi in the diagram.** Wireless devices are part of the diagram, fed by the `wifi` event
+(`src/domain/wifiGraph.ts`):
+- every radio of an access point on the diagram (one per AP x SSID) is a `radio` port on its
+  card, SOUTH after the copper ports, labelled `<SSID> · <channel>` on two lines; a disabled or
+  down radio keeps its port, dimmed, labelled `· off` / `· down`, without lines;
+- a client whose NetBox device is already on the diagram gets a NORTH `radio` port (`wlan`) on
+  its card; any other client becomes a card of its own (name, address row, one `wlan` port),
+  linking to Hosts exactly when its device is a Hosts machine;
+- one Wi-Fi edge per client, from the access point's radio port to the client's port, coloured
+  by the network's VLAN, no speed tag;
+- the Wi-Fi-only clients of one radio, from two on, are packed into a frame (dashed, VLAN
+  colour, label chip "<SSID> · <channel> · <count>" on the bottom border): their compact cards
+  (name, address, a Wi-Fi glyph, no port) in a grid of at most two columns by name, computed by
+  the page; ELK gets the frame as one node of that size, and one Wi-Fi line runs from the radio
+  port to the frame's top edge. A single client keeps its own card and line; a wired device on
+  Wi-Fi is never moved into a frame. Pointing at the access point lights the frame and its
+  members, pointing at a member lights its access point and the frame's line.
 
-**Layers.** Next to the legend, one button per layer (`LAYERS` in `src/presentation/layers.ts`:
-Wired, Wi-Fi; a new layer is one entry), each cycling shown -> grey -> hidden. Grey is 20 %
-opacity and greyscale; hidden draws nothing (the wired diagram keeps its space, the Wi-Fi block
-collapses). Access-point cards stay fully visible while Wired is grey, as anchors for the Wi-Fi
-block. The states are remembered in local storage (default: both shown). The legend has a
-dashed "Wi-Fi" sample while the Wi-Fi block is on the page.
+Wi-Fi client cards are 150 wide (wired cards 190). An access point's radio ports add to its
+width by the port pitch, but do not make it a 330-wide jack-row card (that minimum is for two
+or more copper / SFP ports).
+
+Radio ports are a pill-shaped housing with a Wi-Fi glyph (same box as RJ45). Wi-Fi lines go
+through ELK with the cables; each straight segment of the route is drawn as a run of quadratic
+half-waves (amplitude 3.4, half-wavelength 7, stroke 1.5; a segment shorter than one half-wave
+stays straight), and where ELK merged the routes of one radio port a small dot marks the branch.
+
+Stability: the layout is fed a *plan*, the radios plus every client seen since the page was
+opened, each on the radio it was laid out on (`useWifiPlan`). A client that disconnects keeps
+its place until reload (card dimmed, line removed, no relayout; a frame's line goes only when
+none of its members is connected). A client joining or leaving a frame resizes it: structural. A new client, a client on
+another radio, or a change in the radios is a structural change and lays the diagram out again,
+but at most once every 10 s (changes in between are collected and applied together). Channels,
+signal, radio states, names and addresses never cause a relayout.
+
+**Wi-Fi grid.** Under the diagram, collapsed by default behind its "Wi-Fi" title (click to open;
+remembered in local storage): a grid built without ELK, access points as columns (in the order
+of their cards, then by name), networks (SSID + band) as rows tinted in the VLAN colour with
+the SSID, band and "VLAN <id> <name>" at their head; a cell is empty, "radio disabled", or the
+channel in MHz (marked "down") with client chips (tooltip: MAC, IP, signal, uptime; a Hosts
+machine links to its tile) or "no clients".
+
+**Layers.** Next to the legend, one button per layer (`LAYERS` in `src/presentation/layers.ts`;
+a new layer is one entry), each cycling shown -> grey -> hidden, remembered in local storage
+(default: both shown). Grey is 20 % opacity and greyscale.
+- Wired: cables, copper jacks and wired-only devices. While it is grey, cards with a radio port
+  (access points, wired devices also on Wi-Fi, Wi-Fi clients) stay fully visible, only their
+  copper jacks fade; hidden keeps the drawing's space but draws none of it.
+- Wi-Fi: radio ports (also a wired device's `wlan` port), Wi-Fi lines and Wi-Fi client cards.
+  Hidden takes them out of the layout: the diagram returns to its wired-only size.
+
+The hover trace treats Wi-Fi lines like cables: pointing at an access point emphasises its
+wireless clients and their lines, pointing at a client its access point. The legend shows the
+wavy Wi-Fi line and the radio port while the Wi-Fi layer is not hidden.
 
 **Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
 Hosts page has a "Show on topology" button (only when the device is on the diagram) to

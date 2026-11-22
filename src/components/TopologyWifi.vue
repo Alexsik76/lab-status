@@ -1,28 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Machine } from '../domain/model'
 import { clientTooltip, type WifiGrid } from '../domain/wifi'
 import { routeHash } from '../presentation/route'
+import { WIFI_GRID_OPEN_KEY } from '../presentation/layers'
 import { vlanColor } from '../presentation/topologyLayout'
 import type { RawTopologyVlan } from '../types/topology'
-import type { WifiAp } from '../types/wifi'
 
 /**
- * The Wi-Fi block under the wired diagram: a grid, access points as columns, networks (SSID +
- * band) as rows tinted in the row VLAN's colour. Hovering a column header or a chip traces the
- * access point on the diagram (`trace`); `tracedApId` emphasises the column the other way.
+ * The Wi-Fi block under the diagram: a grid, access points as columns, networks (SSID + band)
+ * as rows tinted in the row VLAN's colour. Collapsed by default behind its title (the diagram
+ * itself shows the wireless clients); the open state is remembered in local storage.
  */
 const props = defineProps<{
   grid: WifiGrid | null
   vlans: readonly RawTopologyVlan[]
   /** Hosts machines by device id: a chip of such a device links to its tile. */
   machines: ReadonlyMap<string, Machine>
-  tracedApId: string | null
   /** Set when there is no Wi-Fi data and none is coming. */
   error: string | null
 }>()
 
-const emit = defineEmits<{ trace: [apId: string | null] }>()
+const readOpen = () => {
+  try {
+    return globalThis.localStorage?.getItem(WIFI_GRID_OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const open = ref(readOpen())
+const toggle = () => {
+  open.value = !open.value
+  try {
+    globalThis.localStorage?.setItem(WIFI_GRID_OPEN_KEY, open.value ? '1' : '0')
+  } catch {
+    /* not remembered */
+  }
+}
 
 const vlanName = computed(() => new Map(props.vlans.map((v) => [v.vid, v.name])))
 const rowColor = (vid: number | null) => (vid === null ? 'var(--color-border-dashed)' : vlanColor(vid))
@@ -37,37 +51,30 @@ const chipHref = (deviceId: string | null) => (deviceId && props.machines.has(de
 const columns = computed(() => props.grid?.columns ?? [])
 const gridStyle = computed(() => ({ gridTemplateColumns: `minmax(150px, max-content) repeat(${columns.value.length}, minmax(150px, 1fr))` }))
 
-const onEnter = (e: PointerEvent | FocusEvent, ap: WifiAp) => {
-  if (e instanceof PointerEvent && e.pointerType === 'touch') return
-  if (e instanceof FocusEvent && !(e.currentTarget as HTMLElement).matches(':focus-visible')) return
-  emit('trace', ap.id)
-}
-const onLeave = () => emit('trace', null)
 </script>
 
 <template>
   <section class="topo-wifi" aria-label="Wi-Fi">
-    <h2 class="wifi-title">Wi-Fi</h2>
+    <h2 class="wifi-title">
+      <button type="button" class="wifi-toggle" :aria-expanded="open" @click="toggle">
+        <span class="chevron" :class="{ 'is-open': open }" aria-hidden="true">▸</span>Wi-Fi
+      </button>
+    </h2>
 
+    <template v-if="open">
     <p v-if="!grid && error" class="empty-state">Wi-Fi data is unavailable. {{ error }}</p>
     <p v-else-if="!grid" class="empty-state">Reading the wireless networks…</p>
     <p v-else-if="error" class="empty-state">Wi-Fi data is unavailable. {{ error }}</p>
     <p v-else-if="!grid.rows.length || !grid.columns.length" class="empty-state">The router reports no wireless networks.</p>
 
     <div v-else class="wifi-scroll">
-      <div class="wifi-grid" :class="{ 'is-tracing': !!tracedApId }" :style="gridStyle">
+      <div class="wifi-grid" :style="gridStyle">
         <div class="corner"></div>
         <div
           v-for="ap in columns"
           :key="ap.id"
           class="ap-head"
-          :class="{ 'is-traced': ap.id === tracedApId }"
           :data-ap="ap.id"
-          tabindex="0"
-          @pointerenter="onEnter($event, ap)"
-          @pointerleave="onLeave"
-          @focusin="onEnter($event, ap)"
-          @focusout="onLeave"
         >
           <span class="ap-name">{{ ap.name }}</span>
         </div>
@@ -81,7 +88,7 @@ const onLeave = () => emit('trace', null)
             v-for="(cell, i) in row.cells"
             :key="columns[i].id"
             class="cell"
-            :class="[`cell-${cell.kind}`, { 'is-traced': columns[i].id === tracedApId }]"
+            :class="`cell-${cell.kind}`"
             :style="{ '--row-color': rowColor(row.network.vlan) }"
             :data-ap="columns[i].id"
           >
@@ -105,8 +112,6 @@ const onLeave = () => emit('trace', null)
                   :href="chipHref(client.deviceId) ?? undefined"
                   :title="clientTooltip(client)"
                   :data-mac="client.mac"
-                  @pointerenter="onEnter($event, columns[i])"
-                  @pointerleave="onLeave"
                 >
                   {{ client.name }}
                 </component>
@@ -116,6 +121,7 @@ const onLeave = () => emit('trace', null)
         </template>
       </div>
     </div>
+    </template>
   </section>
 </template>
 
@@ -125,6 +131,30 @@ const onLeave = () => emit('trace', null)
   flex-direction: column;
   gap: 8px;
   transition: opacity 0.15s ease, filter 0.15s ease;
+}
+.wifi-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.wifi-toggle:focus-visible {
+  outline: 1px solid var(--color-border-btn-hover);
+  outline-offset: 2px;
+}
+.chevron {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--color-text-dim);
+  transition: transform 0.15s ease;
+}
+.chevron.is-open {
+  transform: rotate(90deg);
 }
 .wifi-title {
   margin: 0;
@@ -158,17 +188,6 @@ const onLeave = () => emit('trace', null)
   font-weight: 600;
   color: var(--color-text-host);
 }
-.ap-head:hover .ap-name,
-.ap-head:focus-visible .ap-name,
-.ap-head.is-traced .ap-name {
-  color: var(--color-text-accent);
-}
-.ap-head:focus-visible {
-  outline: none;
-}
-.ap-head.is-traced {
-  border-color: var(--color-text-dim);
-}
 
 .row-head,
 .cell {
@@ -201,9 +220,6 @@ const onLeave = () => emit('trace', null)
 }
 .cell-none {
   background: color-mix(in oklch, var(--row-color) 4%, var(--color-bg-page));
-}
-.cell.is-traced {
-  box-shadow: inset 0 0 0 1px var(--color-text-dim);
 }
 .radio {
   display: inline-flex;
@@ -247,11 +263,6 @@ a.chip:focus-visible {
   outline: none;
 }
 
-/* Cross-highlight: the traced access point's column stays, the others fade. */
-.wifi-grid.is-tracing .ap-head:not(.is-traced),
-.wifi-grid.is-tracing .cell:not(.is-traced) {
-  opacity: 0.45;
-}
 
 .empty-state {
   font-family: var(--font-mono);
@@ -266,6 +277,7 @@ a.chip:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chevron,
   .topo-wifi,
   .ap-head,
   .row-head,

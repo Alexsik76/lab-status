@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { TopologyEdge } from '../domain/topology'
 import { cableWidth, roundedPath, styleColor, trunkWidths, type Point } from '../presentation/topologyLayout'
+import { branchPoints, wavyPath } from '../presentation/wavy'
 
 /** The cables under the cards: orthogonal ELK routes with rounded corners. */
 const props = defineProps<{
@@ -11,17 +12,42 @@ const props = defineProps<{
   height: number
   /** Hover trace: the traced cables (null when nothing is traced); drawn last, so on top. */
   traced?: ReadonlySet<string> | null
+  /** Edges laid out but not drawn: the Wi-Fi lines of clients that are not connected now. */
+  hidden?: ReadonlySet<string> | null
 }>()
+
+/** Wi-Fi line stroke. */
+const WIFI_WIDTH = 1.5
 
 const cables = computed(() =>
   props.edges.flatMap((edge) => {
     const points = props.routes.get(edge.id)
-    if (!points) return []
+    if (!points || props.hidden?.has(edge.id)) return []
+    const route = points.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ')
+    if (edge.medium === 'wifi') {
+      return [{ edge, d: wavyPath(points), width: WIFI_WIDTH, core: 0, color: styleColor(edge.style), route }]
+    }
     const trunk = edge.style.kind === 'trunk' ? trunkWidths(edge.speed) : null
     const width = trunk ? trunk.outer : cableWidth(edge.speed)
-    return [{ edge, d: roundedPath(points), width, core: trunk?.core ?? 0, color: styleColor(edge.style) }]
+    return [{ edge, d: roundedPath(points), width, core: trunk?.core ?? 0, color: styleColor(edge.style), route }]
   }),
 )
+
+/** Where the Wi-Fi lines of one radio port part ways after ELK merged them: a small dot. */
+const branches = computed(() => {
+  const bySource = new Map<string, { color: string; routes: Point[][] }>()
+  for (const edge of props.edges) {
+    if (edge.medium !== 'wifi' || props.hidden?.has(edge.id)) continue
+    const points = props.routes.get(edge.id)
+    if (!points) continue
+    const entry = bySource.get(edge.source) ?? { color: styleColor(edge.style), routes: [] }
+    entry.routes.push(points)
+    bySource.set(edge.source, entry)
+  }
+  return [...bySource.entries()].flatMap(([source, { color, routes }]) =>
+    branchPoints(routes).map((p, i) => ({ key: `${source}:${i}`, x: p.x, y: p.y, color })),
+  )
+})
 
 /** Traced cables after the others: SVG paints in document order. */
 const ordered = computed(() => {
@@ -44,13 +70,15 @@ const ordered = computed(() => {
     <g
       v-for="c in ordered"
       :key="c.edge.id"
-      :class="[`cable kind-${c.edge.style.kind}`, { 'is-traced': c.isTraced }]"
+      :class="[`cable kind-${c.edge.style.kind}`, `medium-${c.edge.medium ?? 'cable'}`, { 'is-traced': c.isTraced }]"
       :style="{ '--cable-color': c.color }"
       :data-cable="c.edge.id"
+      :data-route="c.route"
     >
       <path :d="c.d" :stroke="c.color" :stroke-width="c.width" />
-      <path v-if="c.edge.style.kind === 'trunk'" :d="c.d" class="core" :stroke-width="c.core" />
+      <path v-if="c.edge.style.kind === 'trunk' && c.edge.medium !== 'wifi'" :d="c.d" class="core" :stroke-width="c.core" />
     </g>
+    <circle v-for="b in branches" :key="b.key" class="branch medium-wifi" :cx="b.x" :cy="b.y" r="2.4" :fill="b.color" />
   </svg>
 </template>
 
@@ -64,6 +92,9 @@ const ordered = computed(() => {
 path {
   fill: none;
   stroke-linejoin: round;
+}
+.medium-wifi path {
+  stroke-linecap: round;
 }
 .core {
   stroke: var(--color-bg-page);
