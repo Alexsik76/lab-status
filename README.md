@@ -290,7 +290,10 @@ passphrase or security profile is copied into the event. Its `data`:
 - One radio entry per CAPsMAN interface; a slave (virtual) interface belongs to its master's
   radio (same access point, channel and band, its own SSID). `channel` is the frequency in MHz;
   `band` comes from it, or for a disabled radio from the configuration / channel profile name.
-  `state`: `disabled` (the interface or its master), `running`, or `down` (enabled, not running).
+  `state`: `disabled` (the interface or its master); `running` when CAPsMAN reports the
+  interface broadcasting (`current-state` `running-ap` and the like, a slave without its own
+  taking its master's), whatever the `running` flag says (it is off on an AP with no clients),
+  or when the flag is set; else `down`.
 - SSID -> VLAN: configuration -> datapath -> `vlan-id` (an inline `datapath.vlan-id` wins).
 - Access point -> NetBox device: a CAP base / radio / interface MAC in the NetBox MAC directory,
   else a NetBox device named like the CAP identity, else none (`name` = identity).

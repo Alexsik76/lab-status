@@ -88,6 +88,19 @@ def uptime_text(value: str | None) -> str | None:
     return re.sub(r"(\.\d+|\d+ms)$", "", value)
 
 
+def radio_state(row: dict[str, str], master: dict[str, str]) -> str:
+    """`disabled` when the interface or its master is disabled; `running` when CAPsMAN reports
+    it broadcasting (`current-state` `running-ap` and the like; a slave without its own takes its
+    master's), whatever the `running` flag says (it is off on an AP with no clients); else the
+    `running` flag decides between `running` and `down`."""
+    if _flag(row.get("disabled")) or _flag(master.get("disabled")):
+        return "disabled"
+    current = row.get("current-state") or master.get("current-state") or ""
+    if current.startswith("running"):
+        return "running"
+    return "running" if _flag(row.get("running")) else "down"
+
+
 def build_wifi(
     menus: dict[str, Rows],
     macs: dict[str, MacMatch],
@@ -162,12 +175,7 @@ def build_wifi(
         band = band_of(channel, config.get("channel"), config.get("name"), config_of(master).get("channel"),
                        config_of(master).get("name"), master.get("name"))
         band_of_interface[name] = band
-        if _flag(row.get("disabled")) or _flag(master.get("disabled")):
-            state = "disabled"
-        elif _flag(row.get("running")):
-            state = "running"
-        else:
-            state = "down"
+        state = radio_state(row, master)
         radios.append({"apId": ap_id, "ssid": ssid, "band": band, "channel": channel, "state": state})
         key = (ssid, band)
         vlan = vlan_of(config)
