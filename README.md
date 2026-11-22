@@ -70,7 +70,7 @@ if nobody reconnected, so a page reload reuses the running sessions. A new subsc
 a client that fell too far behind, first receives each source's current state.
 `GET /api/health` reports the subscriber count and each source's state.
 
-Polling sources (`inventory`, `proxmox`, `metrics`, `wifi`; `containers` and `services` alike) publish two kinds of events: `{"type": "data", "data": ...}`
+Polling sources (`inventory`, `proxmox`, `metrics`, `wifi`, `zigbee`; `containers` and `services` alike) publish two kinds of events: `{"type": "data", "data": ...}`
 only when the data changed, and `{"type": "status", "state", "error", "updatedAt", "periodS"}`
 whenever the state, the error or the time of the last successful fetch (`updatedAt`, ISO 8601
 UTC) changes. A failed poll keeps the last data and reports the error; polling goes on (`wifi`
@@ -221,10 +221,15 @@ a device belonging to at most one group, at least two members per group:
 In ELK a group is a parent node with its members as children (`elk.hierarchyHandling:
 INCLUDE_CHILDREN` on the root, padding top 28 / sides and bottom 12); the cables stay declared
 at the root, and member positions are converted back to absolute coordinates. The rectangle is
-drawn under the cables and cards; its label (name, member count, and the VLAN when all the
-members' cables are access cables of one VLAN) sits on a small page-coloured chip above the
+drawn under the cables and cards; its label (`groupLabel` in `src/presentation/groupLabel.ts`)
+sits on a small page-coloured chip above the
 cables, at the bottom-left corner and centred on the bottom border, away from the top edge
-where the cables enter the group. Border and label take that VLAN's colour, else a neutral one. Member cards keep their
+where the cables enter the group. The VLAN part appears when all the members' cables are access
+cables of one VLAN. Proxmox nodes: name, member count, VLAN (`Proxmox nodes · 2 · VLAN 20 lab`).
+Cameras: VLAN first, then the composition (`VLAN 10 cams · 4 cameras + 1 NVR`, or `3 cameras`
+without a recorder); a member counts as a recorder (NVR) when its device type's model contains
+the word `NVR`, and when some member is neither a camera nor a recorder only the total is shown
+(`9 devices`). Border and label take that VLAN's colour, else a neutral one. Member cards keep their
 links, focus and highlight; offline members stay dimmed.
 
 **Jacks.** The ports of switch-like devices are drawn by interface type as inline SVG
@@ -332,7 +337,11 @@ wireless clients and their lines, pointing at a client its access point. The leg
 wavy Wi-Fi line and the radio port while the Wi-Fi layer is not hidden, and the beads and the
 coordinator port while the Zigbee layer is not hidden.
 
-**Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
+**Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`. Such a card carries a
+small permanent `↗` in its top-right corner; on hover or keyboard focus the card lifts by 3 px
+with a shadow, its name and the mark turn amber, and the mark blinks three times quickly, then
+pulses while the hover lasts. The border stays normal and the cursor stays the default arrow (no
+hand); with `prefers-reduced-motion` there is no lift and no animation. A machine tile on the
 Hosts page has a "Show on topology" button (only when the device is on the diagram) to
 `#/topology?focus=<deviceId>`. On arrival the target is scrolled into view, centred, and
 pulses in the accent colour for 1.6 s (a static outline with `prefers-reduced-motion`), then
