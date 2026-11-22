@@ -371,6 +371,7 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `Dockerfile` | stage 1: Node builds the app; stage 2: `nginx:alpine` serves `dist/` |
 | `backend/Dockerfile` | Python 3.13 + uv, `uvicorn` on port 8000 |
 | `docker-compose.yml` | services `web` (`lab-status`, port `8081:80`) and `api` (`lab-status-api`, internal) |
+| `CLAUDE.md` | standing instructions for coding agents (reports in the PR, no live data in the repository) |
 
 ## Configuration
 
