@@ -135,6 +135,7 @@ const jacks = computed(() =>
     @focusin="onFocusIn"
     @focusout="endTrace"
   >
+    <span v-if="href" class="link-mark" aria-hidden="true">↗</span>
     <div class="card-body" :class="`body-${badge}`" :style="bodyStyle">
       <div
         v-for="line in lines"
@@ -214,16 +215,35 @@ const jacks = computed(() =>
   background: var(--color-bg-tile);
   color: inherit;
   text-decoration: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
+/* A link card keeps the default arrow cursor (a link would otherwise show the hand). */
 .topo-card.is-link {
-  cursor: pointer;
+  cursor: default;
 }
 .topo-card.is-link:hover,
 .topo-card.is-link:focus-visible {
-  border-color: var(--color-border-btn-hover);
+  border-color: color-mix(in oklch, var(--color-text-accent) 70%, transparent);
   background: var(--color-bg-spine);
   outline: none;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+/* A card that opens the Hosts page: a small arrow in its top-right corner, above the title row. */
+.link-mark {
+  position: absolute;
+  top: 1px;
+  right: 4px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  pointer-events: none;
+  transition: color 0.12s ease;
+}
+.topo-card.is-link:hover .link-mark,
+.topo-card.is-link:focus-visible .link-mark {
+  color: var(--color-text-accent);
 }
 .topo-card.is-link:hover .card-name,
 .topo-card.is-link:focus-visible .card-name {
@@ -403,8 +423,13 @@ const jacks = computed(() =>
   .topo-card,
   .card-name,
   .jack,
-  .entry {
+  .entry,
+  .link-mark {
     transition: none;
+  }
+  .topo-card.is-link:hover,
+  .topo-card.is-link:focus-visible {
+    transform: none;
   }
 }
 </style>
