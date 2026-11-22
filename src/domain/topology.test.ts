@@ -8,6 +8,8 @@ import {
   buildTopologyGraph,
   cableSpeed,
   cableStyle,
+  findGroups,
+  GROUP_DEFINITIONS,
   nominalSpeedKbps,
   speedBucket,
 } from './topology'
@@ -218,5 +220,83 @@ describe('speeds', () => {
     expect(cableSpeed(port({ type: '10gbase-x-sfpp', speedKbps: 1_000_000 }), port({ type: '10gbase-x-sfpp' }))).toBe('1G')
     expect(cableSpeed(port({ type: '2.5gbase-t' }), port({ type: 'virtual' }))).toBe('2.5G')
     expect(cableSpeed(port(), port())).toBeNull()
+  })
+})
+
+describe('groups', () => {
+  it('groups devices of a grouped role that hang off one upstream device, with their common VLAN', async () => {
+    const { groupDevices, groupTopology } = await import('../__fixtures__/topologyGroups')
+    const g = buildTopologyGraph(groupTopology, groupDevices)
+    const cams = g.groups.find((x) => x.definitionId === 'cameras')!
+    expect(cams).toEqual({
+      id: 'cameras:3',
+      definitionId: 'cameras',
+      label: 'Cameras',
+      roleSlug: 'camera',
+      upstreamId: '3',
+      memberIds: ['31', '32', '33'],
+      vlan: 40,
+    })
+    // A lone camera, and a camera cabled to two devices, are not grouped.
+    const grouped = new Set(g.groups.flatMap((x) => x.memberIds))
+    expect(grouped.has('21')).toBe(false)
+    expect(grouped.has('22')).toBe(false)
+  })
+
+  it('groups a platform wherever its members are cabled; a device matching both rules is in the role group', async () => {
+    const { groupDevices, groupTopology } = await import('../__fixtures__/topologyGroups')
+    const g = buildTopologyGraph(groupTopology, groupDevices)
+    const hv = g.groups.find((x) => x.definitionId === 'proxmox')!
+    // cam-yard (33) is on the platform too, but the camera rule comes first.
+    expect(hv).toMatchObject({ id: 'proxmox', label: 'Proxmox nodes', roleSlug: null, upstreamId: null, memberIds: ['41', '42'] })
+    expect(hv.vlan).toBeNull() // VLAN 60 and 10 on its cables
+  })
+
+  it('does not group cameras on different switches, nor a single platform device', async () => {
+    const { device } = await import('../__fixtures__/topologyGroups')
+    const topo: RawTopology = {
+      vlans: [],
+      ports: [
+        port({ id: 'r1', deviceId: 'r', order: 0 }),
+        port({ id: 'r2', deviceId: 'r', order: 1 }),
+        port({ id: 'r3', deviceId: 'r', order: 2 }),
+        port({ id: 'a1', deviceId: 'a', order: 0 }),
+        port({ id: 'b1', deviceId: 'b', order: 0 }),
+        port({ id: 'a2', deviceId: 'a', order: 1 }),
+        port({ id: 'b2', deviceId: 'b', order: 1 }),
+        port({ id: 'h1', deviceId: 'h', order: 0 }),
+        port({ id: 'c1', deviceId: 'c1', order: 0 }),
+        port({ id: 'c2', deviceId: 'c2', order: 0 }),
+      ],
+      cables: [
+        { id: '1', type: null, a: 'r1', b: 'a1' },
+        { id: '2', type: null, a: 'r2', b: 'b1' },
+        { id: '3', type: null, a: 'a2', b: 'c1' },
+        { id: '4', type: null, a: 'b2', b: 'c2' },
+        { id: '5', type: null, a: 'r3', b: 'h1' },
+      ],
+    }
+    const g = buildTopologyGraph(topo, [
+      device('r', 'rt', 'router'),
+      device('a', 'sw-a', 'switch'),
+      device('b', 'sw-b', 'switch'),
+      device('c1', 'cam-1', 'camera'),
+      device('c2', 'cam-2', 'camera'),
+      device('h', 'hv', 'server', 'Proxmox VE'),
+    ])
+    expect(g.groups).toEqual([])
+  })
+
+  it('makes adding a group one entry', async () => {
+    const { groupDevices, groupTopology } = await import('../__fixtures__/topologyGroups')
+    const g = buildTopologyGraph(groupTopology, groupDevices)
+    const extra = findGroups(g.nodes, g.edges, [
+      ...GROUP_DEFINITIONS,
+      { id: 'switches', label: 'Switches', rule: { kind: 'role', role: 'switch' } },
+    ])
+    // core-switch hangs off the router only; cam-switch has many neighbours: no group of two.
+    expect(extra.map((x) => x.id)).toEqual(['cameras:3', 'proxmox'])
+    const nvr = findGroups(g.nodes, g.edges, [{ id: 'nvr', label: 'Recorders', rule: { kind: 'role', role: 'nvr' } }])
+    expect(nvr).toEqual([]) // one recorder only
   })
 })

@@ -8,16 +8,19 @@ import {
   CARD_LINE_HEIGHT,
   CARD_PADDING_Y,
   JACK_BAND_HEIGHT,
+  JACK_LABEL_GAP,
   JACK_NAME_MAX,
-  JACK_WIDTH,
+  JACK_SIZE,
   cardLines,
   jackBands,
+  jackShape,
   titleBadge,
   styleColor,
   type PlacedNode,
 } from '../presentation/topologyLayout'
 import OsIcon from './OsIcon.vue'
 import StateBadge from './StateBadge.vue'
+import TopologyJack from './TopologyJack.vue'
 
 /**
  * One device on the topology: an HTML card at its ELK position. A Hosts machine links to its
@@ -62,7 +65,16 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const jacks = computed(() =>
   props.node.ports.map((port) => {
     const at = props.placed.ports.get(port.id) ?? { x: 0, y: 0 }
-    return { port, x: at.x, north: port.side === 'NORTH', color: styleColor(port.style), kind: port.style.kind }
+    const shape = jackShape(port.type)
+    return {
+      port,
+      x: at.x,
+      north: port.side === 'NORTH',
+      color: styleColor(port.style),
+      kind: port.style.kind,
+      shape,
+      size: JACK_SIZE[shape],
+    }
   }),
 )
 </script>
@@ -116,10 +128,18 @@ const jacks = computed(() =>
       <span
         v-if="node.switchLike"
         class="jack"
-        :class="[`kind-${j.kind}`, j.north ? 'at-north' : 'at-south']"
-        :style="{ left: `${j.x - JACK_WIDTH / 2}px`, '--jack-color': j.color }"
+        :class="[`shape-${j.shape}`, j.north ? 'at-north' : 'at-south']"
+        :style="{
+          left: `${j.x - j.size.width / 2}px`,
+          [j.north ? 'top' : 'bottom']: `${-j.size.height / 2}px`,
+          width: `${j.size.width}px`,
+          height: `${j.size.height}px`,
+          '--jack-color': j.color,
+          '--jack-label-gap': `${JACK_LABEL_GAP}px`,
+        }"
         :title="j.port.name"
       >
+        <TopologyJack :shape="j.shape" :kind="j.kind" :north="j.north" />
         <span class="jack-name" :style="{ maxWidth: `${JACK_NAME_MAX}px` }">{{ j.port.name }}</span>
       </span>
       <span
@@ -232,29 +252,10 @@ const jacks = computed(() =>
   color: var(--color-text-pct);
 }
 
-/* Jack: a small socket centred on the card edge, its port name inside the card. */
+/* Jack: a socket centred on the card edge (half outside), its port name inside the card. */
 .jack {
   position: absolute;
-  width: 24px;
-  height: 12px;
-  box-sizing: border-box;
-  border-radius: 3px;
-  border: 1.5px solid var(--jack-color);
-  background: color-mix(in oklch, var(--jack-color) 30%, var(--color-bg-page));
   z-index: 1;
-}
-.jack.at-south {
-  bottom: -6px;
-}
-.jack.at-north {
-  top: -6px;
-}
-.jack.kind-trunk {
-  background: var(--color-bg-page);
-}
-.jack.kind-unknown {
-  border-style: dashed;
-  background: var(--color-bg-slot);
 }
 .jack-name {
   position: absolute;
@@ -270,10 +271,10 @@ const jacks = computed(() =>
   pointer-events: none;
 }
 .at-south .jack-name {
-  bottom: calc(100% + 3px);
+  bottom: calc(100% + var(--jack-label-gap));
 }
 .at-north .jack-name {
-  top: calc(100% + 3px);
+  top: calc(100% + var(--jack-label-gap));
 }
 
 /* Entry point of a cable on a device that is not switch-like. */

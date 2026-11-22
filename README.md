@@ -185,13 +185,39 @@ for every vid. The legend lists only what the diagram shows.
 reach starts from its own switch-like device, else the device with most cables). A BFS over
 the cables gives every device a depth; each cable runs from the shallower device (port on its
 SOUTH side) to the deeper one (NORTH side). ELK `layered`, direction `DOWN`, orthogonal edge
-routing, node placement `BRANDES_KOEPF` with `LEFT` post-compaction, node spacing 20.
+routing, node placement `BRANDES_KOEPF`, node spacing 20. No post-compaction: it pulls every
+card up on its own and breaks the rows into stairs; without it the cards of a row are
+top-aligned (next to a group they may sit lower, since ELK pads the group's rectangle).
 Switch-like devices keep their port order (`FIXED_ORDER`, pitch 42 px, card width
 max(330, ports x 42 + 40)); one with at most one SOUTH port (an access point, a single-uplink
 switch) is as wide as an ordinary card (190 px). Other devices fix only the side
 (`FIXED_SIDE`). Port names longer than the pitch are cut, the full name is in the tooltip. The
-layout runs again only when devices, ports, cables or card rows change, not on status or
-metrics events (a machine gaining or losing Proxmox metrics adds or drops its load row).
+layout runs again only when devices, ports, cables, card rows or groups change, not on status
+or metrics events (a machine gaining or losing Proxmox metrics adds or drops its load row).
+
+**Groups.** Some devices are laid out together inside one dashed rectangle, defined by a list
+(`GROUP_DEFINITIONS` in `src/domain/topology.ts`; a new group is one entry), tried in order,
+a device belonging to at most one group, at least two members per group:
+
+| Group | Rule |
+|---|---|
+| Cameras | role `camera`, every cable to one and the same device; one group per such upstream device |
+| Proxmox nodes | platform `Proxmox VE`, wherever they are cabled |
+
+In ELK a group is a parent node with its members as children (`elk.hierarchyHandling:
+INCLUDE_CHILDREN` on the root, padding top 28 / sides and bottom 12); the cables stay declared
+at the root, and member positions are converted back to absolute coordinates. The rectangle is
+drawn under the cables and cards; its label (name, member count, and the VLAN when all the
+members' cables are access cables of one VLAN) sits on a small page-coloured chip above the
+cables. Border and label take that VLAN's colour, else a neutral one. Member cards keep their
+links, focus and highlight; offline members stay dimmed.
+
+**Jacks.** The ports of switch-like devices are drawn by interface type as inline SVG
+(`TopologyJack.vue`): copper (`*base-t`, `*base-tx`) as an RJ45 socket with its latch notch
+(30 x 22), the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`, `*-qsfp*`, `*base-x-*`) as a cage with
+its opening (36 x 18), anything else as a plain rectangle (24 x 12); each is centred on the
+card edge, its notch or opening towards the cable, coloured like its cable. The jack band
+inside the card (half the tallest jack, a gap and the port name) is part of the card height.
 Cables are an SVG layer under absolutely positioned HTML cards; the diagram is scaled to the
 page width, never above 1 and not below 0.6 (it scrolls horizontally then).
 
