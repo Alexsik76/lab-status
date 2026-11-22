@@ -8,11 +8,15 @@ Zigbee2MQTT bridge (manufacturer `Zigbee2MQTT`) and every device whose `via_devi
 bridge:
 
     {"coordinator": {"deviceId", "version"},
-     "devices":     [{"id", "name", "manufacturer", "model", "area", "available"}]}
+     "devices":     [{"id", "name", "manufacturer", "model", "area", "available": bool | None}]}
 
 `coordinator.deviceId` is the NetBox device with a service named `zigbee-socket` (from the
-inventory cycle); `version` the bridge's software version (Zigbee2MQTT) when exposed. A device
-is `available` when at least one of its entities has a state other than `unavailable`. The
+inventory cycle); `version` the bridge's software version (Zigbee2MQTT) when exposed. Only
+enabled entities count (a disabled one has no state at all). A device is `available` (true) when
+at least one of its enabled entities has a state other than `unavailable`, unavailable (false)
+when it has enabled entities and none does (no state counts as unavailable), and unknown (null)
+when it has no enabled entity: nothing in Home Assistant says whether it is reachable (e.g. a
+router whose only sensor, link quality, is disabled by default). The
 source is off (status error, empty data) unless HA_URL and HA_TOKEN are set; errors start with
 "Zigbee: ". The token is only ever sent in the `auth` message: no message, log or event
 contains it.
@@ -89,7 +93,7 @@ def _records(value: Any, what: str) -> list[Json]:
 
 
 def build_raw(devices: Any, entities: Any, areas: Any, states: Any) -> list[Json]:
-    """One record per registry device: its fields, its area name and its entity counts."""
+    """One record per registry device: its fields, its area name and its enabled-entity counts."""
     devices = _records(devices, "device registry")
     entities = _records(entities, "entity registry")
     areas = _records(areas, "area registry")
@@ -100,7 +104,7 @@ def build_raw(devices: Any, entities: Any, areas: Any, states: Any) -> list[Json
     live: dict[Any, int] = {}
     for entity in entities:
         device_id = entity.get("device_id")
-        if device_id is None:
+        if device_id is None or entity.get("disabled_by"):
             continue
         total[device_id] = total.get(device_id, 0) + 1
         state = state_of.get(entity.get("entity_id"))
@@ -139,7 +143,7 @@ def build_zigbee(raw: list[Json], coordinator_device_id: str | None) -> Json:
                 "manufacturer": _text(d.get("manufacturer")),
                 "model": _text(d.get("model")),
                 "area": _text(d.get("area")),
-                "available": entities > 0 and live > 0,
+                "available": live > 0 if entities > 0 else None,
             })
     devices.sort(key=lambda d: (d["name"].lower(), d["id"]))
     return {

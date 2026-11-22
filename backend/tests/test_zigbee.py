@@ -33,6 +33,8 @@ DEVICES = [
      "sw_version": None, "via_device_id": "b1", "area_id": "shed"},
     {"id": "d4", "name": "Half", "name_by_user": None, "manufacturer": "Acme", "model": "Y",
      "sw_version": None, "via_device_id": "b1", "area_id": "missing"},
+    {"id": "d5", "name": "Range extender", "name_by_user": None, "manufacturer": "Acme", "model": "RPT-1",
+     "sw_version": None, "via_device_id": "b1", "area_id": None},
     # Not behind the bridge: not Zigbee.
     {"id": "m1", "name": "Doorbell app", "name_by_user": None, "manufacturer": "Home-made", "model": "app",
      "sw_version": None, "via_device_id": None, "area_id": None},
@@ -44,7 +46,8 @@ ENTITIES = [
     {"entity_id": "switch.attic_plug", "device_id": "d1"},
     {"entity_id": "sensor.half_temperature", "device_id": "d4"},
     {"entity_id": "sensor.half_humidity", "device_id": "d4"},
-    {"entity_id": "sensor.half_disabled", "device_id": "d4"},  # disabled: no state
+    {"entity_id": "sensor.half_disabled", "device_id": "d4", "disabled_by": "user"},  # disabled: no state
+    {"entity_id": "sensor.extender_linkquality", "device_id": "d5", "disabled_by": "integration"},
     {"entity_id": "sun.sun", "device_id": None},
     {"entity_id": "sensor.doorbell", "device_id": "m1"},
 ]
@@ -122,13 +125,15 @@ def test_websocket_url_follows_the_scheme() -> None:
 
 def test_parses_the_registries_into_device_records() -> None:
     raw = {r["id"]: r for r in build_raw(DEVICES, ENTITIES, AREAS, STATES)}
-    assert set(raw) == {"b1", "d1", "d2", "d3", "d4", "m1"}
+    assert set(raw) == {"b1", "d1", "d2", "d3", "d4", "d5", "m1"}
     assert raw["d2"] == {"id": "d2", "name": "0x00158d0001", "name_by_user": "Porch sensor", "manufacturer": "Acme",
                          "model": "PIR-1", "sw_version": None, "via_device_id": "b1", "area": "Porch",
                          "entities": 2, "available": 1}
     assert (raw["d1"]["entities"], raw["d1"]["available"]) == (1, 0)
     assert (raw["d3"]["entities"], raw["d3"]["available"]) == (0, 0)
-    assert (raw["d4"]["entities"], raw["d4"]["available"], raw["d4"]["area"]) == (3, 1, None)  # unknown area
+    # Disabled entities are not counted.
+    assert (raw["d4"]["entities"], raw["d4"]["available"], raw["d4"]["area"]) == (2, 1, None)  # unknown area
+    assert (raw["d5"]["entities"], raw["d5"]["available"]) == (0, 0)
     for bad in ({"a": 1}, [1, 2], None):
         with pytest.raises(Exception, match="unexpected device registry"):
             build_raw(bad, [], [], [])
@@ -142,9 +147,11 @@ def test_selects_the_bridge_and_the_devices_behind_it_with_availability() -> Non
     assert data["coordinator"] == {"deviceId": "7", "version": "2.1.0"}
     assert data["devices"] == [
         {"id": "d1", "name": "Attic plug", "manufacturer": "Acme", "model": "PLUG-2", "area": None, "available": False},
-        {"id": "d3", "name": "Empty", "manufacturer": "Acme", "model": "X", "area": "Shed", "available": False},
+        # No entity, or only disabled ones: nothing says whether it is reachable.
+        {"id": "d3", "name": "Empty", "manufacturer": "Acme", "model": "X", "area": "Shed", "available": None},
         {"id": "d4", "name": "Half", "manufacturer": "Acme", "model": "Y", "area": None, "available": True},
         {"id": "d2", "name": "Porch sensor", "manufacturer": "Acme", "model": "PIR-1", "area": "Porch", "available": True},
+        {"id": "d5", "name": "Range extender", "manufacturer": "Acme", "model": "RPT-1", "area": None, "available": None},
     ]
     no_bridge = [r for r in raw if r["id"] != "b1"]
     assert build_zigbee(no_bridge, None) == {"coordinator": {"deviceId": None, "version": None}, "devices": []}
@@ -176,7 +183,7 @@ async def test_one_read_only_connection_publishes_the_snapshot(ha: FakeHomeAssis
         await asyncio.sleep(0.01)
     assert ha.close_codes == [1000]  # the client closed the connection normally at the end
     assert events[0]["type"] == "data" and events[0]["data"]["coordinator"] == {"deviceId": "19", "version": "2.1.0"}
-    assert [d["id"] for d in events[0]["data"]["devices"]] == ["d1", "d3", "d4", "d2"]
+    assert [d["id"] for d in events[0]["data"]["devices"]] == ["d1", "d3", "d4", "d2", "d5"]
     assert events[1]["state"] == "live" and events[1]["error"] is None
     await source.cycle()
     assert ha.paths == ["/api/websocket"] * 2  # a new short connection per cycle
