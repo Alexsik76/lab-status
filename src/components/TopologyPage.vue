@@ -5,9 +5,11 @@ import type { ArpPresenceIndex } from '../domain/arp'
 import { arpObjectKey } from '../domain/arp'
 import type { DeviceRecord, Machine } from '../domain/model'
 import { buildTopologyGraph, traceOf } from '../domain/topology'
+import { wifiLive, withWifi } from '../domain/wifiGraph'
+import { useWifiPlan } from '../composables/useWifiPlan'
 import type { RawTopology } from '../types/topology'
 import { useTopologyLayout } from '../composables/useTopologyLayout'
-import { JACK_SIZE, fitScale, jackShape, speedTag } from '../presentation/topologyLayout'
+import { JACK_SIZE, drawsJack, fitScale, portShape, speedTag } from '../presentation/topologyLayout'
 import LoadingSpinner from './LoadingSpinner.vue'
 import NoticeBanner from './NoticeBanner.vue'
 import TopologyCables from './TopologyCables.vue'
@@ -50,10 +52,32 @@ const metricKey = computed(() =>
     .sort()
     .join(','),
 )
-const graph = computed(() => {
+/** Layers: Wired and Wi-Fi, each shown / grey / hidden, remembered in local storage. */
+const layers = ref(loadLayerStates())
+watch(layers, (states) => saveLayerStates(states), { deep: true })
+const onLayer = (id: LayerId, state: LayerState) => {
+  layers.value = { ...layers.value, [id]: state }
+}
+
+const wiredGraph = computed(() => {
   if (!props.topology) return null
   const metricIds = new Set(metricKey.value ? metricKey.value.split(',') : [])
   return buildTopologyGraph(props.topology.data, props.topology.devices, props.topology.machineIds, metricIds)
+})
+
+/**
+ * Wi-Fi in the diagram: radio ports, client cards / ports and Wi-Fi edges from the plan
+ * (`useWifiPlan`: sticky clients, structural changes at most every 10 s); live values only
+ * relabel ports and dim disconnected clients, so they never change the layout input. With the
+ * Wi-Fi layer hidden the diagram is the wired graph alone.
+ */
+const wifiData = computed(() => props.wifi ?? null)
+const { plan } = useWifiPlan(wifiData)
+const live = computed(() => (plan.value ? wifiLive(plan.value, wifiData.value) : null))
+const graph = computed(() => {
+  const g = wiredGraph.value
+  if (!g || !plan.value || !live.value || layers.value.wifi === 'hidden') return g
+  return withWifi(g, plan.value, live.value, props.topology?.machineIds)
 })
 const { placement, phase, error } = useTopologyLayout(graph)
 
@@ -62,39 +86,24 @@ const { width: viewportWidth } = useElementSize(viewport)
 const scale = computed(() => fitScale(viewportWidth.value, placement.value?.width ?? 0))
 
 /**
- * Hover trace: the one device being pointed at (or focused from the keyboard). Its cables,
- * neighbours and their ports are emphasised, the rest toned down.
+ * Hover trace: the one device being pointed at (or focused from the keyboard). Its cables and
+ * Wi-Fi lines, neighbours and their ports are emphasised, the rest toned down.
  */
 const tracedId = ref<string | null>(null)
-/** The access point traced together with it: its column in the Wi-Fi block. */
-const tracedApId = ref<string | null>(null)
 const trace = computed(() => (graph.value && tracedId.value ? traceOf(graph.value, tracedId.value) : null))
-const onTrace = (deviceId: string | null) => {
-  tracedId.value = deviceId
-  tracedApId.value = deviceId ? (props.wifi?.aps.find((ap) => ap.deviceId === deviceId)?.id ?? null) : null
-}
-/** From the Wi-Fi block: a column header or chip traces its access point's card. */
-const onApTrace = (apId: string | null) => {
-  tracedApId.value = apId
-  const deviceId = apId ? (props.wifi?.aps.find((ap) => ap.id === apId)?.deviceId ?? null) : null
-  tracedId.value = deviceId && graph.value?.nodes.some((n) => n.id === deviceId) ? deviceId : null
+const onTrace = (nodeId: string | null) => {
+  tracedId.value = nodeId
 }
 
-/** Layers: Wired and Wi-Fi, each shown / grey / hidden, remembered in local storage. */
-const layers = ref(loadLayerStates())
-watch(layers, (states) => saveLayerStates(states), { deep: true })
-const onLayer = (id: LayerId, state: LayerState) => {
-  layers.value = { ...layers.value, [id]: state }
-}
-
-/** Access-point cards stay fully visible when the wired layer is grey: anchors for Wi-Fi. */
-const apDeviceIds = computed(() => new Set((props.wifi?.aps ?? []).flatMap((ap) => (ap.deviceId ? [ap.deviceId] : []))))
-
-const wifiGrid = computed(() => {
-  if (!props.wifi) return null
-  const p = placement.value
-  return buildWifiGrid(props.wifi, (deviceId) => p?.nodes.get(deviceId)?.x)
+/** Wi-Fi lines of clients not connected now: laid out (no relayout), not drawn. */
+const hiddenEdges = computed(() => {
+  const g = graph.value
+  if (!g) return new Set<string>()
+  const offPorts = new Set(g.nodes.flatMap((n) => n.ports.filter((p) => p.kind === 'radio' && p.off).map((p) => p.id)))
+  return new Set(g.edges.filter((e) => e.medium === 'wifi' && (offPorts.has(e.target) || offPorts.has(e.source))).map((e) => e.id))
 })
+
+const wifiGrid = computed(() => (props.wifi ? buildWifiGrid(props.wifi, (deviceId) => placement.value?.nodes.get(deviceId)?.x) : null))
 
 const isEmpty = computed(() => graph.value !== null && graph.value.edges.length === 0)
 
@@ -105,9 +114,13 @@ const cards = computed(() => {
   return g.nodes.flatMap((node) => {
     const placed = p.nodes.get(node.id)
     if (!placed) return []
-    const machine = node.isMachine ? (props.machines.get(node.id) ?? null) : null
-    const presence = machine ? null : (props.presence.get(arpObjectKey('device', node.id)) ?? null)
-    return [{ node, placed, machine, presence }]
+    const deviceId = node.deviceId ?? (node.kind === 'wifi-client' ? null : node.id)
+    const machine = node.isMachine && deviceId ? (props.machines.get(deviceId) ?? null) : null
+    const presence = machine || !deviceId ? null : (props.presence.get(arpObjectKey('device', deviceId)) ?? null)
+    // Cards with a radio port (access points, wired devices also on Wi-Fi, Wi-Fi clients) stay
+    // visible when the wired layer is grey.
+    const anchor = node.ports.some((port) => port.kind === 'radio')
+    return [{ node, placed, machine, presence, anchor }]
   })
 })
 
@@ -124,8 +137,8 @@ const tags = computed(() => {
     const end = points[points.length - 1]
     // Beside the jack the cable ends in (a dot on other devices).
     const target = nodes.get(edge.targetDevice)
-    const port = target?.switchLike ? target.ports.find((q) => q.id === edge.target) : undefined
-    const dx = port ? JACK_SIZE[jackShape(port.type)].width / 2 + 3 : 5
+    const port = target?.ports.find((q) => q.id === edge.target)
+    const dx = target && port && drawsJack(target, port) ? JACK_SIZE[portShape(port)].width / 2 + 3 : 5
     return [{ id: edge.id, text, x: end.x + dx, y: end.y }]
   })
 })
@@ -156,7 +169,7 @@ const tags = computed(() => {
         <div class="topo-sizer" :style="{ width: `${placement.width * scale}px`, height: `${placement.height * scale}px` }">
           <div
             class="topo-canvas"
-            :class="[{ 'is-tracing': !!trace }, `layer-wired-${layers.wired}`]"
+            :class="[{ 'is-tracing': !!trace }, `layer-wired-${layers.wired}`, `layer-wifi-${layers.wifi}`]"
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
             <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
@@ -166,6 +179,7 @@ const tags = computed(() => {
               :width="placement.width"
               :height="placement.height"
               :traced="trace?.edgeIds ?? null"
+              :hidden="hiddenEdges"
             />
             <TopologyCard
               v-for="c in cards"
@@ -176,7 +190,7 @@ const tags = computed(() => {
               :presence="c.presence"
               :traced="trace?.nodeIds.has(c.node.id) ?? false"
               :traced-ports="trace?.portIds ?? null"
-              :anchor="apDeviceIds.has(c.node.id)"
+              :anchor="c.anchor"
               @trace="onTrace"
             />
             <span
@@ -195,15 +209,10 @@ const tags = computed(() => {
     </template>
 
     <TopologyWifi
-      v-if="layers.wifi !== 'hidden'"
-      class="topo-wifi-layer"
-      :class="`layer-wifi-${layers.wifi}`"
       :grid="wifiGrid"
       :vlans="topology?.data.vlans ?? []"
       :machines="machines"
-      :traced-ap-id="tracedApId"
       :error="wifiError ?? null"
-      @trace="onApTrace"
     />
   </section>
 </template>
@@ -244,23 +253,31 @@ const tags = computed(() => {
 }
 
 /*
- * Layers. Grey: faded and colourless (access-point cards stay as anchors for the Wi-Fi block);
- * hidden: the wired diagram keeps its space but draws nothing, the Wi-Fi block is not rendered.
+ * Layers. Wired grey: wired cables, copper jacks and wired-only cards fade; cards with a radio
+ * port (access points, Wi-Fi clients) stay, only their copper jacks fade. Wired hidden: the
+ * wired drawing keeps its space but is not drawn. Wi-Fi grey: radio ports, Wi-Fi lines and
+ * Wi-Fi client cards fade (Wi-Fi hidden takes them out of the graph, see `graph`).
  */
 .layer-wired-grey :deep(.topo-card:not(.is-anchor)),
-.layer-wired-grey :deep(.topo-cables),
+.layer-wired-grey :deep(.topo-card.is-anchor .jack:not(.shape-radio)),
+.layer-wired-grey :deep(.topo-card.is-anchor .entry),
+.layer-wired-grey :deep(.cable:not(.medium-wifi)),
 .layer-wired-grey :deep(.topo-group),
 .layer-wired-grey :deep(.group-label),
-.layer-wired-grey .speed-tag {
+.layer-wired-grey .speed-tag,
+.layer-wifi-grey :deep(.cable.medium-wifi),
+.layer-wifi-grey :deep(.branch),
+.layer-wifi-grey :deep(.jack.shape-radio),
+.layer-wifi-grey :deep(.topo-card.kind-wifi-client) {
   opacity: 0.2;
   filter: grayscale(1);
 }
-.layer-wired-hidden {
+.layer-wired-hidden :deep(.topo-card:not(.is-anchor)),
+.layer-wired-hidden :deep(.cable:not(.medium-wifi)),
+.layer-wired-hidden :deep(.topo-group),
+.layer-wired-hidden :deep(.group-label),
+.layer-wired-hidden .speed-tag {
   visibility: hidden;
-}
-.layer-wifi-grey {
-  opacity: 0.2;
-  filter: grayscale(1);
 }
 
 /* Narrow screens: the legend takes its own row instead of covering the diagram. */

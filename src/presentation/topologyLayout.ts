@@ -1,4 +1,4 @@
-import type { CableStyle, SpeedBucket, TopologyGraph, TopologyGroup, TopologyNode } from '../domain/topology'
+import type { CableStyle, SpeedBucket, TopologyGraph, TopologyGroup, TopologyNode, TopologyPort } from '../domain/topology'
 
 /**
  * The ELK input for a topology graph, the mapping of ELK's result to what the page draws,
@@ -21,13 +21,23 @@ export const PORT_PITCH = 42
  * (`*base-t`, `*base-tx`), an SFP cage for the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`,
  * `*-qsfp*`, `*base-x-*`), a plain rectangle for anything else. All fit the port pitch.
  */
-export type JackShape = 'rj45' | 'sfp' | 'plain'
+export type JackShape = 'rj45' | 'sfp' | 'plain' | 'radio'
 
 export const JACK_SIZE: Readonly<Record<JackShape, { width: number; height: number }>> = {
   rj45: { width: 30, height: 22 },
   sfp: { width: 36, height: 18 },
   plain: { width: 24, height: 12 },
+  /** A Wi-Fi radio (access point SSID) or a client's wireless interface: same box as RJ45. */
+  radio: { width: 30, height: 22 },
 }
+
+/** The jack of a port: `radio` for Wi-Fi ports, else by interface type. */
+export const portShape = (port: Pick<TopologyPort, 'kind' | 'type'>): JackShape =>
+  port.kind === 'radio' ? 'radio' : jackShape(port.type)
+
+/** Switch-like devices draw every port as a jack; others only their radio ports (else a dot). */
+export const drawsJack = (node: Pick<TopologyNode, 'switchLike'>, port: Pick<TopologyPort, 'kind'>) =>
+  node.switchLike || port.kind === 'radio'
 
 export function jackShape(type: string | null): JackShape {
   if (!type) return 'plain'
@@ -71,6 +81,8 @@ export const JACK_LABEL_GAP = 3
  * the tallest jack, the gap and the port name.
  */
 export const JACK_BAND_HEIGHT = JACK_MAX_HEIGHT / 2 + JACK_LABEL_GAP + JACK_LABEL_HEIGHT + 3
+/** A radio port's label takes two lines (SSID, then channel / off / down). */
+export const RADIO_LABEL_EXTRA = JACK_LABEL_HEIGHT + 1
 
 /**
  * The title row: icon, name and state. The full state badge stays only where it fits beside a
@@ -93,21 +105,29 @@ export interface CardSize {
 export function cardLines(node: TopologyNode): CardLine[] {
   const lines: CardLine[] = ['title']
   if (node.model || node.roleSlug) lines.push('sub')
-  if (node.ip) lines.push('ip')
+  // A Wi-Fi client always has its address row (empty while unknown): an address appearing
+  // later must not change the card's height.
+  if (node.ip || node.kind === 'wifi-client') lines.push('ip')
   if (node.isMachine) lines.push('summary')
   if (node.hasMetrics) lines.push('load')
   return lines
 }
 
 export function jackBands(node: TopologyNode): { north: boolean; south: boolean } {
-  if (!node.switchLike) return { north: false, south: false }
-  return { north: node.ports.some((p) => p.side === 'NORTH'), south: node.ports.some((p) => p.side === 'SOUTH') }
+  const drawn = (side: string) => node.ports.some((p) => p.side === side && drawsJack(node, p))
+  return { north: drawn('NORTH'), south: drawn('SOUTH') }
+}
+
+/** Room for the jacks on one side inside the card: 0 without jacks, more with radio labels. */
+export function jackBandHeight(node: TopologyNode, side: 'NORTH' | 'SOUTH'): number {
+  const ports = node.ports.filter((p) => p.side === side && drawsJack(node, p))
+  if (!ports.length) return 0
+  return JACK_BAND_HEIGHT + (ports.some((p) => p.kind === 'radio') ? RADIO_LABEL_EXTRA : 0)
 }
 
 export function cardSize(node: TopologyNode): CardSize {
-  const bands = jackBands(node)
   const rows = cardLines(node).reduce((sum, line) => sum + CARD_LINE_HEIGHT[line], 0)
-  const height = 2 * (CARD_BORDER + CARD_PADDING_Y) + rows + (bands.north ? JACK_BAND_HEIGHT : 0) + (bands.south ? JACK_BAND_HEIGHT : 0)
+  const height = 2 * (CARD_BORDER + CARD_PADDING_Y) + rows + jackBandHeight(node, 'NORTH') + jackBandHeight(node, 'SOUTH')
   if (!node.switchLike) return { width: CARD_WIDTH, height }
   const south = node.ports.filter((p) => p.side === 'SOUTH').length
   const north = node.ports.length - south
@@ -195,7 +215,7 @@ export function toElkGraph(graph: TopologyGraph): ElkGraphInput {
       layoutOptions: { 'elk.portConstraints': node.switchLike ? 'FIXED_ORDER' : 'FIXED_SIDE' },
       ports: node.ports.map((p) => ({
         id: portKey(p.id),
-        width: node.switchLike ? JACK_SIZE[jackShape(p.type)].width : 0,
+        width: drawsJack(node, p) ? JACK_SIZE[portShape(p)].width : 0,
         height: 0,
         layoutOptions: {
           'elk.port.side': p.side,

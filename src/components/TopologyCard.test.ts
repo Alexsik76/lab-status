@@ -68,6 +68,19 @@ describe('TopologyCard height = the size given to ELK', () => {
     ['router with jacks below', nodeOf('gw-router-01'), {}, 3],
   ]
 
+  it('counts radio ports (two-line labels) and a Wi-Fi client card in the height', async () => {
+    const { wifiPayload } = await import('../__fixtures__/wifi')
+    const { mergePlan, wifiLive, withWifi } = await import('../domain/wifiGraph')
+    const plan = mergePlan(null, wifiPayload).next
+    const g = withWifi(graph, plan, wifiLive(plan, wifiPayload), machineIds)
+    for (const id of ['2', '14', '11', 'wifi:02:BB:00:00:00:01']) {
+      const node = g.nodes.find((n) => n.id === id)!
+      const { wrapper, size, height } = renderedHeight(node, {})
+      expect(height).toBe(size.height)
+      if (node.kind === 'wifi-client') expect(wrapper.findAll('.card-line').map((l) => l.classes()[1])).toEqual(['line-title', 'line-ip'])
+    }
+  })
+
   it.each(cases)('%s', (_name, node, props, rows) => {
     const { wrapper, size, height } = renderedHeight(node, props)
     expect(wrapper.findAll('.card-line')).toHaveLength(rows)

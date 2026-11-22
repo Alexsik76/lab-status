@@ -36,6 +36,12 @@ export interface TopologyPort {
   /** The style of the cable plugged in: the jack is drawn like its cable. */
   style: CableStyle
   mgmtOnly: boolean
+  /** `radio`: a Wi-Fi radio (an access point's SSID) or a client's wireless interface. */
+  kind?: 'cable' | 'radio'
+  /** Label of a radio port, e.g. `Home · 5180` (the jack shows it on two lines). */
+  label?: string
+  /** A radio that is disabled or down: drawn dimmed, no links. */
+  off?: boolean
 }
 
 export interface TopologyNode {
@@ -57,6 +63,10 @@ export interface TopologyNode {
   depth: number
   /** NORTH ports, then SOUTH ports, each in NetBox order. */
   ports: TopologyPort[]
+  /** `wifi-client`: a wireless client not otherwise on the diagram (title + IP). */
+  kind?: 'device' | 'wifi-client'
+  /** The NetBox device behind the card, when not the node id itself (a Wi-Fi client's). */
+  deviceId?: string | null
 }
 
 export interface TopologyEdge {
@@ -69,6 +79,8 @@ export interface TopologyEdge {
   cableType: string | null
   style: CableStyle
   speed: SpeedBucket | null
+  /** `wifi`: from an access point's radio to a client, drawn as a wavy line. */
+  medium?: 'cable' | 'wifi'
 }
 
 /**

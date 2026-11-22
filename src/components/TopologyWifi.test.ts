@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { WIFI_GRID_OPEN_KEY } from '../presentation/layers'
 import { wifiPayload } from '../__fixtures__/wifi'
 import type { Machine } from '../domain/model'
 import { buildWifiGrid } from '../domain/wifi'
@@ -8,12 +9,13 @@ import TopologyWifi from './TopologyWifi.vue'
 const grid = buildWifiGrid(wifiPayload, (id) => ({ '2': 100, '14': 400 })[id])
 const vlans = [{ vid: 30, name: 'gadgets' }, { vid: 20, name: 'home' }]
 const machines = new Map([['11', { id: '11' } as Machine]])
-const base = { grid, vlans, machines, tracedApId: null, error: null }
+const base = { grid, vlans, machines, error: null }
 
 describe('TopologyWifi', () => {
+  beforeEach(() => localStorage.setItem(WIFI_GRID_OPEN_KEY, '1'))
+
   it('draws access points as columns and networks as rows', () => {
     const w = mount(TopologyWifi, { props: base })
-    expect(w.find('.wifi-title').text()).toBe('Wi-Fi')
     expect(w.findAll('.ap-head').map((h) => h.text())).toEqual(['ap-east', 'ap-west', 'ap-loft'])
     expect(w.findAll('.row-head').map((h) => `${h.find('.ssid').text()} ${h.find('.row-meta').text()}`)).toEqual([
       'Gadgets 2.4 GHz · VLAN 30 gadgets',
@@ -57,17 +59,18 @@ describe('TopologyWifi', () => {
     expect(empty.find('.empty-state').text()).toBe('The router reports no wireless networks.')
   })
 
-  it('asks to trace an access point from its header or a chip, and emphasises a traced column', async () => {
+  it('is collapsed by default behind its title, opens on click and remembers it', async () => {
+    localStorage.removeItem(WIFI_GRID_OPEN_KEY)
     const w = mount(TopologyWifi, { props: base })
-    await w.findAll('.ap-head')[1].trigger('pointerenter', { pointerType: 'mouse' })
-    await w.find('.chip[data-mac="02:BB:00:00:00:03"]').trigger('pointerenter', { pointerType: 'mouse' })
-    await w.findAll('.ap-head')[1].trigger('pointerleave')
-    await w.findAll('.ap-head')[0].trigger('pointerenter', { pointerType: 'touch' }) // no trace on touch
-    expect(w.emitted('trace')).toEqual([['[02:AA:00:00:00:01]'], ['[02:AA:00:00:00:02]'], [null]])
-
-    await w.setProps({ tracedApId: '[02:AA:00:00:00:02]' })
-    expect(w.find('.wifi-grid').classes()).toContain('is-tracing')
-    expect(w.findAll('.ap-head.is-traced').map((h) => h.text())).toEqual(['ap-east'])
-    expect(w.findAll('.cell.is-traced')).toHaveLength(3) // the east column, every row
+    const toggle = w.find('.wifi-toggle')
+    expect(toggle.text()).toContain('Wi-Fi')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(w.find('.wifi-grid').exists()).toBe(false)
+    await toggle.trigger('click')
+    expect(w.find('.wifi-grid').exists()).toBe(true)
+    expect(localStorage.getItem(WIFI_GRID_OPEN_KEY)).toBe('1')
+    await toggle.trigger('click')
+    expect(w.find('.wifi-grid').exists()).toBe(false)
+    expect(localStorage.getItem(WIFI_GRID_OPEN_KEY)).toBe('0')
   })
 })

@@ -2,6 +2,8 @@
 import type { SpeedBucket } from '../domain/topology'
 import type { RawTopologyVlan } from '../types/topology'
 import { cableWidth, styleColor, vlanColor } from '../presentation/topologyLayout'
+import { wavyPath } from '../presentation/wavy'
+import TopologyJack from './TopologyJack.vue'
 
 /** What the cables mean: trunk, the VLANs present, no VLAN data, Wi-Fi, widths by speed. */
 defineProps<{
@@ -14,6 +16,8 @@ defineProps<{
 }>()
 
 const trunk = styleColor({ kind: 'trunk', vlan: null })
+/** The Wi-Fi line sample: the same wave as on the diagram. */
+const wave = wavyPath([{ x: 1, y: 5 }, { x: 25, y: 5 }], 2.4, 6)
 const unknown = styleColor({ kind: 'unknown', vlan: null })
 </script>
 
@@ -43,9 +47,15 @@ const unknown = styleColor({ kind: 'unknown', vlan: null })
     <ul v-if="wifi" class="legend-group">
       <li data-legend="wifi">
         <svg width="26" height="10" aria-hidden="true">
-          <line x1="1" y1="5" x2="25" y2="5" stroke="var(--color-text-secondary)" stroke-width="2" stroke-dasharray="4 3" />
+          <path :d="wave" fill="none" stroke="var(--color-text-secondary)" stroke-width="1.5" stroke-linecap="round" />
         </svg>
         Wi-Fi
+      </li>
+      <li data-legend="radio">
+        <span class="legend-jack" style="--jack-color: var(--color-text-secondary)">
+          <TopologyJack shape="radio" kind="access" :north="false" />
+        </span>
+        radio
       </li>
     </ul>
     <ul v-if="speeds.length" class="legend-group">
@@ -92,6 +102,12 @@ li {
 }
 svg {
   flex: none;
+}
+.legend-jack {
+  display: inline-flex;
+  justify-content: center;
+  width: 26px;
+  transform: scale(0.75);
 }
 .vid {
   color: var(--color-text-secondary);
