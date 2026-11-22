@@ -218,8 +218,9 @@ const jacks = computed(() =>
   transition: border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease,
     box-shadow 0.15s ease;
 }
+/* A link card keeps the default arrow cursor (a link would otherwise show the hand). */
 .topo-card.is-link {
-  cursor: pointer;
+  cursor: default;
 }
 .topo-card.is-link:hover,
 .topo-card.is-link:focus-visible {
