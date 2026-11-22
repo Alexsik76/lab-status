@@ -113,6 +113,8 @@
      a vid without its own token gets a colour derived from the vid (fallbackVlanColor). */
   --color-cable-trunk: oklch(0.86 0.01 250);
   --color-cable-unknown: oklch(0.5 0.01 250);
+  /* Zigbee: the coordinator's port, the bead line and the device frame. */
+  --color-zigbee: oklch(0.74 0.13 295);
   --color-vlan-1: oklch(0.72 0.03 250);
   --color-vlan-10: oklch(0.74 0.13 155);
   --color-vlan-20: oklch(0.72 0.12 240);

@@ -18,6 +18,9 @@ const props = defineProps<{
 
 /** Wi-Fi line stroke. */
 const WIFI_WIDTH = 1.5
+/** Zigbee line: bead diameter and spacing. */
+const ZIGBEE_BEAD = 3.4
+const ZIGBEE_BEAD_GAP = 8
 
 const cables = computed(() =>
   props.edges.flatMap((edge) => {
@@ -26,6 +29,10 @@ const cables = computed(() =>
     const route = points.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ')
     if (edge.medium === 'wifi') {
       return [{ edge, d: wavyPath(points), width: WIFI_WIDTH, core: 0, color: styleColor(edge.style), route }]
+    }
+    if (edge.medium === 'zigbee') {
+      // Beads: round dots along the route (a dash of almost nothing, round caps).
+      return [{ edge, d: roundedPath(points), width: ZIGBEE_BEAD, core: 0, color: styleColor(edge.style), route }]
     }
     const trunk = edge.style.kind === 'trunk' ? trunkWidths(edge.speed) : null
     const width = trunk ? trunk.outer : cableWidth(edge.speed)
@@ -75,8 +82,13 @@ const ordered = computed(() => {
       :data-cable="c.edge.id"
       :data-route="c.route"
     >
-      <path :d="c.d" :stroke="c.color" :stroke-width="c.width" />
-      <path v-if="c.edge.style.kind === 'trunk' && c.edge.medium !== 'wifi'" :d="c.d" class="core" :stroke-width="c.core" />
+      <path
+        :d="c.d"
+        :stroke="c.color"
+        :stroke-width="c.width"
+        :stroke-dasharray="c.edge.medium === 'zigbee' ? `0.01 ${ZIGBEE_BEAD_GAP}` : undefined"
+      />
+      <path v-if="c.edge.style.kind === 'trunk' && !c.edge.medium?.match(/wifi|zigbee/)" :d="c.d" class="core" :stroke-width="c.core" />
     </g>
     <circle v-for="b in branches" :key="b.key" class="branch medium-wifi" :cx="b.x" :cy="b.y" r="2.4" :fill="b.color" />
   </svg>
@@ -93,7 +105,8 @@ path {
   fill: none;
   stroke-linejoin: round;
 }
-.medium-wifi path {
+.medium-wifi path,
+.medium-zigbee path {
   stroke-linecap: round;
 }
 .core {

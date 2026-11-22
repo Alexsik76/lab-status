@@ -5,14 +5,16 @@ import { cableWidth, styleColor, vlanColor } from '../presentation/topologyLayou
 import { wavyPath } from '../presentation/wavy'
 import TopologyJack from './TopologyJack.vue'
 
-/** What the cables mean: trunk, the VLANs present, no VLAN data, Wi-Fi, widths by speed. */
+/** What the lines mean: trunk, the VLANs present, no VLAN data, Wi-Fi, Zigbee, widths by speed. */
 defineProps<{
   vlans: readonly RawTopologyVlan[]
   hasTrunk: boolean
   hasUnknown: boolean
   speeds: readonly SpeedBucket[]
-  /** The Wi-Fi block is on the page. */
+  /** The Wi-Fi layer is on the diagram. */
   wifi?: boolean
+  /** The Zigbee layer is on the diagram. */
+  zigbee?: boolean
 }>()
 
 const trunk = styleColor({ kind: 'trunk', vlan: null })
@@ -56,6 +58,20 @@ const unknown = styleColor({ kind: 'unknown', vlan: null })
           <TopologyJack shape="radio" kind="access" :north="false" />
         </span>
         radio
+      </li>
+    </ul>
+    <ul v-if="zigbee" class="legend-group">
+      <li data-legend="zigbee">
+        <svg width="26" height="10" aria-hidden="true">
+          <line x1="3" y1="5" x2="24" y2="5" stroke="var(--color-zigbee)" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="0.01 8" />
+        </svg>
+        Zigbee
+      </li>
+      <li data-legend="zigbee-port">
+        <span class="legend-jack" style="--jack-color: var(--color-zigbee)">
+          <TopologyJack shape="zigbee" kind="zigbee" :north="false" />
+        </span>
+        coordinator
       </li>
     </ul>
     <ul v-if="speeds.length" class="legend-group">

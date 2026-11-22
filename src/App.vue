@@ -13,6 +13,7 @@ import { useFocusTarget } from './composables/useFocusTarget'
 import { useLab } from './composables/useLab'
 import { useSourceStatuses } from './composables/useSourceStatuses'
 import { useWifi } from './composables/useWifi'
+import { useZigbee } from './composables/useZigbee'
 import { countViews } from './domain/arp'
 import type { Machine } from './domain/model'
 import { statusPhaseKey, topologyDevicesKey } from './injection'
@@ -28,6 +29,7 @@ const TopologyPage = defineAsyncComponent({
 const arp = useArp()
 const sources = useSourceStatuses()
 const wifi = useWifi()
+const zigbee = useZigbee()
 const labState = useLab(arp.presence)
 const lab = reactive(labState)
 provide(statusPhaseKey, labState.livePhase)
@@ -136,6 +138,7 @@ onMounted(() => {
             :unavailable="topologyUnavailable"
             :wifi="wifi.data.value"
             :wifi-error="wifi.errorMessage.value"
+            :zigbee="zigbee.data.value"
           />
         </template>
       </div>

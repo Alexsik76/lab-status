@@ -11,7 +11,7 @@ import { drawnLinks, type Link } from './topologyLinks'
 export const SWITCH_LIKE_ROLES: ReadonlySet<string> = new Set(['router', 'switch', 'access-point'])
 const ROOT_ROLE = 'router'
 
-export type CableKind = 'trunk' | 'access' | 'unknown'
+export type CableKind = 'trunk' | 'access' | 'unknown' | 'zigbee'
 
 export interface CableStyle {
   kind: CableKind
@@ -36,14 +36,19 @@ export interface TopologyPort {
   /** The style of the cable plugged in: the jack is drawn like its cable. */
   style: CableStyle
   mgmtOnly: boolean
-  /** `radio`: a Wi-Fi radio (an access point's SSID) or a client's wireless interface. */
-  kind?: 'cable' | 'radio'
+  /**
+   * `radio`: a Wi-Fi radio (an access point's SSID) or a client's wireless interface.
+   * `zigbee`: the Zigbee coordinator's port.
+   */
+  kind?: 'cable' | 'radio' | 'zigbee'
   /** Label of a radio port, e.g. `Home · 5180` (the jack shows it on two lines). */
   label?: string
   /** A radio that is disabled or down: drawn dimmed, no links. */
   off?: boolean
   /** No jack and no dot: where a Wi-Fi line meets a client frame's top edge. */
   bare?: boolean
+  /** A jack without its name and without a jack band (a group member keeps its card size). */
+  compact?: boolean
 }
 
 export interface TopologyNode {
@@ -69,8 +74,9 @@ export interface TopologyNode {
    * `wifi-client`: a wireless client not otherwise on the diagram (title + IP).
    * `wifi-group`: a frame packing the Wi-Fi-only clients of one radio (two or more), laid out
    * by ELK as one node of fixed size; its `members` are positioned inside it by the page.
+   * `zigbee-group` / `zigbee-device`: the same for the Zigbee devices (name, area or model).
    */
-  kind?: 'device' | 'wifi-client' | 'wifi-group'
+  kind?: 'device' | 'wifi-client' | 'wifi-group' | 'zigbee-device' | 'zigbee-group'
   /** The NetBox device behind the card, when not the node id itself (a Wi-Fi client's). */
   deviceId?: string | null
   /** A `wifi-group`'s clients, sorted by name (cards without ports). */
@@ -91,8 +97,11 @@ export interface TopologyEdge {
   cableType: string | null
   style: CableStyle
   speed: SpeedBucket | null
-  /** `wifi`: from an access point's radio to a client, drawn as a wavy line. */
-  medium?: 'cable' | 'wifi'
+  /**
+   * `wifi`: from an access point's radio to a client, drawn as a wavy line.
+   * `zigbee`: from the coordinator's port to the Zigbee frame, drawn as beads.
+   */
+  medium?: 'cable' | 'wifi' | 'zigbee'
 }
 
 /**
@@ -341,6 +350,18 @@ export function buildTopologyGraph(
   }
 }
 
+/**
+ * The VLAN of a group: the one VLAN of all its members' links (cables or Wi-Fi) when they are
+ * all access links of that VLAN, else null.
+ */
+export function groupVlan(memberIds: readonly string[], edges: readonly TopologyEdge[]): number | null {
+  const members = new Set(memberIds)
+  const styles = edges.filter((e) => members.has(e.sourceDevice) || members.has(e.targetDevice)).map((e) => e.style)
+  const first = styles[0]
+  if (!first || first.kind !== 'access') return null
+  return styles.every((s) => s.kind === 'access' && s.vlan === first.vlan) ? first.vlan : null
+}
+
 /** Groups by `GROUP_DEFINITIONS`, earlier definitions first; members keep the node order. */
 export function findGroups(
   nodes: readonly TopologyNode[],
@@ -359,12 +380,7 @@ export function findGroups(
   const taken = new Set<string>()
   const groups: TopologyGroup[] = []
 
-  const commonVlan = (memberIds: string[]): number | null => {
-    const styles = memberIds.flatMap((id) => cables.get(id) ?? []).map((e) => e.style)
-    const first = styles[0]
-    if (!first || first.kind !== 'access') return null
-    return styles.every((s) => s.kind === 'access' && s.vlan === first.vlan) ? first.vlan : null
-  }
+  const commonVlan = (memberIds: string[]) => groupVlan(memberIds, edges)
   const add = (def: GroupDefinition, id: string, memberIds: string[], roleSlug: string | null, upstreamId: string | null) => {
     if (memberIds.length < MIN_GROUP_SIZE) return
     for (const m of memberIds) taken.add(m)

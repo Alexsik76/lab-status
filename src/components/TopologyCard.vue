@@ -144,7 +144,10 @@ const jacks = computed(() =>
         :style="{ height: `${CARD_LINE_HEIGHT[line]}px` }"
       >
         <template v-if="line === 'title'">
-          <svg v-if="node.inFrame" class="wifi-glyph" width="14" height="14" viewBox="0 0 14 14" aria-label="Wi-Fi">
+          <svg v-if="node.kind === 'zigbee-device'" class="zigbee-glyph" width="14" height="14" viewBox="0 0 14 14" aria-label="Zigbee">
+            <path d="M3.5 4 H10.5 L3.5 10 H10.5" />
+          </svg>
+          <svg v-else-if="node.inFrame" class="wifi-glyph" width="14" height="14" viewBox="0 0 14 14" aria-label="Wi-Fi">
             <path d="M2.6 6.2 A6.2 6.2 0 0 1 11.4 6.2 M4.7 8.3 A3.2 3.2 0 0 1 9.3 8.3" />
             <circle cx="7" cy="10.6" r="1.2" />
           </svg>
@@ -185,7 +188,7 @@ const jacks = computed(() =>
         :data-port="j.port.id"
       >
         <TopologyJack :shape="j.shape" :kind="j.kind" :north="j.north" />
-        <span class="jack-name" :class="{ 'is-radio': j.radio }" :style="{ maxWidth: `${JACK_NAME_MAX}px` }">
+        <span v-if="!j.port.compact" class="jack-name" :class="{ 'is-radio': j.radio }" :style="{ maxWidth: `${JACK_NAME_MAX}px` }">
           <template v-for="(text, k) in j.lines" :key="k"><span class="jack-name-line">{{ text }}</span></template>
         </span>
       </span>
@@ -286,6 +289,14 @@ const jacks = computed(() =>
   fill: none;
   stroke: var(--color-text-muted);
   stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.zigbee-glyph {
+  flex: none;
+  fill: none;
+  stroke: var(--color-zigbee);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
   stroke-linecap: round;
 }
 .wifi-glyph circle {

@@ -96,6 +96,8 @@ class InventoryParts:
     topology: Json | None = None
     #: NetBox device id by device name (reserve hardware left out), for the Wi-Fi source.
     device_ids: dict[str, str] | None = None
+    #: REST services of the last good read, for the Zigbee source's coordinator.
+    services: list[Json] | None = None
     #: Messages of the parts that failed in the last cycle, by part name.
     errors: dict[str, str] = field(default_factory=dict)
 
@@ -149,6 +151,9 @@ class InventorySource(PollingSource):
 
         def first_error(*names: str) -> BaseException:
             return next(results[n] for n in names if isinstance(results[n], BaseException))
+
+        if ok("services"):
+            self.parts.services = results["services"]
 
         if ok("services", "vms", "devices"):
             self.parts.targets = build_targets(results["services"], results["vms"], results["devices"])

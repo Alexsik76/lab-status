@@ -21,7 +21,7 @@ export const PORT_PITCH = 42
  * (`*base-t`, `*base-tx`), an SFP cage for the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`,
  * `*-qsfp*`, `*base-x-*`), a plain rectangle for anything else. All fit the port pitch.
  */
-export type JackShape = 'rj45' | 'sfp' | 'plain' | 'radio'
+export type JackShape = 'rj45' | 'sfp' | 'plain' | 'radio' | 'zigbee'
 
 export const JACK_SIZE: Readonly<Record<JackShape, { width: number; height: number }>> = {
   rj45: { width: 30, height: 22 },
@@ -29,15 +29,17 @@ export const JACK_SIZE: Readonly<Record<JackShape, { width: number; height: numb
   plain: { width: 24, height: 12 },
   /** A Wi-Fi radio (access point SSID) or a client's wireless interface: same box as RJ45. */
   radio: { width: 30, height: 22 },
+  /** The Zigbee coordinator's port: a hexagon in the same box. */
+  zigbee: { width: 30, height: 22 },
 }
 
 /** The jack of a port: `radio` for Wi-Fi ports, else by interface type. */
 export const portShape = (port: Pick<TopologyPort, 'kind' | 'type'>): JackShape =>
-  port.kind === 'radio' ? 'radio' : jackShape(port.type)
+  port.kind === 'radio' ? 'radio' : port.kind === 'zigbee' ? 'zigbee' : jackShape(port.type)
 
 /** Switch-like devices draw every port as a jack; others only their radio ports (else a dot). */
 export const drawsJack = (node: Pick<TopologyNode, 'switchLike'>, port: Pick<TopologyPort, 'kind' | 'bare'>) =>
-  !port.bare && (node.switchLike || port.kind === 'radio')
+  !port.bare && (node.switchLike || port.kind === 'radio' || port.kind === 'zigbee')
 
 export function jackShape(type: string | null): JackShape {
   if (!type) return 'plain'
@@ -106,7 +108,8 @@ export interface CardSize {
 /** The rows a card shows, top to bottom. Depends only on what the layout key covers. */
 export function cardLines(node: TopologyNode): CardLine[] {
   const lines: CardLine[] = ['title']
-  if (node.model || node.roleSlug) lines.push('sub')
+  // A Zigbee device always has its second row (area, else model; empty when neither).
+  if (node.model || node.roleSlug || node.kind === 'zigbee-device') lines.push('sub')
   // A Wi-Fi client always has its address row (empty while unknown): an address appearing
   // later must not change the card's height.
   if (node.ip || node.kind === 'wifi-client') lines.push('ip')
@@ -116,13 +119,13 @@ export function cardLines(node: TopologyNode): CardLine[] {
 }
 
 export function jackBands(node: TopologyNode): { north: boolean; south: boolean } {
-  const drawn = (side: string) => node.ports.some((p) => p.side === side && drawsJack(node, p))
+  const drawn = (side: string) => node.ports.some((p) => p.side === side && drawsJack(node, p) && !p.compact)
   return { north: drawn('NORTH'), south: drawn('SOUTH') }
 }
 
 /** Room for the jacks on one side inside the card: 0 without jacks, more with radio labels. */
 export function jackBandHeight(node: TopologyNode, side: 'NORTH' | 'SOUTH'): number {
-  const ports = node.ports.filter((p) => p.side === side && drawsJack(node, p))
+  const ports = node.ports.filter((p) => p.side === side && drawsJack(node, p) && !p.compact)
   if (!ports.length) return 0
   return JACK_BAND_HEIGHT + (ports.some((p) => p.kind === 'radio') ? RADIO_LABEL_EXTRA : 0)
 }
@@ -166,13 +169,13 @@ export function packFrame(members: readonly TopologyNode[]): { width: number; he
 }
 
 export function cardSize(node: TopologyNode): CardSize {
-  if (node.kind === 'wifi-group') {
+  if (node.kind === 'wifi-group' || node.kind === 'zigbee-group') {
     const { width, height } = packFrame(node.members ?? [])
     return { width, height }
   }
   const rows = cardLines(node).reduce((sum, line) => sum + CARD_LINE_HEIGHT[line], 0)
   const height = 2 * (CARD_BORDER + CARD_PADDING_Y) + rows + jackBandHeight(node, 'NORTH') + jackBandHeight(node, 'SOUTH')
-  if (node.kind === 'wifi-client') return { width: WIFI_CARD_WIDTH, height }
+  if (node.kind === 'wifi-client' || node.kind === 'zigbee-device') return { width: WIFI_CARD_WIDTH, height }
   if (!node.switchLike) return { width: CARD_WIDTH, height }
   const south = node.ports.filter((p) => p.side === 'SOUTH').length
   const north = node.ports.length - south
@@ -462,6 +465,7 @@ export const vlanColor = (vid: number) => (PALETTE_VIDS.has(vid) ? `var(--color-
 /** Stroke colour of a cable (and its jacks). */
 export function styleColor(style: CableStyle): string {
   if (style.kind === 'trunk') return 'var(--color-cable-trunk)'
+  if (style.kind === 'zigbee') return 'var(--color-zigbee)'
   if (style.kind === 'access' && style.vlan !== null) return vlanColor(style.vlan)
   return 'var(--color-cable-unknown)'
 }

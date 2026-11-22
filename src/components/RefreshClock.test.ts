@@ -164,6 +164,7 @@ describe('RefreshClock', () => {
       'Containers live · docker-2: Portainer is unreachable.',
       'ARP connecting',
       'Wi-Fi no data yet',
+      'Zigbee no data yet',
     ])
     expect(mountClock({}).findAll('.tip-line').map((l) => l.text())[0]).toBe('NetBox inventory no data yet')
   })

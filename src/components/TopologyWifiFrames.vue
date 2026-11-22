@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { TopologyNode } from '../domain/topology'
+import { ZIGBEE_MESH_NOTE } from '../domain/zigbeeGraph'
 import { styleColor } from '../presentation/topologyLayout'
 
 /**
- * Frames packing the Wi-Fi-only clients of one radio, in the visual language of the device
- * groups: dashed, VLAN colour, a label chip on the bottom border ("Home · 5180 · 3"). Drawn
- * twice: the frames under the cables (`part="frame"`), the labels above them. Not interactive;
- * the member cards inside handle hover and links.
+ * Frames packing the Wi-Fi-only clients of one radio ("Home · 5180 · 3", VLAN colour) or the
+ * Zigbee devices ("Zigbee · 5", Zigbee colour), in the visual language of the device groups:
+ * dashed, a label chip on the bottom border. Drawn twice: the frames under the cables
+ * (`part="frame"`), the labels above them. The member cards inside handle hover and links; the
+ * Zigbee label carries a title (the mesh routes are not shown), so it takes the pointer.
  */
 defineProps<{
   frames: readonly { node: TopologyNode; x: number; y: number; width: number; height: number }[]
@@ -15,7 +17,9 @@ defineProps<{
   traced: ReadonlySet<string> | null
 }>()
 
-const color = (node: TopologyNode) => styleColor(node.ports[0]?.style ?? { kind: 'unknown', vlan: null })
+const color = (node: TopologyNode) =>
+  node.kind === 'zigbee-group' ? 'var(--color-zigbee)' : styleColor(node.ports[0]?.style ?? { kind: 'unknown', vlan: null })
+const title = (node: TopologyNode) => (node.kind === 'zigbee-group' ? ZIGBEE_MESH_NOTE : undefined)
 </script>
 
 <template>
@@ -23,16 +27,18 @@ const color = (node: TopologyNode) => styleColor(node.ports[0]?.style ?? { kind:
     <div
       v-if="part === 'frame'"
       class="wifi-frame"
-      :class="{ 'is-traced': traced?.has(f.node.id), 'is-offline': f.node.offline }"
+      :class="[`frame-${f.node.kind}`, { 'is-traced': traced?.has(f.node.id), 'is-offline': f.node.offline }]"
       :data-frame="f.node.id"
+      :title="title(f.node)"
       :style="{ left: `${f.x}px`, top: `${f.y}px`, width: `${f.width}px`, height: `${f.height}px`, '--group-color': color(f.node) }"
       aria-hidden="true"
     ></div>
     <span
       v-else
       class="wifi-frame-label"
-      :class="{ 'is-traced': traced?.has(f.node.id) }"
+      :class="[`frame-${f.node.kind}`, { 'is-traced': traced?.has(f.node.id) }]"
       :data-frame="f.node.id"
+      :title="title(f.node)"
       :style="{ left: `${f.x + 10}px`, top: `${f.y + f.height}px`, '--group-color': color(f.node) }"
     >
       {{ f.node.label }}
@@ -68,6 +74,10 @@ const color = (node: TopologyNode) => styleColor(node.ports[0]?.style ?? { kind:
   white-space: nowrap;
   color: var(--group-color);
   transition: opacity 0.15s ease;
+}
+.wifi-frame-label.frame-zigbee-group {
+  pointer-events: auto;
+  cursor: help;
 }
 @media (prefers-reduced-motion: reduce) {
   .wifi-frame,

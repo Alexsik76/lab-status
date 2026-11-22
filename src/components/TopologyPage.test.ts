@@ -143,9 +143,89 @@ describe('TopologyPage Wi-Fi in the diagram', () => {
     expect(w.find('.cable.medium-wifi').exists()).toBe(false)
     expect(w.find('.wifi-frame').exists()).toBe(false)
     expect(w.find('.topo-legend [data-legend="wifi"]').exists()).toBe(false)
-    expect(JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY)!)).toEqual({ wired: 'shown', wifi: 'hidden' })
+    expect(JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY)!)).toEqual({ wired: 'shown', wifi: 'hidden', zigbee: 'shown' })
     // A new page starts from the remembered states.
     await mountPage({ wifi: wifiPayload }, 7)
+    localStorage.clear()
+  })
+})
+
+describe('TopologyPage Zigbee layer', () => {
+  const node = (w: VueWrapper, id: string) => w.find(`.topo-card[data-node="${id}"]`)
+
+  it('draws the coordinator port, the device frame and a bead line; traces both ways', async () => {
+    localStorage.clear()
+    const { zigbeePayload } = await import('../__fixtures__/zigbee')
+    const w = await mountPage({ zigbee: zigbeePayload }, 10) // 7 wired + 3 Zigbee devices
+    const port = node(w, '13').find('.jack.shape-zigbee')
+    expect(port.attributes('title')).toBe('Zigbee')
+    expect(port.find('polygon').exists()).toBe(true) // hexagon
+    expect(w.findAll('.topo-card.kind-zigbee-device').map((c) => c.find('.card-name').text())).toEqual(['Attic plug', 'Hall button', 'Porch motion'])
+    expect(w.findAll('.topo-card.kind-zigbee-device').map((c) => c.find('.line-sub').text())).toEqual(['PLUG-2', 'Hall', 'Porch'])
+    expect(node(w, 'zigbee:z1').classes()).toContain('is-offline')
+    expect(node(w, 'zigbee:z1').element.tagName).toBe('DIV') // not a link
+    const label = w.find('.wifi-frame-label.frame-zigbee-group')
+    expect(label.text()).toBe('Zigbee · 3')
+    expect(label.attributes('title')).toContain('mesh routes are not shown')
+    const beads = w.find('.cable.medium-zigbee path')
+    expect(beads.attributes('stroke-dasharray')).toBe('0.01 8')
+    expect(beads.attributes('stroke-width')).toBe('3.4')
+    expect(w.find('.topo-legend [data-legend="zigbee"]').exists()).toBe(true)
+    expect(w.find('.topo-legend [data-legend="zigbee-port"] polygon').exists()).toBe(true)
+
+    await node(w, '13').trigger('pointerenter', { pointerType: 'mouse' })
+    expect(tracedCables(w)).toContain('zigbee:line')
+    expect(w.findAll('.topo-card.kind-zigbee-device.is-traced')).toHaveLength(3)
+    expect(w.find('.wifi-frame.frame-zigbee-group').classes()).toContain('is-traced')
+    await node(w, '13').trigger('pointerleave')
+    await node(w, 'zigbee:z2').trigger('pointerenter', { pointerType: 'mouse' })
+    expect(w.findAll('.topo-card.is-traced').map((c) => c.attributes('data-node')).sort()).toEqual(['13', 'zigbee:z2'])
+    expect(tracedCables(w)).toEqual(['zigbee:line'])
+  })
+
+  it('greys and hides the Zigbee layer', async () => {
+    localStorage.clear()
+    const { zigbeePayload } = await import('../__fixtures__/zigbee')
+    const w = await mountPage({ zigbee: zigbeePayload }, 10)
+    const button = w.find('.layer-btn[data-layer="zigbee"]')
+    await button.trigger('click')
+    expect(w.find('.topo-canvas').classes()).toContain('layer-zigbee-grey')
+    await button.trigger('click')
+    await vi.waitFor(() => expect(w.findAll('.topo-card')).toHaveLength(7), { timeout: 4000 })
+    expect(w.find('.jack.shape-zigbee').exists()).toBe(false)
+    expect(w.find('.cable.medium-zigbee').exists()).toBe(false)
+    expect(w.find('.frame-zigbee-group').exists()).toBe(false)
+    expect(JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY)!).zigbee).toBe('hidden')
+    localStorage.clear()
+  })
+})
+
+describe('TopologyPage camera on Wi-Fi', () => {
+  it('sits in the Cameras frame; the label count and VLAN follow, and it leaves with the Wi-Fi layer', async () => {
+    localStorage.clear()
+    const { groupDevices, groupTopology, device } = await import('../__fixtures__/topologyGroups')
+    const cams = [...groupDevices, device('39', 'cam-wireless', 'camera')]
+    const wifi = {
+      networks: [{ ssid: 'Lenses', band: '2.4' as const, vlan: 40 }],
+      aps: [{ id: 'cap-a', name: 'core', deviceId: '2' }],
+      radios: [{ apId: 'cap-a', ssid: 'Lenses', band: '2.4' as const, channel: 2437, state: 'running' as const }],
+      clients: [{ apId: 'cap-a', ssid: 'Lenses', band: '2.4' as const, mac: '02:CC:00:00:00:39', name: 'cam-wireless', deviceId: '39', ip: null, signal: null, uptime: null }],
+    }
+    const w = mount(TopologyPage, {
+      props: { topology: { data: groupTopology, devices: cams, machineIds: new Set<string>() }, machines: new Map(), presence: new Map(), wifi },
+    })
+    const label = () => w.find('.group-label[data-group="cameras:3"]').text()
+    await vi.waitFor(() => expect(w.find('.topo-card[data-node="39"]').exists()).toBe(true), { timeout: 4000 })
+    expect(label()).toBe('Cameras · 4 · VLAN 40 cams')
+    expect(w.find('.topo-card[data-node="39"] .jack.shape-radio').exists()).toBe(true)
+    expect(w.find('.topo-card[data-node="39"] .jack-name').exists()).toBe(false) // compact port
+    expect(w.find('.cable.medium-wifi').exists()).toBe(true)
+
+    const button = w.find('.layer-btn[data-layer="wifi"]')
+    await button.trigger('click')
+    await button.trigger('click') // hidden
+    await vi.waitFor(() => expect(label()).toBe('Cameras · 3 · VLAN 40 cams'), { timeout: 4000 })
+    expect(w.find('.topo-card[data-node="39"]').exists()).toBe(false)
     localStorage.clear()
   })
 })

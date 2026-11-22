@@ -40,6 +40,10 @@ class Settings:
     services_period_s: float = 180.0
     #: Period of the `inventory` source (NetBox inventory, check targets, MAC directory, NPM).
     inventory_period_s: float = 300.0
+    #: Home Assistant base URL and a long-lived access token (read-only use: one template call);
+    #: the `zigbee` source is off unless both are set.
+    ha_url: str = ""
+    ha_token: str = ""
     #: Seconds the stream sources keep running after the last page disconnected.
     stream_grace_s: float = 10.0
 
@@ -80,4 +84,6 @@ class Settings:
             services_period_s=float(env.get("SERVICES_PERIOD_S") or 180.0),
             inventory_period_s=float(env.get("INVENTORY_PERIOD_S") or 300.0),
             stream_grace_s=float(env.get("STREAM_GRACE_S") or 10.0),
+            ha_url=env.get("HA_URL", "").rstrip("/"),
+            ha_token=env.get("HA_TOKEN", ""),
         )

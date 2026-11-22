@@ -14,21 +14,21 @@ describe('layers', () => {
   })
 
   it('defaults every layer to shown, and the list is the only place a layer is declared', () => {
-    expect(LAYERS.map((l) => l.id)).toEqual(['wired', 'wifi'])
-    expect(defaultLayerStates()).toEqual({ wired: 'shown', wifi: 'shown' })
+    expect(LAYERS.map((l) => l.id)).toEqual(['wired', 'wifi', 'zigbee'])
+    expect(defaultLayerStates()).toEqual({ wired: 'shown', wifi: 'shown', zigbee: 'shown' })
   })
 
   it('remembers the states, ignoring unknown values and broken storage', () => {
     const store = memory()
-    saveLayerStates({ wired: 'grey', wifi: 'hidden' }, store)
-    expect(JSON.parse(store.items.get(LAYER_STORAGE_KEY)!)).toEqual({ wired: 'grey', wifi: 'hidden' })
-    expect(loadLayerStates(store)).toEqual({ wired: 'grey', wifi: 'hidden' })
-    store.setItem(LAYER_STORAGE_KEY, '{"wired":"purple","zigbee":"grey"}')
-    expect(loadLayerStates(store)).toEqual({ wired: 'shown', wifi: 'shown' })
+    saveLayerStates({ wired: 'grey', wifi: 'hidden', zigbee: 'grey' }, store)
+    expect(JSON.parse(store.items.get(LAYER_STORAGE_KEY)!)).toEqual({ wired: 'grey', wifi: 'hidden', zigbee: 'grey' })
+    expect(loadLayerStates(store)).toEqual({ wired: 'grey', wifi: 'hidden', zigbee: 'grey' })
+    store.setItem(LAYER_STORAGE_KEY, '{"wired":"purple","lora":"grey","zigbee":"pink"}')
+    expect(loadLayerStates(store)).toEqual({ wired: 'shown', wifi: 'shown', zigbee: 'shown' })
     store.setItem(LAYER_STORAGE_KEY, 'not json')
-    expect(loadLayerStates(store)).toEqual({ wired: 'shown', wifi: 'shown' })
+    expect(loadLayerStates(store)).toEqual({ wired: 'shown', wifi: 'shown', zigbee: 'shown' })
     const throwing = { getItem: () => { throw new Error('denied') }, setItem: () => { throw new Error('denied') } }
-    expect(loadLayerStates(throwing)).toEqual({ wired: 'shown', wifi: 'shown' })
-    expect(() => saveLayerStates({ wired: 'grey', wifi: 'grey' }, throwing)).not.toThrow()
+    expect(loadLayerStates(throwing)).toEqual({ wired: 'shown', wifi: 'shown', zigbee: 'shown' })
+    expect(() => saveLayerStates({ wired: 'grey', wifi: 'grey', zigbee: 'grey' }, throwing)).not.toThrow()
   })
 })
