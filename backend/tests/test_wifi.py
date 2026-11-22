@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from app.arp import ClientHints
 from app.netbox import MacMatch
 from app.routeros import Reply
-from app.wifi import EMPTY, WifiSource, band_of, build_wifi, read_menus, uptime_text
+from app.wifi import EMPTY, WifiSource, band_of, build_wifi, radio_state, read_menus, uptime_text
 
 # Invented network: three access points (one known to NetBox by MAC, one by name, one unknown).
 CAPS = [
@@ -92,6 +92,40 @@ def test_radio_states_running_disabled_down() -> None:
     assert by[("[02:AA:00:00:00:01]", "Home")]["state"] == "down"  # enabled but not running
     shed = by[("[02:AA:00:00:00:03]", "Things")]
     assert shed == {"apId": "[02:AA:00:00:00:03]", "ssid": "Things", "band": "2.4", "channel": None, "state": "disabled"}
+
+
+def test_broadcasting_radio_without_clients_is_running_despite_the_running_flag() -> None:
+    # Live case: current-state running-ap, flags MDB (no R), no registered clients.
+    quiet = {"name": "hall-5g", "mac-address": "02:AA:00:00:01:02", "master-interface": "none",
+             "configuration": "cfg-home-5", "current-channel": "5745/20-Ceee/ac/P(20dBm)",
+             "current-state": "running-ap", "disabled": "false", "running": "false"}
+    menus = {**MENUS, "interfaces": [i for i in INTERFACES if i["name"] != "hall-5g"] + [quiet], "registrations": []}
+    radios = build_wifi(menus, MACS, DEVICE_IDS, lambda mac: ClientHints())["radios"]
+    home = next(r for r in radios if r["ssid"] == "Home")
+    assert home == {"apId": "[02:AA:00:00:00:01]", "ssid": "Home", "band": "5", "channel": 5745, "state": "running"}
+
+
+def test_slave_takes_its_masters_current_state() -> None:
+    master = {"name": "yard-2g", "mac-address": "02:AA:00:00:02:01", "master-interface": "none",
+              "configuration": "cfg-things", "current-channel": "2462/20/gn(20dBm)",
+              "current-state": "running-ap", "disabled": "false", "running": "false"}
+    slave = {"name": "yard-2g-1", "mac-address": "06:AA:00:00:02:01", "master-interface": "yard-2g",
+             "configuration": "cfg-guests", "disabled": "false", "running": "false"}
+    menus = {**MENUS, "interfaces": [i for i in INTERFACES if i["name"] != "yard-2g"] + [master, slave],
+             "registrations": []}
+    radios = build_wifi(menus, MACS, DEVICE_IDS, lambda mac: ClientHints())["radios"]
+    guests = next(r for r in radios if r["apId"] == "[02:AA:00:00:00:02]" and r["ssid"] == "Guests")
+    assert guests == {"apId": "[02:AA:00:00:00:02]", "ssid": "Guests", "band": "2.4", "channel": 2462, "state": "running"}
+
+
+def test_radio_state_rules() -> None:
+    assert radio_state({"disabled": "true", "current-state": "running-ap"}, {}) == "disabled"
+    assert radio_state({}, {"disabled": "true"}) == "disabled"  # the master is disabled
+    assert radio_state({"current-state": "running-ap", "running": "false"}, {}) == "running"
+    assert radio_state({"running": "true"}, {}) == "running"
+    assert radio_state({"current-state": "searching", "running": "false"}, {}) == "down"
+    assert radio_state({"running": "false"}, {"current-state": "running-ap"}) == "running"  # slave
+    assert radio_state({"current-state": "disabled", "running": "false"}, {"current-state": "running-ap"}) == "down"
 
 
 def test_client_naming_order_and_fields() -> None:
