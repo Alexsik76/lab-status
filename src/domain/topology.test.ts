@@ -12,6 +12,7 @@ import {
   GROUP_DEFINITIONS,
   nominalSpeedKbps,
   speedBucket,
+  traceOf,
 } from './topology'
 import { topologyDeviceIds } from './topologyLinks'
 
@@ -298,5 +299,33 @@ describe('groups', () => {
     expect(extra.map((x) => x.id)).toEqual(['cameras:3', 'proxmox'])
     const nvr = findGroups(g.nodes, g.edges, [{ id: 'nvr', label: 'Recorders', rule: { kind: 'role', role: 'nvr' } }])
     expect(nvr).toEqual([]) // one recorder only
+  })
+})
+
+describe('traceOf', () => {
+  it('collects the cables, neighbours and ports of a device with several cables', () => {
+    const t = traceOf(graph, '2') // sw-core-01: uplink to the router, five servers below
+    expect([...t.edgeIds].sort()).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect([...t.nodeIds].sort()).toEqual(['1', '10', '11', '12', '13', '2'])
+    expect([...t.portIds].sort()).toEqual(['1001', '1002', '101', '1101', '1201', '1301', '201', '202', '203', '204', '205', '206'])
+    // One hop only: the router's other cable (to host-print) is not traced.
+    expect(t.edgeIds.has('7')).toBe(false)
+    expect(t.nodeIds.has('14')).toBe(false)
+  })
+
+  it('lists a neighbour once when two cables lead to it', () => {
+    const t = traceOf(graph, '10') // storage-nas: two cables to the switch
+    expect([...t.edgeIds].sort()).toEqual(['5', '6'])
+    expect([...t.nodeIds].sort()).toEqual(['10', '2'])
+    expect([...t.portIds].sort()).toEqual(['1001', '1002', '205', '206'])
+  })
+
+  it('has only the device itself when it has no cables, and nothing for an unknown id', () => {
+    const lone = { nodes: [...graph.nodes, { ...graph.nodes[0], id: 'lone' }], edges: graph.edges }
+    const t = traceOf(lone, 'lone')
+    expect([...t.nodeIds]).toEqual(['lone'])
+    expect(t.edgeIds.size + t.portIds.size).toBe(0)
+    const none = traceOf(graph, 'nope')
+    expect(none.nodeIds.size + none.edgeIds.size + none.portIds.size).toBe(0)
   })
 })

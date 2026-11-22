@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import type { ArpPresenceIndex } from '../domain/arp'
 import { arpObjectKey } from '../domain/arp'
 import type { DeviceRecord, Machine } from '../domain/model'
-import { buildTopologyGraph } from '../domain/topology'
+import { buildTopologyGraph, traceOf } from '../domain/topology'
 import type { RawTopology } from '../types/topology'
 import { useTopologyLayout } from '../composables/useTopologyLayout'
 import { JACK_SIZE, fitScale, jackShape, speedTag } from '../presentation/topologyLayout'
@@ -51,6 +51,16 @@ const { placement, phase, error } = useTopologyLayout(graph)
 const viewport = ref<HTMLElement | null>(null)
 const { width: viewportWidth } = useElementSize(viewport)
 const scale = computed(() => fitScale(viewportWidth.value, placement.value?.width ?? 0))
+
+/**
+ * Hover trace: the one device being pointed at (or focused from the keyboard). Its cables,
+ * neighbours and their ports are emphasised, the rest toned down.
+ */
+const tracedId = ref<string | null>(null)
+const trace = computed(() => (graph.value && tracedId.value ? traceOf(graph.value, tracedId.value) : null))
+const onTrace = (deviceId: string | null) => {
+  tracedId.value = deviceId
+}
 
 const isEmpty = computed(() => graph.value !== null && graph.value.edges.length === 0)
 
@@ -109,10 +119,17 @@ const tags = computed(() => {
         <div class="topo-sizer" :style="{ width: `${placement.width * scale}px`, height: `${placement.height * scale}px` }">
           <div
             class="topo-canvas"
+            :class="{ 'is-tracing': !!trace }"
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
             <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
-            <TopologyCables :edges="graph.edges" :routes="placement.edges" :width="placement.width" :height="placement.height" />
+            <TopologyCables
+              :edges="graph.edges"
+              :routes="placement.edges"
+              :width="placement.width"
+              :height="placement.height"
+              :traced="trace?.edgeIds ?? null"
+            />
             <TopologyCard
               v-for="c in cards"
               :key="c.node.id"
@@ -120,8 +137,17 @@ const tags = computed(() => {
               :placed="c.placed"
               :machine="c.machine"
               :presence="c.presence"
+              :traced="trace?.nodeIds.has(c.node.id) ?? false"
+              :traced-ports="trace?.portIds ?? null"
+              @trace="onTrace"
             />
-            <span v-for="t in tags" :key="t.id" class="speed-tag" :style="{ left: `${t.x}px`, top: `${t.y - 8}px` }">
+            <span
+              v-for="t in tags"
+              :key="t.id"
+              class="speed-tag"
+              :class="{ 'is-traced': trace?.edgeIds.has(t.id) }"
+              :data-cable="t.id"
+              :style="{ left: `${t.x}px`, top: `${t.y - 8}px` }">
               {{ t.text }}
             </span>
             <TopologyGroups part="label" :groups="placement.groups" :vlans="graph.vlans" />
@@ -171,7 +197,21 @@ const tags = computed(() => {
   }
 }
 
+/*
+ * Hover trace, keyed on the canvas's `.is-tracing`: cards that are neither the traced device
+ * nor its neighbours, the untraced jacks of a traced card, untraced speed tags and the group
+ * frames and labels fade to 45 % (other cables fade to 25 % in TopologyCables).
+ */
+.is-tracing :deep(.topo-card:not(.is-traced)),
+.is-tracing :deep(.topo-card.is-traced .jack:not(.is-traced)),
+.is-tracing :deep(.topo-card.is-traced .entry:not(.is-traced)),
+.is-tracing :deep(.topo-group),
+.is-tracing :deep(.group-label),
+.is-tracing .speed-tag:not(.is-traced) {
+  opacity: 0.45;
+}
 .speed-tag {
+  transition: opacity 0.15s ease;
   position: absolute;
   transform: translateY(-100%);
   padding: 0 4px;
@@ -182,6 +222,12 @@ const tags = computed(() => {
   line-height: 13px;
   color: var(--color-text-secondary);
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speed-tag {
+    transition: none;
+  }
 }
 
 .topo-loading {

@@ -87,6 +87,17 @@ const items = computed(() => {
   white-space: nowrap;
   color: var(--color-text-muted);
 }
+/* Hover trace: frames and labels fade (TopologyPage, keyed on `.is-tracing`). */
+.topo-group,
+.group-label {
+  transition: opacity 0.15s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .topo-group,
+  .group-label {
+    transition: none;
+  }
+}
 .group-label.has-vlan {
   color: var(--group-color);
 }

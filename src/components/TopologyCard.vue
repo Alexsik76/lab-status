@@ -33,7 +33,25 @@ const props = defineProps<{
   machine?: Machine | null
   /** ARP presence of a device that is not a Hosts machine. */
   presence?: 'up' | 'down' | null
+  /** Hover trace: this device is the traced one or one of its neighbours. */
+  traced?: boolean
+  /** Hover trace: the ports at the ends of the traced cables (null when nothing is traced). */
+  tracedPorts?: ReadonlySet<string> | null
 }>()
+
+/**
+ * Hover trace: pointing at the card (mouse or pen, not touch) or focusing it from the keyboard
+ * asks the page to trace this device; leaving or blurring ends it. A tap only follows the link.
+ */
+const emit = defineEmits<{ trace: [deviceId: string | null] }>()
+const onPointerEnter = (e: PointerEvent) => {
+  if (e.pointerType !== 'touch') emit('trace', props.node.id)
+}
+const onFocusIn = (e: FocusEvent) => {
+  const el = e.currentTarget as HTMLElement
+  if (el.matches(':focus-visible')) emit('trace', props.node.id)
+}
+const endTrace = () => emit('trace', null)
 
 const subtitle = computed(() => props.node.model || props.node.roleSlug || '')
 const href = computed(() => (props.node.isMachine && props.machine ? routeHash('hosts', props.node.id) : null))
@@ -84,7 +102,7 @@ const jacks = computed(() =>
     :is="href ? 'a' : 'div'"
     :href="href ?? undefined"
     class="topo-card"
-    :class="{ 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike }"
+    :class="{ 'is-offline': node.offline, 'is-link': !!href, 'is-switch': node.switchLike, 'is-traced': traced }"
     :style="{
       left: `${placed.x}px`,
       top: `${placed.y}px`,
@@ -94,6 +112,11 @@ const jacks = computed(() =>
     }"
     :data-focus-device="node.id"
     :aria-label="href ? `${node.name}: show on the Hosts page` : undefined"
+    @pointerenter="onPointerEnter"
+    @pointerleave="endTrace"
+    @mouseleave="endTrace"
+    @focusin="onFocusIn"
+    @focusout="endTrace"
   >
     <div class="card-body" :class="`body-${badge}`" :style="bodyStyle">
       <div
@@ -128,7 +151,7 @@ const jacks = computed(() =>
       <span
         v-if="node.switchLike"
         class="jack"
-        :class="[`shape-${j.shape}`, j.north ? 'at-north' : 'at-south']"
+        :class="[`shape-${j.shape}`, j.north ? 'at-north' : 'at-south', { 'is-traced': tracedPorts?.has(j.port.id) }]"
         :style="{
           left: `${j.x - j.size.width / 2}px`,
           [j.north ? 'top' : 'bottom']: `${-j.size.height / 2}px`,
@@ -145,7 +168,7 @@ const jacks = computed(() =>
       <span
         v-else
         class="entry"
-        :class="j.north ? 'at-north' : 'at-south'"
+        :class="[j.north ? 'at-north' : 'at-south', { 'is-traced': tracedPorts?.has(j.port.id) }]"
         :style="{ left: `${j.x}px`, '--jack-color': j.color }"
         :title="j.port.name"
       ></span>
@@ -164,7 +187,7 @@ const jacks = computed(() =>
   background: var(--color-bg-tile);
   color: inherit;
   text-decoration: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
 }
 .topo-card.is-link {
   cursor: pointer;
@@ -179,6 +202,29 @@ const jacks = computed(() =>
 .topo-card.is-link:focus-visible .card-name {
   color: var(--color-text-accent);
 }
+/*
+ * Hover trace: the traced device and its neighbours get a brighter border, their traced jacks
+ * glow and their port names stand out. The toning down of everything else is keyed on the
+ * canvas's `.is-tracing` and lives in TopologyPage.
+ */
+.topo-card.is-traced {
+  border-color: var(--color-text-dim);
+}
+.jack,
+.entry {
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+.jack.is-traced {
+  filter: drop-shadow(0 0 3px var(--jack-color));
+}
+.jack.is-traced .jack-name {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+.entry.is-traced {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--jack-color) 45%, transparent);
+}
+
 /* Dim the content, not the card: a focus outline on it stays bright. */
 .topo-card.is-offline > * {
   opacity: 0.45;
@@ -295,7 +341,9 @@ const jacks = computed(() =>
 
 @media (prefers-reduced-motion: reduce) {
   .topo-card,
-  .card-name {
+  .card-name,
+  .jack,
+  .entry {
     transition: none;
   }
 }
