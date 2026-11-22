@@ -3,7 +3,7 @@ import type { SourceState } from '../types/stream'
 import { useEventStream, type EventStream } from './useEventStream'
 
 /** The backend sources, in the order the clock's tooltip lists them. */
-export const SOURCE_NAMES = ['inventory', 'services', 'proxmox', 'metrics', 'containers', 'arp'] as const
+export const SOURCE_NAMES = ['inventory', 'services', 'proxmox', 'metrics', 'containers', 'arp', 'wifi'] as const
 export type SourceName = (typeof SOURCE_NAMES)[number]
 
 /** The latest `status` event of a source (the ARP mirror's carries no time or period). */

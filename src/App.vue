@@ -12,6 +12,7 @@ import { useArp } from './composables/useArp'
 import { useFocusTarget } from './composables/useFocusTarget'
 import { useLab } from './composables/useLab'
 import { useSourceStatuses } from './composables/useSourceStatuses'
+import { useWifi } from './composables/useWifi'
 import { countViews } from './domain/arp'
 import type { Machine } from './domain/model'
 import { statusPhaseKey, topologyDevicesKey } from './injection'
@@ -26,6 +27,7 @@ const TopologyPage = defineAsyncComponent({
 
 const arp = useArp()
 const sources = useSourceStatuses()
+const wifi = useWifi()
 const labState = useLab(arp.presence)
 const lab = reactive(labState)
 provide(statusPhaseKey, labState.livePhase)
@@ -132,6 +134,8 @@ onMounted(() => {
             :machines="machinesById"
             :presence="arp.presence.value"
             :unavailable="topologyUnavailable"
+            :wifi="wifi.data.value"
+            :wifi-error="wifi.errorMessage.value"
           />
         </template>
       </div>

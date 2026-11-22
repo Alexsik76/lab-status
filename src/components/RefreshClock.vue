@@ -33,6 +33,7 @@ const LABELS: Record<SourceName, string> = {
   metrics: 'Proxmox graphs',
   containers: 'Containers',
   arp: 'ARP',
+  wifi: 'Wi-Fi',
 }
 const STREAMING: ReadonlySet<SourceName> = new Set(['containers', 'arp'])
 

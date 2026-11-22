@@ -9,6 +9,7 @@ directory comes from the `inventory` source (`set_macs`).
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 from .hub import Event, Source
@@ -16,6 +17,15 @@ from .netbox import MacMatch
 from .routeros import RouterOsConnection, RouterOsError
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ClientHints:
+    """What the mirror knows about a MAC, for naming Wi-Fi clients: its DHCP lease and address."""
+
+    lease_comment: str | None = None
+    lease_host_name: str | None = None
+    ip: str | None = None
 
 ACTIVE = frozenset({"reachable", "stale", "delay", "probe", "permanent"})
 DISCONNECTED = frozenset({"failed", "incomplete"})
@@ -135,6 +145,18 @@ class ArpSource(Source):
         changed = old is None or any(old.get(k) != merged.get(k) for k in relevant)
         was_static = old is not None and not _flag(old.get("dynamic"))
         return changed and (was_static or not _flag(merged.get("dynamic")))
+
+    def hints(self, mac: str) -> ClientHints:
+        """For the Wi-Fi source: the DHCP lease (comment, host name, address) and the ARP address
+        of a MAC, from the mirror's tables (empty while the mirror is not live)."""
+        mac = mac.upper()
+        lease = next((le for le in self._leases.values() if le.get("mac-address", "").upper() == mac), None)
+        arp_ip = next((r["address"] for r in self._rows.values() if r["mac"] == mac and r["address"]), None)
+        return ClientHints(
+            lease_comment=(lease or {}).get("comment") or None,
+            lease_host_name=(lease or {}).get("host-name") or None,
+            ip=(lease or {}).get("address") or arp_ip,
+        )
 
     def _snapshot_event(self) -> Event:
         return {"type": "snapshot", "rows": [self.enrich(r) for r in self._rows.values()]}

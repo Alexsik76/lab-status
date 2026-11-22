@@ -163,6 +163,7 @@ describe('RefreshClock', () => {
       'Proxmox graphs 20 s ago',
       'Containers live · docker-2: Portainer is unreachable.',
       'ARP connecting',
+      'Wi-Fi no data yet',
     ])
     expect(mountClock({}).findAll('.tip-line').map((l) => l.text())[0]).toBe('NetBox inventory no data yet')
   })
@@ -180,7 +181,7 @@ describe('RefreshClock', () => {
     vi.advanceTimersByTime(5000)
     await wrapper.vm.$nextTick()
     expect(wrapper.find('button').attributes('aria-label')).toBe(`Refresh, data 10 s old, updated ${hhmmss(10)}`)
-    expect(wrapper.findAll('.tip-line').at(-1)?.text()).toBe('ARP paused')
+    expect(wrapper.find('.tip-line[data-source="arp"]').text()).toBe('ARP paused')
     await wrapper.setProps({ streamState: 'open' })
     expect(wrapper.find('button').attributes('aria-label')).toBe(`Refresh, data 15 s old, updated ${hhmmss(10)}`)
   })

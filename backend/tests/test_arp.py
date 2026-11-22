@@ -312,3 +312,15 @@ async def test_a_second_row_for_an_active_address_changes_nothing() -> None:
     ])
     assert seen == []
     await hub.aclose()
+
+
+def test_hints_for_wifi_clients_from_leases_and_arp_rows() -> None:
+    source = ArpSource(lambda: None)  # type: ignore[arg-type,return-value]
+    source.apply_lease({".id": "*1", "mac-address": "02:00:00:00:00:aa", "address": "192.0.2.10",
+                        "comment": "desk lamp", "host-name": "esp-1", "dynamic": "true"})
+    source.apply(_attrs("*9", "reachable", mac="02:00:00:00:00:BB", address="192.0.2.20"), broadcast=False)
+    lamp = source.hints("02:00:00:00:00:AA")
+    assert (lamp.lease_comment, lamp.lease_host_name, lamp.ip) == ("desk lamp", "esp-1", "192.0.2.10")
+    other = source.hints("02:00:00:00:00:bb")
+    assert (other.lease_comment, other.lease_host_name, other.ip) == (None, None, "192.0.2.20")
+    assert source.hints("02:00:00:00:00:CC").ip is None
