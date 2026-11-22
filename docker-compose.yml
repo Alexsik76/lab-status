@@ -34,3 +34,5 @@ services:
       - CONTAINERS_PERIOD_S
       - INVENTORY_PERIOD_S
       - STREAM_GRACE_S
+      - HA_URL
+      - HA_TOKEN
