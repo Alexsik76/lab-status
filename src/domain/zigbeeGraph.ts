@@ -49,9 +49,9 @@ export function mergeZigbeePlan(prev: ZigbeePlan | null, data: ZigbeeData): { ne
   return { next, structural: zigbeePlanKey(next) !== zigbeePlanKey(prev) }
 }
 
-/** Ids of the devices present and available right now. */
+/** Ids of the devices present right now and not known to be unavailable (unknown counts as available). */
 export function zigbeeAvailable(data: ZigbeeData | null): ReadonlySet<string> {
-  return new Set((data?.devices ?? []).filter((d) => d.available).map((d) => d.id))
+  return new Set((data?.devices ?? []).filter((d) => d.available !== false).map((d) => d.id))
 }
 
 /**

@@ -41,6 +41,13 @@ describe('Zigbee in the graph', () => {
     ])
   })
 
+  it('does not dim a device whose availability is unknown (no enabled entity in Home Assistant)', () => {
+    const data = { ...zigbeePayload, devices: [...zigbeePayload.devices, { id: 'z4', name: 'Range extender', manufacturer: 'Acme', model: 'RPT-1', area: null, available: null }] }
+    expect([...zigbeeAvailable(data)].sort()).toEqual(['z2', 'z3', 'z4'])
+    const members = build(data).graph.nodes.find((n) => n.id === ZIGBEE_FRAME_ID)!.members!
+    expect(members.find((m) => m.name === 'Range extender')!.offline).toBe(false)
+  })
+
   it('draws one bead line from the port to the frame top', () => {
     const { graph } = build()
     const line = graph.edges.filter((e) => e.medium === 'zigbee')

@@ -6,8 +6,11 @@ export interface ZigbeeDevice {
   manufacturer: string | null
   model: string | null
   area: string | null
-  /** At least one of its entities is not `unavailable`. */
-  available: boolean
+  /**
+   * true: at least one of its enabled entities is not `unavailable`; false: none is; null: it has
+   * no enabled entity, so its availability is unknown (shown like an available device).
+   */
+  available: boolean | null
 }
 
 export interface ZigbeeData {
