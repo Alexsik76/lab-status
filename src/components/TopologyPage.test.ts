@@ -216,7 +216,7 @@ describe('TopologyPage camera on Wi-Fi', () => {
     })
     const label = () => w.find('.group-label[data-group="cameras:3"]').text()
     await vi.waitFor(() => expect(w.find('.topo-card[data-node="39"]').exists()).toBe(true), { timeout: 4000 })
-    expect(label()).toBe('Cameras · 4 · VLAN 40 cams')
+    expect(label()).toBe('VLAN 40 cams · 4 cameras')
     expect(w.find('.topo-card[data-node="39"] .jack.shape-radio').exists()).toBe(true)
     expect(w.find('.topo-card[data-node="39"] .jack-name').exists()).toBe(false) // compact port
     expect(w.find('.cable.medium-wifi').exists()).toBe(true)
@@ -224,7 +224,7 @@ describe('TopologyPage camera on Wi-Fi', () => {
     const button = w.find('.layer-btn[data-layer="wifi"]')
     await button.trigger('click')
     await button.trigger('click') // hidden
-    await vi.waitFor(() => expect(label()).toBe('Cameras · 3 · VLAN 40 cams'), { timeout: 4000 })
+    await vi.waitFor(() => expect(label()).toBe('VLAN 40 cams · 3 cameras'), { timeout: 4000 })
     expect(w.find('.topo-card[data-node="39"]').exists()).toBe(false)
     localStorage.clear()
   })
