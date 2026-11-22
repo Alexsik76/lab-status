@@ -80,4 +80,23 @@ describe('TopologyCard height = the size given to ELK', () => {
     expect(wrapper.find('.line-summary').text()).toBe('0 guests · 0 containers')
     expect(wrapper.find('.line-title .state').attributes('data-state')).toBe('up')
   })
+
+  it('shows the state as a dot on an ordinary card, the word as tooltip and screen-reader text', () => {
+    const { wrapper } = renderedHeight(nodeOf('node-alpha'), { machine: machine('11', true) })
+    const state = wrapper.find('.line-title .state')
+    expect(state.classes()).toContain('variant-dot')
+    expect(state.attributes('title')).toBe('online')
+    expect(state.find('.sr-only').text()).toBe('online')
+    expect(state.find('.status-text').exists()).toBe(false)
+    expect(wrapper.find('.line-title').classes()).toContain('badge-dot')
+    expect(wrapper.find('.card-name').attributes('title')).toBe('node-alpha')
+  })
+
+  it('keeps the full badge on a wide switch card', () => {
+    const { wrapper } = renderedHeight(nodeOf('sw-core-01'), { presence: 'down' })
+    const state = wrapper.find('.line-title .state')
+    expect(state.classes()).toContain('variant-machine')
+    expect(state.text()).toBe('unreachable')
+    expect(wrapper.find('.line-title').classes()).toContain('badge-full')
+  })
 })
