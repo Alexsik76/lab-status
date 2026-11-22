@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { DeviceRecord } from '../domain/model'
 import type { RawTopologyVlan } from '../types/topology'
+import { groupLabel } from '../presentation/groupLabel'
 import { vlanColor, type PlacedGroup } from '../presentation/topologyLayout'
 
 /**
- * Group rectangles: dashed, rounded, a label at the top left with the group's name, member
- * count and common VLAN. Not interactive. Drawn twice: the frames under the cables and cards
+ * Group rectangles: dashed, rounded, a label with the group's name or composition and common
+ * VLAN (`groupLabel`). Not interactive. Drawn twice: the frames under the cables and cards
  * (`part="frame"`), the labels on a page-coloured chip above the cables (`part="label"`). The
  * chip sits at the bottom-left corner, centred on the bottom border: cables enter a group from
  * the top, so nothing runs through the text there.
@@ -16,21 +18,18 @@ const LABEL_INSET = 10
 const props = defineProps<{
   groups: readonly PlacedGroup[]
   vlans: readonly RawTopologyVlan[]
+  /** NetBox device records, to tell the members apart (cameras, recorders). */
+  devices: readonly DeviceRecord[]
   part: 'frame' | 'label'
 }>()
 
 const items = computed(() => {
-  const names = new Map(props.vlans.map((v) => [v.vid, v.name]))
-  return props.groups.map((p) => {
-    const { group } = p
-    const vlan = group.vlan
-    const vlanText = vlan === null ? '' : ` · VLAN ${vlan}${names.get(vlan) ? ` ${names.get(vlan)}` : ''}`
-    return {
-      ...p,
-      label: `${group.label} · ${group.memberIds.length}${vlanText}`,
-      color: vlan === null ? null : vlanColor(vlan),
-    }
-  })
+  const devices = new Map(props.devices.map((d) => [d.id, d]))
+  return props.groups.map((p) => ({
+    ...p,
+    label: groupLabel(p.group, devices, props.vlans),
+    color: p.group.vlan === null ? null : vlanColor(p.group.vlan),
+  }))
 })
 </script>
 

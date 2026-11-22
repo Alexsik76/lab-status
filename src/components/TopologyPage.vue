@@ -224,7 +224,7 @@ const tags = computed(() => {
             :class="[{ 'is-tracing': !!trace }, `layer-wired-${layers.wired}`, `layer-wifi-${layers.wifi}`, `layer-zigbee-${layers.zigbee}`]"
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
-            <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
+            <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" :devices="topology?.devices ?? []" />
             <TopologyWifiFrames part="frame" :frames="frames" :traced="trace?.nodeIds ?? null" />
             <TopologyCables
               :edges="graph.edges"
@@ -255,7 +255,7 @@ const tags = computed(() => {
               :style="{ left: `${t.x}px`, top: `${t.y - 8}px` }">
               {{ t.text }}
             </span>
-            <TopologyGroups part="label" :groups="placement.groups" :vlans="graph.vlans" />
+            <TopologyGroups part="label" :groups="placement.groups" :vlans="graph.vlans" :devices="topology?.devices ?? []" />
             <TopologyWifiFrames part="label" :frames="frames" :traced="trace?.nodeIds ?? null" />
           </div>
         </div>
