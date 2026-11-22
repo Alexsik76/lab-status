@@ -25,6 +25,12 @@ import {
   toElkGraph,
   trunkWidths,
   vlanColor,
+  JACK_SIZE,
+  JACK_LABEL_GAP,
+  JACK_LABEL_HEIGHT,
+  jackShape,
+  type ElkGroupInput,
+  type ElkNodeInput,
 } from './topologyLayout'
 
 const devices = normalizeInventory(rawInventory).devices
@@ -34,7 +40,7 @@ const nodeOf = (name: string) => graph.nodes.find((n) => n.name === name)!
 
 describe('toElkGraph', () => {
   const elk = toElkGraph(graph)
-  const child = (deviceId: string) => elk.children.find((c) => c.id === `d${deviceId}`)!
+  const child = (deviceId: string) => elk.children.find((c) => c.id === `d${deviceId}`) as ElkNodeInput
 
   it('fixes the port order of switch-like devices, SOUTH ports indexed from the right', () => {
     const sw = child('2')
@@ -100,6 +106,58 @@ describe('toElkGraph', () => {
     expect(layoutKey(same)).toBe(layoutKey(graph))
     const fewer = buildTopologyGraph({ ...topologyPayload, cables: topologyPayload.cables.slice(1) }, devices, machines)
     expect(layoutKey(fewer)).not.toBe(layoutKey(graph))
+  })
+})
+
+describe('groups in the ELK input', () => {
+  it('nests the members under one node per group, edges stay at the root', async () => {
+    const { groupDevices, groupTopology } = await import('../__fixtures__/topologyGroups')
+    const g = buildTopologyGraph(groupTopology, groupDevices)
+    const elk = toElkGraph(g)
+    expect(elk.layoutOptions['elk.hierarchyHandling']).toBe('INCLUDE_CHILDREN')
+    const cams = elk.children.find((c) => c.id === 'gcameras:3') as ElkGroupInput
+    expect(cams.children.map((c) => c.id)).toEqual(['d31', 'd32', 'd33'])
+    expect(cams.layoutOptions['elk.padding']).toBe('[top=28,left=12,bottom=12,right=12]')
+    const hv = elk.children.find((c) => c.id === 'gproxmox') as ElkGroupInput
+    expect(hv.children.map((c) => c.id)).toEqual(['d41', 'd42'])
+    const rootIds = elk.children.map((c) => c.id)
+    for (const member of ['d31', 'd32', 'd33', 'd41', 'd42']) expect(rootIds).not.toContain(member)
+    expect(elk.edges).toHaveLength(g.edges.length)
+  })
+
+  it('has no hierarchy option without groups, and a key that changes with membership', async () => {
+    expect(toElkGraph(graph).layoutOptions['elk.hierarchyHandling']).toBeUndefined()
+    const { groupDevices, groupTopology } = await import('../__fixtures__/topologyGroups')
+    const g = buildTopologyGraph(groupTopology, groupDevices)
+    expect(layoutKey({ ...g, groups: g.groups.slice(0, 1) })).not.toBe(layoutKey(g))
+    const fewer = { ...g, groups: [{ ...g.groups[0], memberIds: g.groups[0].memberIds.slice(0, 2) }, ...g.groups.slice(1)] }
+    expect(layoutKey(fewer)).not.toBe(layoutKey(g))
+  })
+
+  it('has no post-compaction (rows stay aligned)', () => {
+    expect(toElkGraph(graph).layoutOptions['elk.layered.compaction.postCompaction.strategy']).toBeUndefined()
+    expect(toElkGraph(graph).layoutOptions['elk.layered.nodePlacement.strategy']).toBe('BRANDES_KOEPF')
+  })
+})
+
+describe('jacks', () => {
+  it('picks the shape by interface type', () => {
+    for (const t of ['1000base-t', '2.5gbase-t', '10gbase-t', '100base-tx']) expect(jackShape(t)).toBe('rj45')
+    for (const t of ['1000base-x-sfp', '10gbase-x-sfpp', '25gbase-x-sfp28', '40gbase-x-qsfpp', '100gbase-x-qsfp28', '1000base-x-gbic'])
+      expect(jackShape(t)).toBe('sfp')
+    for (const t of ['virtual', 'ieee802.11ax', 'other', null]) expect(jackShape(t)).toBe('plain')
+  })
+
+  it('fits the port pitch and the jack band', () => {
+    for (const s of Object.values(JACK_SIZE)) expect(s.width).toBeLessThanOrEqual(42 - 4)
+    const tallest = Math.max(...Object.values(JACK_SIZE).map((s) => s.height))
+    expect(JACK_BAND_HEIGHT).toBeGreaterThanOrEqual(tallest / 2 + JACK_LABEL_GAP + JACK_LABEL_HEIGHT)
+  })
+
+  it('gives ELK each port as wide as its jack', () => {
+    const sw = toElkGraph(graph).children.find((c) => c.id === 'd2') as ElkNodeInput
+    expect(sw.ports.find((p) => p.id === 'p201')!.width).toBe(JACK_SIZE.sfp.width)
+    expect(sw.ports.find((p) => p.id === 'p202')!.width).toBe(JACK_SIZE.rj45.width)
   })
 })
 

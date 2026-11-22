@@ -7,11 +7,12 @@ import type { DeviceRecord, Machine } from '../domain/model'
 import { buildTopologyGraph } from '../domain/topology'
 import type { RawTopology } from '../types/topology'
 import { useTopologyLayout } from '../composables/useTopologyLayout'
-import { fitScale, speedTag } from '../presentation/topologyLayout'
+import { JACK_SIZE, fitScale, jackShape, speedTag } from '../presentation/topologyLayout'
 import LoadingSpinner from './LoadingSpinner.vue'
 import NoticeBanner from './NoticeBanner.vue'
 import TopologyCables from './TopologyCables.vue'
 import TopologyCard from './TopologyCard.vue'
+import TopologyGroups from './TopologyGroups.vue'
 import TopologyLegend from './TopologyLegend.vue'
 
 /**
@@ -71,12 +72,17 @@ const tags = computed(() => {
   const g = graph.value
   const p = placement.value
   if (!g || !p) return []
+  const nodes = new Map(g.nodes.map((n) => [n.id, n]))
   return g.edges.flatMap((edge) => {
     const text = speedTag(edge.speed)
     const points = p.edges.get(edge.id)
     if (!text || !points) return []
     const end = points[points.length - 1]
-    return [{ id: edge.id, text, x: end.x, y: end.y }]
+    // Beside the jack the cable ends in (a dot on other devices).
+    const target = nodes.get(edge.targetDevice)
+    const port = target?.switchLike ? target.ports.find((q) => q.id === edge.target) : undefined
+    const dx = port ? JACK_SIZE[jackShape(port.type)].width / 2 + 3 : 5
+    return [{ id: edge.id, text, x: end.x + dx, y: end.y }]
   })
 })
 </script>
@@ -105,6 +111,7 @@ const tags = computed(() => {
             class="topo-canvas"
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
+            <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
             <TopologyCables :edges="graph.edges" :routes="placement.edges" :width="placement.width" :height="placement.height" />
             <TopologyCard
               v-for="c in cards"
@@ -114,9 +121,10 @@ const tags = computed(() => {
               :machine="c.machine"
               :presence="c.presence"
             />
-            <span v-for="t in tags" :key="t.id" class="speed-tag" :style="{ left: `${t.x + 5}px`, top: `${t.y - 8}px` }">
+            <span v-for="t in tags" :key="t.id" class="speed-tag" :style="{ left: `${t.x}px`, top: `${t.y - 8}px` }">
               {{ t.text }}
             </span>
+            <TopologyGroups part="label" :groups="placement.groups" :vlans="graph.vlans" />
           </div>
         </div>
       </div>

@@ -29,6 +29,8 @@ export interface TopologyPort {
   deviceId: string
   name: string
   order: number
+  /** NetBox interface type value (decides the jack drawn). */
+  type: string | null
   side: PortSide
   cableId: string
   /** The style of the cable plugged in: the jack is drawn like its cable. */
@@ -69,9 +71,48 @@ export interface TopologyEdge {
   speed: SpeedBucket | null
 }
 
+/**
+ * A rectangle of devices drawn together. One entry per kind of group: adding a group is one
+ * more entry. Rules are tried in this order; a device belongs to at most one group.
+ * - `role`: devices with this role slug whose every cable goes to one and the same device
+ *   (their upstream); one group per upstream device.
+ * - `platform`: devices on this NetBox platform, wherever they are cabled.
+ * A group needs at least two members.
+ */
+export type GroupRule = { kind: 'role'; role: string } | { kind: 'platform'; platform: string }
+
+export interface GroupDefinition {
+  id: string
+  label: string
+  rule: GroupRule
+}
+
+export const GROUP_DEFINITIONS: readonly GroupDefinition[] = [
+  { id: 'cameras', label: 'Cameras', rule: { kind: 'role', role: 'camera' } },
+  { id: 'proxmox', label: 'Proxmox nodes', rule: { kind: 'platform', platform: 'Proxmox VE' } },
+]
+
+const MIN_GROUP_SIZE = 2
+
+export interface TopologyGroup {
+  /** `<definition id>` or `<definition id>:<upstream device id>` for a role group. */
+  id: string
+  definitionId: string
+  label: string
+  /** The grouped role (role rule), else null. */
+  roleSlug: string | null
+  /** The device every member is cabled to (role rule), else null. */
+  upstreamId: string | null
+  /** Member device ids, in node order. */
+  memberIds: string[]
+  /** The VLAN of all the members' cables when they are access cables of one VLAN, else null. */
+  vlan: number | null
+}
+
 export interface TopologyGraph {
   nodes: TopologyNode[]
   edges: TopologyEdge[]
+  groups: TopologyGroup[]
   /** VLANs used by the access cables on the diagram, by vid; a vid unknown to NetBox gets its number. */
   vlans: RawTopologyVlan[]
   /** Some cable is a trunk / has no VLAN data: the legend lists only what is drawn. */
@@ -220,6 +261,7 @@ export function buildTopologyGraph(
         deviceId: port.deviceId,
         name: port.name,
         order: port.order,
+        type: port.type,
         side,
         cableId: l.id,
         style,
@@ -259,15 +301,71 @@ export function buildTopologyGraph(
     return (depth.get(e.sourceDevice)! - depth.get(f.sourceDevice)!) || collator.compare(e.sourceDevice, f.sourceDevice) || pe.order - pf.order
   })
 
+  const groups = findGroups(nodes, edges)
+
   const vlanNames = new Map(topology.vlans.map((v) => [v.vid, v.name]))
   const vids = [...new Set(edges.map((e) => e.style.vlan).filter((v): v is number => v !== null))].sort((a, b) => a - b)
   const present = new Set(edges.map((e) => e.speed).filter((s): s is SpeedBucket => s !== null))
   return {
     nodes,
     edges,
+    groups,
     vlans: vids.map((vid) => ({ vid, name: vlanNames.get(vid) ?? '' })),
     hasTrunk: edges.some((e) => e.style.kind === 'trunk'),
     hasUnknown: edges.some((e) => e.style.kind === 'unknown'),
     speeds: (['10G', '2.5G', '1G', '100M'] as const).filter((s) => present.has(s)),
   }
+}
+
+/** Groups by `GROUP_DEFINITIONS`, earlier definitions first; members keep the node order. */
+export function findGroups(
+  nodes: readonly TopologyNode[],
+  edges: readonly TopologyEdge[],
+  definitions: readonly GroupDefinition[] = GROUP_DEFINITIONS,
+): TopologyGroup[] {
+  const neighbours = new Map<string, Set<string>>()
+  const cables = new Map<string, TopologyEdge[]>()
+  for (const e of edges) {
+    for (const [d, other] of [[e.sourceDevice, e.targetDevice], [e.targetDevice, e.sourceDevice]]) {
+      if (!neighbours.has(d)) neighbours.set(d, new Set())
+      neighbours.get(d)!.add(other)
+      cables.set(d, [...(cables.get(d) ?? []), e])
+    }
+  }
+  const taken = new Set<string>()
+  const groups: TopologyGroup[] = []
+
+  const commonVlan = (memberIds: string[]): number | null => {
+    const styles = memberIds.flatMap((id) => cables.get(id) ?? []).map((e) => e.style)
+    const first = styles[0]
+    if (!first || first.kind !== 'access') return null
+    return styles.every((s) => s.kind === 'access' && s.vlan === first.vlan) ? first.vlan : null
+  }
+  const add = (def: GroupDefinition, id: string, memberIds: string[], roleSlug: string | null, upstreamId: string | null) => {
+    if (memberIds.length < MIN_GROUP_SIZE) return
+    for (const m of memberIds) taken.add(m)
+    groups.push({ id, definitionId: def.id, label: def.label, roleSlug, upstreamId, memberIds, vlan: commonVlan(memberIds) })
+  }
+
+  for (const def of definitions) {
+    const free = nodes.filter((n) => !taken.has(n.id))
+    if (def.rule.kind === 'role') {
+      const role = def.rule.role
+      const byUpstream = new Map<string, string[]>()
+      for (const n of free) {
+        const around = neighbours.get(n.id)
+        if (n.roleSlug !== role || !around || around.size !== 1) continue
+        const upstream = [...around][0]
+        byUpstream.set(upstream, [...(byUpstream.get(upstream) ?? []), n.id])
+      }
+      for (const [upstream, members] of byUpstream) {
+        // The upstream itself cannot be a member of the group that hangs off it.
+        add(def, `${def.id}:${upstream}`, members.filter((m) => m !== upstream), role, upstream)
+      }
+    } else {
+      const platform = def.rule.platform
+      add(def, def.id, free.filter((n) => n.platform === platform).map((n) => n.id), null, null)
+    }
+  }
+  return groups
 }

@@ -1,4 +1,4 @@
-import type { CableStyle, SpeedBucket, TopologyGraph, TopologyNode } from '../domain/topology'
+import type { CableStyle, SpeedBucket, TopologyGraph, TopologyGroup, TopologyNode } from '../domain/topology'
 
 /**
  * The ELK input for a topology graph, the mapping of ELK's result to what the page draws,
@@ -15,7 +15,30 @@ import type { CableStyle, SpeedBucket, TopologyGraph, TopologyNode } from '../do
  */
 
 export const PORT_PITCH = 42
-export const JACK_WIDTH = 24
+
+/**
+ * The jack of a switch-like device's port, by interface type: an RJ45 socket for copper
+ * (`*base-t`, `*base-tx`), an SFP cage for the SFP family (`*-sfp`, `*-sfpp`, `*-sfp28`,
+ * `*-qsfp*`, `*base-x-*`), a plain rectangle for anything else. All fit the port pitch.
+ */
+export type JackShape = 'rj45' | 'sfp' | 'plain'
+
+export const JACK_SIZE: Readonly<Record<JackShape, { width: number; height: number }>> = {
+  rj45: { width: 30, height: 22 },
+  sfp: { width: 36, height: 18 },
+  plain: { width: 24, height: 12 },
+}
+
+export function jackShape(type: string | null): JackShape {
+  if (!type) return 'plain'
+  const t = type.toLowerCase()
+  if (/(^|-)q?sfp|base-x-/.test(t)) return 'sfp'
+  if (/base-tx?$/.test(t)) return 'rj45'
+  return 'plain'
+}
+
+/** The tallest jack sits half inside the card, centred on its edge. */
+const JACK_MAX_HEIGHT = Math.max(...Object.values(JACK_SIZE).map((j) => j.height))
 /** Longest port name shown in full next to a jack; longer ones are cut (tooltip has it all). */
 export const JACK_NAME_MAX = PORT_PITCH - 4
 const SWITCH_MIN_WIDTH = 330
@@ -40,8 +63,14 @@ export const CARD_LINE_HEIGHT: Readonly<Record<CardLine, number>> = {
 export const CARD_PADDING_Y = 9
 /** The card's border (box-sizing: border-box), top and bottom. */
 export const CARD_BORDER = 1
-/** Room for the port names beside a jack row, added on each side that has jacks. */
-export const JACK_BAND_HEIGHT = 18
+/** Port name size and its gap to the jack. */
+export const JACK_LABEL_HEIGHT = 9
+export const JACK_LABEL_GAP = 3
+/**
+ * Room for a jack row inside the card, added on each side that has jacks: the inner half of
+ * the tallest jack, the gap and the port name.
+ */
+export const JACK_BAND_HEIGHT = JACK_MAX_HEIGHT / 2 + JACK_LABEL_GAP + JACK_LABEL_HEIGHT + 3
 
 /**
  * The title row: icon, name and state. The full state badge stays only where it fits beside a
@@ -90,7 +119,10 @@ export function cardSize(node: TopologyNode): CardSize {
 
 // ---- ELK input ----
 
-/** Options measured on real data for a compact result (see README, Topology). */
+/**
+ * Options measured on real data for a compact result (see README, Topology). No
+ * post-compaction: it pulls every card up on its own and breaks the rows into stairs.
+ */
 export const LAYOUT_OPTIONS: Readonly<Record<string, string>> = {
   'elk.algorithm': 'layered',
   'elk.direction': 'DOWN',
@@ -102,7 +134,6 @@ export const LAYOUT_OPTIONS: Readonly<Record<string, string>> = {
   'elk.layered.spacing.edgeEdgeBetweenLayers': '14',
   'elk.layered.spacing.edgeNodeBetweenLayers': '26',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-  'elk.layered.compaction.postCompaction.strategy': 'LEFT',
   'elk.layered.crossingMinimization.greedySwitch.type': 'TWO_SIDED',
   'elk.layered.thoroughness': '40',
   'elk.padding': '[top=28,left=28,bottom=28,right=28]',
@@ -123,16 +154,26 @@ export interface ElkNodeInput {
   ports: ElkPortInput[]
 }
 
-export interface ElkGraphInput {
+export interface ElkGroupInput {
   id: string
   layoutOptions: Record<string, string>
   children: ElkNodeInput[]
+}
+
+export interface ElkGraphInput {
+  id: string
+  layoutOptions: Record<string, string>
+  children: (ElkNodeInput | ElkGroupInput)[]
   edges: { id: string; sources: string[]; targets: string[] }[]
 }
+
+/** Room around the members of a group; the top holds its label. */
+export const GROUP_PADDING = { top: 28, left: 12, bottom: 12, right: 12 }
 
 export const nodeKey = (deviceId: string) => `d${deviceId}`
 export const portKey = (portId: string) => `p${portId}`
 export const edgeKey = (cableId: string) => `c${cableId}`
+export const groupKey = (groupId: string) => `g${groupId}`
 
 /**
  * Switch-like devices keep their ports in NetBox order (FIXED_ORDER). ELK counts
@@ -141,7 +182,7 @@ export const edgeKey = (cableId: string) => `c${cableId}`
  * Other devices only fix the side (FIXED_SIDE) and let ELK order their entry points.
  */
 export function toElkGraph(graph: TopologyGraph): ElkGraphInput {
-  const children = graph.nodes.map((node): ElkNodeInput => {
+  const nodes = graph.nodes.map((node): ElkNodeInput => {
     const size = cardSize(node)
     const north = node.ports.filter((p) => p.side === 'NORTH')
     const south = node.ports.filter((p) => p.side === 'SOUTH')
@@ -154,7 +195,7 @@ export function toElkGraph(graph: TopologyGraph): ElkGraphInput {
       layoutOptions: { 'elk.portConstraints': node.switchLike ? 'FIXED_ORDER' : 'FIXED_SIDE' },
       ports: node.ports.map((p) => ({
         id: portKey(p.id),
-        width: node.switchLike ? JACK_WIDTH : 0,
+        width: node.switchLike ? JACK_SIZE[jackShape(p.type)].width : 0,
         height: 0,
         layoutOptions: {
           'elk.port.side': p.side,
@@ -163,15 +204,27 @@ export function toElkGraph(graph: TopologyGraph): ElkGraphInput {
       })),
     }
   })
+  // Members of a group are children of the group's node; edges stay declared at the root.
+  const byId = new Map(graph.nodes.map((n, i) => [n.id, nodes[i]]))
+  const grouped = new Set(graph.groups.flatMap((g) => g.memberIds))
+  const { top, left, bottom, right } = GROUP_PADDING
+  const groups = graph.groups.map(
+    (g): ElkGroupInput => ({
+      id: groupKey(g.id),
+      layoutOptions: { 'elk.padding': `[top=${top},left=${left},bottom=${bottom},right=${right}]` },
+      children: g.memberIds.map((id) => byId.get(id)!),
+    }),
+  )
+  const children = [...nodes.filter((_, i) => !grouped.has(graph.nodes[i].id)), ...groups]
   return {
     id: 'root',
-    layoutOptions: { ...LAYOUT_OPTIONS },
+    layoutOptions: { ...LAYOUT_OPTIONS, ...(groups.length ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}) },
     children,
     edges: graph.edges.map((e) => ({ id: edgeKey(e.id), sources: [portKey(e.source)], targets: [portKey(e.target)] })),
   }
 }
 
-/** Changes only when what ELK lays out changes: devices, ports, cables and card sizes. */
+/** Changes only when what ELK lays out changes: devices, ports, cables, card sizes and groups. */
 export function layoutKey(graph: TopologyGraph): string {
   return JSON.stringify(toElkGraph(graph))
 }
@@ -183,18 +236,23 @@ export interface Point {
   y: number
 }
 
-export interface ElkResult {
+interface ElkResultNode {
+  id: string
+  x?: number
+  y?: number
   width?: number
   height?: number
-  children?: {
+  ports?: { id: string; x?: number; y?: number; width?: number; height?: number }[]
+  children?: ElkResultNode[]
+}
+
+export interface ElkResult extends ElkResultNode {
+  edges?: {
     id: string
-    x?: number
-    y?: number
-    width?: number
-    height?: number
-    ports?: { id: string; x?: number; y?: number; width?: number; height?: number }[]
+    /** The node the coordinates are relative to (elkjs sets it with hierarchical layouts). */
+    container?: string
+    sections?: { startPoint: Point; endPoint: Point; bendPoints?: Point[] }[]
   }[]
-  edges?: { id: string; sections?: { startPoint: Point; endPoint: Point; bendPoints?: Point[] }[] }[]
 }
 
 export interface PlacedNode {
@@ -206,33 +264,67 @@ export interface PlacedNode {
   ports: Map<string, Point>
 }
 
+export interface PlacedGroup {
+  group: TopologyGroup
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface Placement {
   width: number
   height: number
+  /** Absolute canvas coordinates, also for members of a group. */
   nodes: Map<string, PlacedNode>
   /** Cable polylines (absolute), by cable id. */
   edges: Map<string, Point[]>
+  groups: PlacedGroup[]
 }
 
+/** ELK gives a child's position relative to its parent: everything here is made absolute. */
 export function readPlacement(graph: TopologyGraph, result: ElkResult): Placement {
-  const children = new Map((result.children ?? []).map((c) => [c.id, c]))
-  const edgesById = new Map((result.edges ?? []).map((e) => [e.id, e]))
+  const absolute = new Map<string, { node: ElkResultNode; x: number; y: number }>()
+  const walk = (node: ElkResultNode, ox: number, oy: number) => {
+    const x = ox + (node.x ?? 0)
+    const y = oy + (node.y ?? 0)
+    absolute.set(node.id, { node, x, y })
+    for (const child of node.children ?? []) walk(child, x, y)
+  }
+  walk({ ...result, x: 0, y: 0 }, 0, 0)
+
   const nodes = new Map<string, PlacedNode>()
   for (const node of graph.nodes) {
-    const c = children.get(nodeKey(node.id))
-    if (!c) continue
+    const at = absolute.get(nodeKey(node.id))
+    if (!at) continue
     const ports = new Map<string, Point>()
-    for (const p of c.ports ?? []) {
+    for (const p of at.node.ports ?? []) {
       ports.set(p.id.slice(1), { x: (p.x ?? 0) + (p.width ?? 0) / 2, y: (p.y ?? 0) + (p.height ?? 0) / 2 })
     }
-    nodes.set(node.id, { x: c.x ?? 0, y: c.y ?? 0, width: c.width ?? 0, height: c.height ?? 0, ports })
+    nodes.set(node.id, { x: at.x, y: at.y, width: at.node.width ?? 0, height: at.node.height ?? 0, ports })
   }
+
+  const groups: PlacedGroup[] = []
+  for (const group of graph.groups) {
+    const at = absolute.get(groupKey(group.id))
+    if (at) groups.push({ group, x: at.x, y: at.y, width: at.node.width ?? 0, height: at.node.height ?? 0 })
+  }
+
+  const edgesById = new Map((result.edges ?? []).map((e) => [e.id, e]))
   const edges = new Map<string, Point[]>()
   for (const edge of graph.edges) {
-    const section = edgesById.get(edgeKey(edge.id))?.sections?.[0]
-    if (section) edges.set(edge.id, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint])
+    const elkEdge = edgesById.get(edgeKey(edge.id))
+    const section = elkEdge?.sections?.[0]
+    if (!section) continue
+    const origin = elkEdge.container ? absolute.get(elkEdge.container) : undefined
+    const ox = origin?.x ?? 0
+    const oy = origin?.y ?? 0
+    edges.set(
+      edge.id,
+      [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map((p) => ({ x: p.x + ox, y: p.y + oy })),
+    )
   }
-  return { width: result.width ?? 0, height: result.height ?? 0, nodes, edges }
+  return { width: result.width ?? 0, height: result.height ?? 0, nodes, edges, groups }
 }
 
 // ---- drawing ----
