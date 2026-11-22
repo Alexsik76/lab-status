@@ -1,4 +1,5 @@
-import type { CableStyle, TopologyEdge, TopologyGraph, TopologyNode, TopologyPort } from './topology'
+import type { DeviceRecord } from './model'
+import { groupVlan, type CableStyle, type TopologyEdge, type TopologyGraph, type TopologyNode, type TopologyPort } from './topology'
 import type { WifiBand, WifiData } from '../types/wifi'
 
 /**
@@ -142,7 +143,12 @@ export function withWifi(
   plan: WifiPlan,
   live: WifiLive,
   machineIds: ReadonlySet<string> = new Set(),
+  devices: readonly DeviceRecord[] = [],
 ): TopologyGraph {
+  const deviceRecords = new Map(devices.map((d) => [d.id, d]))
+  // Role groups (Cameras) take devices of their role that are on the diagram only via Wi-Fi.
+  const roleGroups = graph.groups.filter((g) => g.roleSlug !== null)
+  const joined = new Map<string, string[]>()
   const byId = new Map(graph.nodes.map((n) => [n.id, n]))
   const radios = plan.radios.filter((r) => byId.has(r.apDeviceId))
   if (!radios.length) return graph
@@ -217,6 +223,33 @@ export function withWifi(
       // A wired device also on Wi-Fi is never moved: its own port and line.
       addPort(existing.id, port)
       edges.push(edge(wifiEdgeId(c.mac), radio, port.id, nodeId))
+      continue
+    }
+    const record = c.deviceId !== null ? deviceRecords.get(c.deviceId) : undefined
+    const group = record ? roleGroups.find((g) => g.roleSlug === record.roleSlug) : undefined
+    if (record && group) {
+      // A member of its role's group, card like the others: radio port on the top edge
+      // (compact: no label, no band), its own line; never in a client frame.
+      const cardPort = { ...port, deviceId: record.id, compact: true }
+      newNodes.push({
+        id: record.id,
+        name: record.name,
+        roleSlug: record.roleSlug,
+        model: record.model,
+        ip: record.ip,
+        icon: record.icon,
+        platform: record.platform,
+        offline: record.offline || !live.connected.has(c.mac),
+        switchLike: false,
+        isMachine: machineIds.has(record.id),
+        hasMetrics: false,
+        depth: ap.depth + 1,
+        ports: [cardPort],
+        kind: 'device',
+        deviceId: record.id,
+      })
+      edges.push(edge(wifiEdgeId(c.mac), radio, cardPort.id, record.id))
+      joined.set(group.id, [...(joined.get(group.id) ?? []), record.id])
       continue
     }
     const card: TopologyNode = {
@@ -294,5 +327,12 @@ export function withWifi(
     if (!more) return n
     return { ...n, ports: [...n.ports, ...more].sort((p, q) => side(p) - side(q) || p.order - q.order) }
   })
-  return { ...graph, nodes: [...nodes, ...newNodes], edges: [...graph.edges, ...edges] }
+  const allEdges = [...graph.edges, ...edges]
+  const groups = graph.groups.map((g) => {
+    const extra = joined.get(g.id)
+    if (!extra) return g
+    const memberIds = [...g.memberIds, ...extra]
+    return { ...g, memberIds, vlan: groupVlan(memberIds, allEdges) }
+  })
+  return { ...graph, nodes: [...nodes, ...newNodes], edges: allEdges, groups }
 }

@@ -2,7 +2,8 @@
  * Layers of the Topology page and their visibility. Each layer button cycles
  * shown -> grey -> hidden -> shown. A new layer (e.g. Zigbee) is one more entry in `LAYERS`.
  * Wired: cables, copper jacks, wired-only devices. Wi-Fi: radio ports, Wi-Fi lines and Wi-Fi
- * client cards (hidden takes them out of the layout).
+ * client cards (hidden takes them out of the layout). Zigbee: the coordinator's port, the bead
+ * line and the device frame (hidden takes them out of the layout).
  */
 
 export type LayerState = 'shown' | 'grey' | 'hidden'
@@ -10,6 +11,7 @@ export type LayerState = 'shown' | 'grey' | 'hidden'
 export const LAYERS = [
   { id: 'wired', label: 'Wired' },
   { id: 'wifi', label: 'Wi-Fi' },
+  { id: 'zigbee', label: 'Zigbee' },
 ] as const
 
 export type LayerId = (typeof LAYERS)[number]['id']

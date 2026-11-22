@@ -22,6 +22,9 @@ import TopologyWifiFrames from './TopologyWifiFrames.vue'
 import { buildWifiGrid } from '../domain/wifi'
 import { loadLayerStates, saveLayerStates, type LayerId, type LayerState } from '../presentation/layers'
 import type { WifiData } from '../types/wifi'
+import type { ZigbeeData } from '../types/zigbee'
+import { mergeZigbeePlan, withZigbee, zigbeeAvailable } from '../domain/zigbeeGraph'
+import { useThrottledPlan } from '../composables/useThrottledPlan'
 
 /**
  * The physical network from NetBox cabling, laid out by ELK: an SVG layer of cables under
@@ -39,6 +42,8 @@ const props = defineProps<{
   wifi?: WifiData | null
   /** Why there is no Wi-Fi data (the source's error), if so. */
   wifiError?: string | null
+  /** The Zigbee network from Home Assistant (`zigbee` source); null until the first snapshot. */
+  zigbee?: ZigbeeData | null
 }>()
 
 /** Rebuilt only with the inventory; live states reach the cards through `machines` and `presence`. */
@@ -75,10 +80,22 @@ const wiredGraph = computed(() => {
 const wifiData = computed(() => props.wifi ?? null)
 const { plan } = useWifiPlan(wifiData)
 const live = computed(() => (plan.value ? wifiLive(plan.value, wifiData.value) : null))
+/**
+ * Zigbee in the diagram: the coordinator's port, the device frame and the bead line, from a
+ * sticky plan as for Wi-Fi; availability only dims cards. Hidden layer: not in the graph.
+ */
+const zigbeeData = computed(() => props.zigbee ?? null)
+const { plan: zigbeePlan } = useThrottledPlan(zigbeeData, mergeZigbeePlan)
+const zigbeeLive = computed(() => zigbeeAvailable(zigbeeData.value))
+
 const graph = computed(() => {
-  const g = wiredGraph.value
-  if (!g || !plan.value || !live.value || layers.value.wifi === 'hidden') return g
-  return withWifi(g, plan.value, live.value, props.topology?.machineIds)
+  let g = wiredGraph.value
+  if (!g) return g
+  if (plan.value && live.value && layers.value.wifi !== 'hidden') {
+    g = withWifi(g, plan.value, live.value, props.topology?.machineIds, props.topology?.devices)
+  }
+  if (zigbeePlan.value && layers.value.zigbee !== 'hidden') g = withZigbee(g, zigbeePlan.value, zigbeeLive.value)
+  return g
 })
 const { placement, phase, error } = useTopologyLayout(graph)
 
@@ -132,13 +149,13 @@ const cards = computed(() => {
     const presence = machine || !deviceId ? null : (props.presence.get(arpObjectKey('device', deviceId)) ?? null)
     // Cards with a radio port (access points, wired devices also on Wi-Fi, Wi-Fi clients) stay
     // visible when the wired layer is grey.
-    const anchor = node.inFrame || node.ports.some((port) => port.kind === 'radio')
+    const anchor = node.inFrame || node.ports.some((port) => port.kind === 'radio' || port.kind === 'zigbee')
     return { node, placed, machine, presence, anchor, frameId }
   }
   return g.nodes.flatMap((node) => {
     const placed = p.nodes.get(node.id)
     if (!placed) return []
-    if (node.kind !== 'wifi-group') return [item(node, placed)]
+    if (node.kind !== 'wifi-group' && node.kind !== 'zigbee-group') return [item(node, placed)]
     // A frame of Wi-Fi clients: its members at their grid slots, relative to the frame.
     const { slots } = packFrame(node.members ?? [])
     return (node.members ?? []).map((member, i) =>
@@ -153,7 +170,7 @@ const frames = computed(() => {
   const p = placement.value
   if (!g || !p) return []
   return g.nodes.flatMap((node) => {
-    const placed = node.kind === 'wifi-group' ? p.nodes.get(node.id) : undefined
+    const placed = node.kind === 'wifi-group' || node.kind === 'zigbee-group' ? p.nodes.get(node.id) : undefined
     return placed ? [{ node, ...placed }] : []
   })
 })
@@ -197,13 +214,14 @@ const tags = computed(() => {
           :has-unknown="graph.hasUnknown"
           :speeds="graph.speeds"
           :wifi="layers.wifi !== 'hidden'"
+          :zigbee="layers.zigbee !== 'hidden'"
         />
       </div>
       <div ref="viewport" class="topo-viewport">
         <div class="topo-sizer" :style="{ width: `${placement.width * scale}px`, height: `${placement.height * scale}px` }">
           <div
             class="topo-canvas"
-            :class="[{ 'is-tracing': !!trace }, `layer-wired-${layers.wired}`, `layer-wifi-${layers.wifi}`]"
+            :class="[{ 'is-tracing': !!trace }, `layer-wired-${layers.wired}`, `layer-wifi-${layers.wifi}`, `layer-zigbee-${layers.zigbee}`]"
             :style="{ width: `${placement.width}px`, height: `${placement.height}px`, transform: `scale(${scale})` }"
           >
             <TopologyGroups part="frame" :groups="placement.groups" :vlans="graph.vlans" />
@@ -292,12 +310,13 @@ const tags = computed(() => {
  * Layers. Wired grey: wired cables, copper jacks and wired-only cards fade; cards with a radio
  * port (access points, Wi-Fi clients) stay, only their copper jacks fade. Wired hidden: the
  * wired drawing keeps its space but is not drawn. Wi-Fi grey: radio ports, Wi-Fi lines and
- * Wi-Fi client cards fade (Wi-Fi hidden takes them out of the graph, see `graph`).
+ * Wi-Fi client cards fade; Zigbee grey: its port, bead line, frame and device cards (hidden
+ * layers are taken out of the graph, see `graph`).
  */
 .layer-wired-grey :deep(.topo-card:not(.is-anchor)),
-.layer-wired-grey :deep(.topo-card.is-anchor .jack:not(.shape-radio)),
+.layer-wired-grey :deep(.topo-card.is-anchor .jack:not(.shape-radio):not(.shape-zigbee)),
 .layer-wired-grey :deep(.topo-card.is-anchor .entry),
-.layer-wired-grey :deep(.cable:not(.medium-wifi)),
+.layer-wired-grey :deep(.cable.medium-cable),
 .layer-wired-grey :deep(.topo-group),
 .layer-wired-grey :deep(.group-label),
 .layer-wired-grey .speed-tag,
@@ -305,13 +324,18 @@ const tags = computed(() => {
 .layer-wifi-grey :deep(.branch),
 .layer-wifi-grey :deep(.jack.shape-radio),
 .layer-wifi-grey :deep(.topo-card.kind-wifi-client),
-.layer-wifi-grey :deep(.wifi-frame),
-.layer-wifi-grey :deep(.wifi-frame-label) {
+.layer-wifi-grey :deep(.wifi-frame.frame-wifi-group),
+.layer-wifi-grey :deep(.wifi-frame-label.frame-wifi-group),
+.layer-zigbee-grey :deep(.cable.medium-zigbee),
+.layer-zigbee-grey :deep(.jack.shape-zigbee),
+.layer-zigbee-grey :deep(.topo-card.kind-zigbee-device),
+.layer-zigbee-grey :deep(.wifi-frame.frame-zigbee-group),
+.layer-zigbee-grey :deep(.wifi-frame-label.frame-zigbee-group) {
   opacity: 0.2;
   filter: grayscale(1);
 }
 .layer-wired-hidden :deep(.topo-card:not(.is-anchor)),
-.layer-wired-hidden :deep(.cable:not(.medium-wifi)),
+.layer-wired-hidden :deep(.cable.medium-cable),
 .layer-wired-hidden :deep(.topo-group),
 .layer-wired-hidden :deep(.group-label),
 .layer-wired-hidden .speed-tag {

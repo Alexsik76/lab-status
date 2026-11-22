@@ -23,6 +23,7 @@ from .proxmox import proxmox_sources
 from .routeros import RouterOsConnection
 from .services import ServicesSource
 from .wifi import WifiSource
+from .zigbee import ZigbeeSource
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -55,6 +56,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     wifi = WifiSource(connect, arp.hints)
     inventory.on_macs_changed.append(wifi.set_macs)
     inventory.on_cycle.append(lambda parts: wifi.set_device_ids(parts.device_ids))
+    ha_http = httpx.AsyncClient()
+    zigbee = ZigbeeSource(settings.ha_url, settings.ha_token, ha_http)
+    inventory.on_cycle.append(lambda parts: zigbee.set_services(parts.services))
     checker = ServiceChecker(
         inventory.load_targets, checks_http, settings.service_check_exclude, inventory.load_public_urls
     )
@@ -66,7 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         source.on_change.append(services.on_container)
     app.state.services = services
     app.state.hub = StreamHub(
-        [arp, inventory, services, wifi, *proxmox_sources(settings, proxmox_http), *containers],
+        [arp, inventory, services, wifi, zigbee, *proxmox_sources(settings, proxmox_http), *containers],
         grace_s=settings.stream_grace_s,
     )
     try:
@@ -78,6 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await npm_http.aclose()
         await proxmox_http.aclose()
         await portainer_http.aclose()
+        await ha_http.aclose()
 
 
 app = FastAPI(title="lab-status-api", lifespan=lifespan, docs_url=None, redoc_url=None)

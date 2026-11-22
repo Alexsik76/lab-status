@@ -175,3 +175,45 @@ describe('the plan: what reaches the layout', () => {
     expect(planKey(null)).toBe('')
   })
 })
+
+describe('a camera on Wi-Fi joins the Cameras group', async () => {
+  const { groupDevices, groupTopology, device } = await import('../__fixtures__/topologyGroups')
+  const cams = [...groupDevices, device('39', 'cam-wireless', 'camera')]
+  const groups = buildTopologyGraph(groupTopology, cams)
+  const wifi = (vlan: number | null): WifiData => ({
+    networks: [{ ssid: 'Lenses', band: '2.4', vlan }],
+    aps: [{ id: 'cap-a', name: 'core', deviceId: '2' }],
+    radios: [{ apId: 'cap-a', ssid: 'Lenses', band: '2.4', channel: 2437, state: 'running' }],
+    clients: [{ apId: 'cap-a', ssid: 'Lenses', band: '2.4', mac: '02:CC:00:00:00:39', name: 'cam-wireless', deviceId: '39', ip: '192.0.2.39', signal: -60, uptime: '1h' }],
+  })
+  const withCam = (vlan: number | null) => {
+    const plan = mergePlan(null, wifi(vlan)).next
+    return withWifi(groups, plan, wifiLive(plan, wifi(vlan)), new Set(), cams)
+  }
+
+  it('becomes a regular member with its radio port on top and its own line', () => {
+    const g = withCam(40)
+    const group = g.groups.find((x) => x.definitionId === 'cameras')!
+    expect(group.memberIds).toEqual(['31', '32', '33', '39'])
+    const cam = g.nodes.find((n) => n.id === '39')!
+    expect(cam).toMatchObject({ kind: 'device', roleSlug: 'camera', name: 'cam-wireless', ip: null })
+    expect(cam.ports).toEqual([expect.objectContaining({ kind: 'radio', side: 'NORTH', compact: true })])
+    expect(g.edges.find((e) => e.targetDevice === '39')).toMatchObject({ medium: 'wifi', style: { kind: 'access', vlan: 40 } })
+    // Not in a client frame, not a Wi-Fi client card.
+    expect(g.nodes.some((n) => n.kind === 'wifi-group' || n.kind === 'wifi-client')).toBe(false)
+  })
+
+  it('has the card size of the other members (no jack band)', async () => {
+    const { cardSize } = await import('../presentation/topologyLayout')
+    const g = withCam(40)
+    const other = g.nodes.find((n) => n.id === '31')!
+    const cam = g.nodes.find((n) => n.id === '39')!
+    expect(cardSize({ ...cam, ip: other.ip })).toEqual(cardSize(other))
+  })
+
+  it('keeps the VLAN in the label only while every member link is in it', () => {
+    expect(withCam(40).groups.find((x) => x.definitionId === 'cameras')!.vlan).toBe(40)
+    expect(withCam(10).groups.find((x) => x.definitionId === 'cameras')!.vlan).toBeNull()
+    expect(withCam(null).groups.find((x) => x.definitionId === 'cameras')!.vlan).toBeNull()
+  })
+})

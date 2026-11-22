@@ -25,7 +25,9 @@ independent sources:
    and sent as `proxmox` / `metrics` events of `GET /api/stream`;
 5. **Router ARP table**: a live mirror streamed by the backend as `arp` events of `GET /api/stream`;
 6. **Router CAPsMAN (Wi-Fi)**: wireless networks, access points and clients, polled by the backend
-   and sent as `wifi` events of `GET /api/stream` (shown on the Topology page).
+   and sent as `wifi` events of `GET /api/stream` (shown on the Topology page);
+7. **Home Assistant (Zigbee)**: the Zigbee2MQTT devices, read with one template call, sent as
+   `zigbee` events of `GET /api/stream` (shown on the Topology page).
 
 A second page, `#/topology`, draws the physical network from NetBox cabling (see
 [Topology](#topology)).
@@ -61,7 +63,7 @@ assistive technology is "Refresh, data N s old, updated HH:MM:SS".
 ## Event stream
 
 The page holds one Server-Sent Events connection, `GET /api/stream`; the SSE `event:`
-field names the source of each message (`arp`, `inventory`, `services`, `proxmox`, `metrics`, `containers`, `wifi`). The backend runs its sources
+field names the source of each message (`arp`, `inventory`, `services`, `proxmox`, `metrics`, `containers`, `wifi`, `zigbee`). The backend runs its sources
 only while at least one page is connected: the first subscriber starts them, and when the
 last one leaves they keep running for `STREAM_GRACE_S` seconds (default 10) and stop only
 if nobody reconnected, so a page reload reuses the running sessions. A new subscriber, and
@@ -82,6 +84,7 @@ alone publishes an empty snapshot instead, so the page never shows stale wireles
 | `proxmox` | `cluster/resources` | 15 s (`PROXMOX_PERIOD_S`) | the Proxmox `data` array unchanged |
 | `metrics` | `nodes/<node>/rrddata?timeframe=hour&cf=AVERAGE` for every node of the latest cluster resources, concurrently | 60 s (`PROXMOX_METRICS_PERIOD_S`), and at once when the node set changes | `{node: points}`; a node that fails gets `[]` |
 | `wifi` | RouterOS API: `print` of six legacy CAPsMAN menus on one short session (see [Wi-Fi source](#wi-fi-source)) | 15 s, and at once when the NetBox MAC directory or device names change | `{networks, aps, radios, clients}` |
+| `zigbee` | Home Assistant: one `POST /api/template` (see [Zigbee source](#zigbee-source)) | 60 s, and at once when the coordinator's NetBox device changes | `{coordinator, devices}` |
 
 The `inventory` cycle is the backend's only NetBox (and NPM) read: the service checks take
 their targets and public URLs from it, and the ARP mirror its MAC directory (a changed
@@ -291,16 +294,36 @@ machine links to its tile) or "no clients".
 
 **Layers.** Next to the legend, one button per layer (`LAYERS` in `src/presentation/layers.ts`;
 a new layer is one entry), each cycling shown -> grey -> hidden, remembered in local storage
-(default: both shown). Grey is 20 % opacity and greyscale.
+(default: all shown). Grey is 20 % opacity and greyscale.
 - Wired: cables, copper jacks and wired-only devices. While it is grey, cards with a radio port
   (access points, wired devices also on Wi-Fi, Wi-Fi clients) stay fully visible, only their
   copper jacks fade; hidden keeps the drawing's space but draws none of it.
 - Wi-Fi: radio ports (also a wired device's `wlan` port), Wi-Fi lines and Wi-Fi client cards.
   Hidden takes them out of the layout: the diagram returns to its wired-only size.
+- Zigbee: the coordinator's port, the bead line and the Zigbee frame; hidden takes them out of
+  the layout.
+
+**Wi-Fi cameras.** A device of a grouped role (Cameras) that is on the diagram only as a Wi-Fi
+client becomes a regular member of that group's frame: a card like the other members, its radio
+port on the top edge (no label, so the card keeps their size) and its own wavy line from the
+access point; never in a Wi-Fi client frame. The group label keeps its VLAN only while every
+member's link (cable or Wi-Fi) is an access link of that VLAN. With the Wi-Fi layer hidden the
+camera leaves the diagram and the member count follows.
+
+**Zigbee.** The coordinator (the NetBox device with a service named `zigbee-socket`) gets one
+SOUTH `zigbee` port, a hexagonal housing with a zigzag in `--color-zigbee`, labelled "Zigbee".
+All Zigbee devices sit in one frame "Zigbee · <count>" in that colour (compact cards like Wi-Fi
+clients, two columns, by name: name, then area or model; unavailable ones dimmed; not links),
+and one line of round beads (3.4 wide, 8 apart) runs from the port to the frame's top edge. The
+real mesh routes are not shown (the frame's label says so in its title). Without the coordinator
+on the diagram the frame is shown without a line. Stability as for Wi-Fi: a device that
+disappears stays dimmed until reload, new devices or another coordinator lay out again at most
+once per 10 s, availability never does. The trace runs coordinator <-> frame and members.
 
 The hover trace treats Wi-Fi lines like cables: pointing at an access point emphasises its
 wireless clients and their lines, pointing at a client its access point. The legend shows the
-wavy Wi-Fi line and the radio port while the Wi-Fi layer is not hidden.
+wavy Wi-Fi line and the radio port while the Wi-Fi layer is not hidden, and the beads and the
+coordinator port while the Zigbee layer is not hidden.
 
 **Navigation.** A Hosts machine's card links to `#/?focus=<deviceId>`; a machine tile on the
 Hosts page has a "Show on topology" button (only when the device is on the diagram) to
@@ -339,6 +362,25 @@ passphrase or security profile is copied into the event. Its `data`:
   CAP's `last-ip`; `signal` in dBm; `uptime` as RouterOS shows it, without fractions of a second.
 - If the menus are absent or the read fails, the source publishes an empty snapshot and a
   status error starting with `Wi-Fi: `; nothing else depends on it.
+
+## Zigbee source
+
+The `zigbee` source (`backend/app/zigbee.py`) reads Home Assistant, read-only: once per cycle
+`POST {HA_URL}/api/template` with a template that renders the MQTT devices as JSON (no service
+is called, no state changes). It keeps the Zigbee2MQTT bridge (manufacturer `Zigbee2MQTT`) and
+every device whose `via_device` is the bridge. Its `data`:
+
+```
+{ "coordinator": { "deviceId": string | null, "version": string | null },
+  "devices":     [{ "id", "name", "manufacturer", "model", "area", "available" }] }
+```
+
+`name` is the user's name, else the device name; `available` is true when at least one of the
+device's entities is not `unavailable`; `version` is the bridge's software version when
+exposed; `coordinator.deviceId` is the NetBox device with a service named `zigbee-socket` (from
+the inventory cycle), else null. Errors start with `Zigbee: `; the token is only sent in the
+Authorization header and never appears in a message, log line or event. Without `HA_URL` and
+`HA_TOKEN` the source is off: its status says so and the data is empty.
 
 ## ARP mirror
 
@@ -393,6 +435,8 @@ Its events are `status`, `snapshot`, `upsert` and `remove`.
 | `PORTAINER_URL` | api | Portainer base URL, direct, e.g. `https://192.0.2.20:9443` (TLS is not verified: self-signed certificates work) |
 | `PORTAINER_TOKEN` | api | API key (`X-API-Key`) of a Portainer user with read-only access to the Docker environments; container states are off unless both are set |
 | `CONTAINERS_PERIOD_S` | api | optional: period of the full container re-list, default `300` |
+| `HA_URL` | api | optional: Home Assistant base URL, e.g. `http://192.0.2.30:8123` |
+| `HA_TOKEN` | api | optional: Home Assistant long-lived access token, used for one read-only template call; the `zigbee` source is off unless both are set |
 | `STREAM_GRACE_S` | api | optional: seconds the stream sources keep running after the last page disconnected, default `10` |
 | `BACKEND_URL` | dev server | optional: where the backend runs, default `http://127.0.0.1:8000` |
 

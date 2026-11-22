@@ -86,6 +86,19 @@ describe('TopologyCard height = the size given to ELK', () => {
     }
   })
 
+  it('sizes a Zigbee device card like a Wi-Fi client card: name, then area or model', async () => {
+    const { zigbeePayload } = await import('../__fixtures__/zigbee')
+    const { mergeZigbeePlan, withZigbee, zigbeeAvailable } = await import('../domain/zigbeeGraph')
+    const g = withZigbee(graph, mergeZigbeePlan(null, zigbeePayload).next, zigbeeAvailable(zigbeePayload))
+    for (const member of g.nodes.find((n) => n.kind === 'zigbee-group')!.members!) {
+      const { wrapper, size, height } = renderedHeight(member, {})
+      expect(height).toBe(size.height)
+      expect(size.width).toBe(150)
+      expect(wrapper.findAll('.card-line').map((l) => l.classes()[1])).toEqual(['line-title', 'line-sub'])
+      expect(wrapper.find('.zigbee-glyph').exists()).toBe(true)
+    }
+  })
+
   it.each(cases)('%s', (_name, node, props, rows) => {
     const { wrapper, size, height } = renderedHeight(node, props)
     expect(wrapper.findAll('.card-line')).toHaveLength(rows)

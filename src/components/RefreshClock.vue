@@ -34,6 +34,7 @@ const LABELS: Record<SourceName, string> = {
   containers: 'Containers',
   arp: 'ARP',
   wifi: 'Wi-Fi',
+  zigbee: 'Zigbee',
 }
 const STREAMING: ReadonlySet<SourceName> = new Set(['containers', 'arp'])
 
