@@ -1,10 +1,12 @@
 import { computed, readonly, ref, type Ref } from 'vue'
 import type { ArpPresenceIndex } from '../domain/arp'
 import { matchDockerContainers } from '../domain/containerStatuses'
+import { markUnknown } from '../domain/stale'
 import { mapMachineMetrics, matchProxmoxGuests } from '../domain/proxmox'
 import { topologyDeviceIds } from '../domain/topologyLinks'
 import { buildTree, countTree, MACHINE_ROLE } from '../domain/tree'
 import { useContainerStatuses } from './useContainerStatuses'
+import { useEventStream } from './useEventStream'
 import { useInventory } from './useInventory'
 import { useProxmox } from './useProxmox'
 import { useStatuses, type StatusPhase } from './useStatuses'
@@ -24,6 +26,9 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
   const statuses = useStatuses()
   const containerStatuses = useContainerStatuses()
   const proxmox = useProxmox()
+  const stream = useEventStream()
+  /** The status stream is down: what the page shows is last known, not live. */
+  const offlineSince = computed(() => stream.disconnectedAt.value)
 
   const dockerIndex = computed(() =>
     inventory.data.value && containerStatuses.data.value
@@ -43,7 +48,7 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
       : new Map(),
   )
 
-  const tree = computed(() =>
+  const liveTree = computed(() =>
     inventory.data.value
       ? buildTree(
           inventory.data.value,
@@ -55,6 +60,8 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
         )
       : null,
   )
+  /** While the stream is down no live state is shown as current: up / down become unknown. */
+  const tree = computed(() => (liveTree.value && offlineSince.value ? markUnknown(liveTree.value) : liveTree.value))
   const counts = computed(() => (tree.value ? countTree(tree.value) : null))
 
   /** Changes only with the inventory; the graph itself is built in the Topology chunk. */
@@ -118,6 +125,7 @@ export function useLab(arpPresence?: Readonly<Ref<ArpPresenceIndex>>) {
     /** The inventory status says why there is no topology (when it says anything). */
     inventoryError: inventory.errorMessage,
     livePhase,
+    offlineSince,
     statusPhase: statuses.phase,
     statusError: statuses.errorMessage,
     hasStatusData: computed(() => statuses.data.value !== null),

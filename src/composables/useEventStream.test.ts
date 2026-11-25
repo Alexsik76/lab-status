@@ -53,6 +53,23 @@ describe('createEventStream', () => {
     expect(received).toEqual([{ type: 'remove', id: '*1' }])
   })
 
+  it('keeps the time the connection was lost through retries, and clears it on open', () => {
+    const s = stream()
+    latest().open()
+    expect(s.disconnectedAt.value).toBeNull()
+    latest().fail(true)
+    const lost = s.disconnectedAt.value
+    expect(lost).toBeInstanceOf(Date)
+    vi.advanceTimersByTime(2_000) // the retry opens a new connection...
+    expect(s.state.value).toBe('connecting')
+    vi.advanceTimersByTime(5_000)
+    latest().fail(true) // ...which fails as well: the time stays the first loss
+    expect(s.disconnectedAt.value).toBe(lost)
+    vi.advanceTimersByTime(4_000)
+    latest().open()
+    expect(s.disconnectedAt.value).toBeNull()
+  })
+
   it('leaves a network drop to the browser', () => {
     const s = stream()
     latest().open()
