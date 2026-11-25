@@ -8,13 +8,14 @@ import InventorySkeleton from './components/InventorySkeleton.vue'
 import LabTree from './components/LabTree.vue'
 import LoadingSpinner from './components/LoadingSpinner.vue'
 import NoticeBanner from './components/NoticeBanner.vue'
+import OfflineBanner from './components/OfflineBanner.vue'
 import { useArp } from './composables/useArp'
 import { useFocusTarget } from './composables/useFocusTarget'
 import { useLab } from './composables/useLab'
 import { useSourceStatuses } from './composables/useSourceStatuses'
 import { useWifi } from './composables/useWifi'
 import { useZigbee } from './composables/useZigbee'
-import { countViews } from './domain/arp'
+import { countViews, type ArpPresenceIndex } from './domain/arp'
 import type { Machine } from './domain/model'
 import { statusPhaseKey, topologyDevicesKey } from './injection'
 import { parseRoute, routeHash, type Page } from './presentation/route'
@@ -52,6 +53,9 @@ const machinesById = computed(
   () => new Map<string, Machine>((lab.tree?.machines ?? []).map((m) => [m.id, m])),
 )
 /** No topology and the inventory status explains why (none is on its way). */
+/** No ARP presence is current while the stream is down: the topology shows none. */
+const NO_PRESENCE: ArpPresenceIndex = new Map()
+const topologyPresence = computed(() => (lab.offlineSince ? NO_PRESENCE : arp.presence.value))
 const topologyUnavailable = computed(() => (lab.topology ? null : lab.inventoryError ?? lab.topologyError))
 
 /* Each page keeps its own scroll position; restored when the page enters again. */
@@ -95,7 +99,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <main ref="appRoot" class="homelab-app">
+  <main ref="appRoot" class="homelab-app" :class="{ 'is-offline': !!lab.offlineSince }">
     <AppHeader
       :page="page"
       :counts="lab.counts"
@@ -125,6 +129,7 @@ onMounted(() => {
           @retry="labState.refresh"
         />
         <template v-else>
+          <OfflineBanner v-if="lab.offlineSince" :since="lab.offlineSince" />
           <NoticeBanner v-if="lab.refreshError && lab.topology">
             The inventory could not be refreshed; the topology is from {{ lab.inventoryTimeText }}. {{ lab.refreshError }}
           </NoticeBanner>
@@ -134,7 +139,7 @@ onMounted(() => {
           <TopologyPage
             :topology="lab.topology"
             :machines="machinesById"
-            :presence="arp.presence.value"
+            :presence="topologyPresence"
             :unavailable="topologyUnavailable"
             :wifi="wifi.data.value"
             :wifi-error="wifi.errorMessage.value"
@@ -157,30 +162,33 @@ onMounted(() => {
           <NoticeBanner v-if="lab.refreshError">
             The inventory could not be refreshed; the inventory is from {{ lab.inventoryTimeText }}. {{ lab.refreshError }}
           </NoticeBanner>
-          <NoticeBanner v-if="lab.statusPhase === 'failed'">
-            <template v-if="lab.hasStatusData">
-              Live statuses could not be refreshed; showing last known data. {{ lab.statusError }}
-            </template>
-            <template v-else>
-              Live statuses are unavailable; none shown. {{ lab.statusError }}
-            </template>
-          </NoticeBanner>
-          <NoticeBanner v-if="lab.containerStatusPhase === 'failed'">
-            <template v-if="lab.hasContainerStatusData">
-              Live container states could not be refreshed; showing last known data. {{ lab.containerStatusError }}
-            </template>
-            <template v-else>
-              Live container states are unavailable; none shown. {{ lab.containerStatusError }}
-            </template>
-          </NoticeBanner>
-          <NoticeBanner v-if="lab.proxmoxPhase === 'failed'">
-            <template v-if="lab.hasProxmoxData">
-              Proxmox data could not be refreshed; showing last known data. {{ lab.proxmoxError }}
-            </template>
-            <template v-else>
-              Proxmox data is unavailable; none shown. {{ lab.proxmoxError }}
-            </template>
-          </NoticeBanner>
+          <OfflineBanner v-if="lab.offlineSince" :since="lab.offlineSince" />
+          <template v-else>
+            <NoticeBanner v-if="lab.statusPhase === 'failed'">
+              <template v-if="lab.hasStatusData">
+                Live statuses could not be refreshed; showing last known data. {{ lab.statusError }}
+              </template>
+              <template v-else>
+                Live statuses are unavailable; none shown. {{ lab.statusError }}
+              </template>
+            </NoticeBanner>
+            <NoticeBanner v-if="lab.containerStatusPhase === 'failed'">
+              <template v-if="lab.hasContainerStatusData">
+                Live container states could not be refreshed; showing last known data. {{ lab.containerStatusError }}
+              </template>
+              <template v-else>
+                Live container states are unavailable; none shown. {{ lab.containerStatusError }}
+              </template>
+            </NoticeBanner>
+            <NoticeBanner v-if="lab.proxmoxPhase === 'failed'">
+              <template v-if="lab.hasProxmoxData">
+                Proxmox data could not be refreshed; showing last known data. {{ lab.proxmoxError }}
+              </template>
+              <template v-else>
+                Proxmox data is unavailable; none shown. {{ lab.proxmoxError }}
+              </template>
+            </NoticeBanner>
+          </template>
 
           <p v-if="lab.view === 'empty'" class="empty-state">
             NetBox returned no machines or containers.
@@ -269,6 +277,13 @@ a:hover {
   [data-focus-flash] {
     animation: none;
   }
+}
+
+/* Stream down: the last metrics stay readable but visibly not live. */
+.is-offline .host-metrics,
+.is-offline .line-load {
+  opacity: 0.4;
+  filter: grayscale(1);
 }
 
 .empty-state {

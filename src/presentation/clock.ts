@@ -52,3 +52,9 @@ export function formatAge(seconds: number): string {
   if (minutes < 60) return `${minutes} min ${seconds % 60} s ago`
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min ago`
 }
+
+/** Coarse age for a banner that re-renders rarely: "just now", "5 min ago", "2 h 3 min ago". */
+export function formatSince(seconds: number): string {
+  if (seconds < 60) return 'just now'
+  return formatAge(seconds - (seconds % 60)).replace(' 0 s', '')
+}

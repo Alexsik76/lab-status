@@ -12,6 +12,11 @@ export type StreamState = 'idle' | 'connecting' | 'open' | 'error' | 'paused'
 
 export interface EventStream {
   readonly state: Readonly<Ref<StreamState>>
+  /**
+   * When the connection was lost (or first failed to open); null while it is open. It stays
+   * set through the retries and a hidden-tab pause, and is cleared only when a connection opens.
+   */
+  readonly disconnectedAt: Readonly<Ref<Date | null>>
   /** Calls `handler` with the parsed JSON of every event named `event`; returns the unsubscribe. */
   on<T>(event: string, handler: (data: T) => void): () => void
   /** Closes the connection for good. */
@@ -46,6 +51,7 @@ export function createEventStream(options: EventStreamOptions): EventStream {
   const retryInitialMs = options.retryInitialMs ?? STREAM_RETRY_INITIAL_MS
   const retryMaxMs = options.retryMaxMs ?? STREAM_RETRY_MAX_MS
   const state = ref<StreamState>('idle')
+  const disconnectedAt = ref<Date | null>(null)
   const handlers = new Map<string, Set<Handler>>()
   let source: EventSource | null = null
   let hideTimer: ReturnType<typeof setTimeout> | null = null
@@ -80,11 +86,13 @@ export function createEventStream(options: EventStreamOptions): EventStream {
       if (source !== es) return
       retryDelay = retryInitialMs
       state.value = 'open'
+      disconnectedAt.value = null
     }
     // Meanwhile the subscribers keep their last data.
     es.onerror = () => {
       if (source !== es) return
       state.value = 'error'
+      disconnectedAt.value ??= new Date()
       // A network drop is retried by the browser itself (readyState CONNECTING); an HTTP
       // error answer (e.g. 502 while the backend restarts) closes it for good.
       if (es.readyState === CLOSED) {
@@ -138,6 +146,7 @@ export function createEventStream(options: EventStreamOptions): EventStream {
 
   return {
     state: readonly(state),
+    disconnectedAt: readonly(disconnectedAt),
     on<T>(event: string, handler: (data: T) => void) {
       let set = handlers.get(event)
       if (!set) {
@@ -159,6 +168,7 @@ export function createEventStream(options: EventStreamOptions): EventStream {
       source?.close()
       source = null
       state.value = 'idle'
+      disconnectedAt.value = null
     },
   }
 }

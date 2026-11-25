@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageSeconds, bitCount, clockColor, formatAge, rgb, toBits } from './clock'
+import { ageSeconds, bitCount, clockColor, formatAge, formatSince, rgb, toBits } from './clock'
 
 describe('binary clock helpers', () => {
   it('derives the bit count from the period', () => {
@@ -45,5 +45,14 @@ describe('binary clock helpers', () => {
     expect(formatAge(12)).toBe('12 s ago')
     expect(formatAge(245)).toBe('4 min 5 s ago')
     expect(formatAge(7380)).toBe('2 h 3 min ago')
+  })
+})
+
+describe('formatSince', () => {
+  it('rounds down to whole minutes', () => {
+    expect(formatSince(12)).toBe('just now')
+    expect(formatSince(65)).toBe('1 min ago')
+    expect(formatSince(299)).toBe('4 min ago')
+    expect(formatSince(3 * 3600 + 125)).toBe('3 h 2 min ago')
   })
 })

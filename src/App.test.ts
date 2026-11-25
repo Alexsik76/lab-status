@@ -536,6 +536,34 @@ describe('App', () => {
     })
   })
 
+  it('shows one "no connection" notice and no live state while the stream is down', async () => {
+    stubBackend({ netbox: ok(netboxResponse), status: ok(statusEntries) })
+    const wrapper = await mountApp()
+    await vi.waitFor(() => expect(wrapper.findAll('.machine-node')).toHaveLength(5))
+    await vi.waitFor(() => expect(states(wrapper)).toContain('up'))
+    expect(wrapper.find('.offline-banner').exists()).toBe(false)
+    const stoppedBefore = states(wrapper).filter((s) => s === 'stopped').length
+
+    // The tunnel goes down: the browser keeps retrying a dropped connection.
+    FakeEventSource.latest().fail(false)
+
+    await vi.waitFor(() => expect(wrapper.find('.offline-banner').exists()).toBe(true))
+    expect(wrapper.findAll('.notice')).toHaveLength(1)
+    expect(wrapper.text()).toContain('No connection to the status backend')
+    expect(wrapper.text()).not.toContain('could not be refreshed')
+    expect(states(wrapper)).not.toContain('up')
+    expect(states(wrapper)).not.toContain('down')
+    expect(states(wrapper).filter((s) => s === 'stopped')).toHaveLength(stoppedBefore)
+    expect(wrapper.find('main').classes()).toContain('is-offline')
+    expect(wrapper.findAll('.machine-node')).toHaveLength(5)
+
+    // The connection returns and the backend re-sends every source's state.
+    FakeEventSource.latest().open()
+    await vi.waitFor(() => expect(wrapper.find('.offline-banner').exists()).toBe(false))
+    expect(states(wrapper)).toContain('up')
+    expect(wrapper.find('main').classes()).not.toContain('is-offline')
+  })
+
   describe('Stored inventory & NetBox offline resilience', () => {
     it('uses stored inventory on NetBox failure and shows notice with timestamp', async () => {
       const normalized = normalizeInventory(netboxResponse.data!)
